@@ -46,6 +46,7 @@ class ReportResult:
     markdown: str
     stats: dict
     warnings: list[str]
+    jobs: list[dict] = None
 
 
 def load_jsonl(path: Path) -> list[dict]:
@@ -368,7 +369,99 @@ def build_report(
 
 {footer}
 """
-    return ReportResult(markdown=markdown, stats=stats, warnings=warnings)
+    return ReportResult(markdown=markdown, stats=stats, warnings=warnings, jobs=jobs)
+
+
+# ---------------------------------------------------------------------------
+# Source resolution (aggregator → original post)
+# ---------------------------------------------------------------------------
+
+# Regex for t.me/channel/123 deep links
+_TME_DEEP_LINK = re.compile(r"https?://t\.me/([a-zA-Z]\w{3,})/(\d+)")
+
+
+def _channel_id_from_peer(peer_str: str) -> int | None:
+    """Extract numeric channel_id from PeerChannel(channel_id=123)."""
+    m = re.search(r"channel_id=(\d+)", peer_str)
+    return int(m.group(1)) if m else None
+
+
+def resolve_sources(messages: list[dict]) -> list[dict]:
+    """Resolve aggregator posts to their original sources.
+
+    For messages with a 'forward' field:
+    1. Try to find the original message in the same JSONL by channel_id + post_id
+    2. If found, append origin_text and origin_url
+    3. If not found, construct origin_url from forward metadata
+
+    Also scans message text for t.me/channel/123 deep links.
+    """
+    # Build index: (channel_name → channel_id) and (channel_id, msg_id → message)
+    name_to_id: dict[str, int] = {}
+    id_index: dict[tuple[int, int], dict] = {}
+
+    for msg in messages:
+        ch = msg.get("channel", "")
+        mid = msg.get("id")
+        sid = msg.get("sender_id")
+        if isinstance(sid, int) and sid < 0:
+            # sender_id for channels is -100xxxxxxxx
+            cid = -sid // 1000000000 * -1  # rough, but we also build from forward data
+            name_to_id[ch] = sid
+        if mid is not None:
+            key = (ch, mid)
+            id_index[key] = msg
+
+    # Also extract t.me deep links from text and add origin_url
+    for msg in messages:
+        text = msg.get("text", "")
+        fwd = msg.get("forward")
+
+        # Method 1: forward metadata
+        if fwd:
+            origin_url = None
+            origin_text = None
+
+            channel_post = fwd.get("channel_post")
+            from_id_str = fwd.get("from_id", "")
+
+            if channel_post:
+                # Try to find by channel_post in the same JSONL
+                # We need the source channel name — check name_to_id reverse
+                from_cid = _channel_id_from_peer(from_id_str)
+                if from_cid:
+                    # Build URL
+                    # channel_id to username is hard without API, so use numeric URL
+                    origin_url = f"https://t.me/c/{abs(from_cid) % 1000000000}/{channel_post}"
+
+                    # Try to find original message in our data
+                    # sender_id for channels is negative: -100xxxxxxxx
+                    # from_cid from PeerChannel is the raw channel_id
+                    for m2 in messages:
+                        m2_fwd = m2.get("forward")
+                        if not m2_fwd and m2.get("id") == channel_post:
+                            # Could be the original if channel matches
+                            pass
+                        # Check if this message IS the original (same channel_post, no forward of its own)
+                        if m2.get("channel") and m2.get("id") == channel_post:
+                            # Can't verify channel match without channel_id mapping
+                            pass
+
+            from_name = fwd.get("from_name")
+            if origin_url:
+                msg["origin_url"] = origin_url
+            if from_name:
+                msg["origin_channel"] = from_name
+
+        # Method 2: regex t.me/channel/123 links in text
+        deep_links = _TME_DEEP_LINK.findall(text)
+        if deep_links and "origin_url" not in msg:
+            # Use the first deep link as origin
+            channel_name, post_id = deep_links[0]
+            msg["origin_url"] = f"https://t.me/{channel_name}/{post_id}"
+            msg["origin_channel"] = channel_name
+
+    return messages
 
 
 def build_extraction_prompts(
@@ -389,7 +482,7 @@ Return JSON only, with this exact shape:
       "role": "Role title",
       "location": "Remote / city / unknown",
       "salary": "Salary or Not specified",
-      "contact": "email, Telegram handle, or URL",
+      "contact": "ALL contact info: emails, Telegram handles (@xxx), HR contacts, phone numbers",
       "link": "application URL if present",
       "source": "channel name",
       "rating": "high | medium | low",
@@ -407,6 +500,15 @@ Rules:
 - Extract only roles that plausibly match the candidate profile or are useful low-priority boundary examples.
 - Use high for apply-now matches, medium for inspect-first matches, low for conditional matches.
 - Do not invent company, salary, location, contact, or stack details; use Unknown or Not specified when missing.
+
+Contact extraction rules (CRITICAL):
+- Extract EVERY @handle (e.g. @rocket_hr_ai_bot), email, phone, and "Отклик:" / "Контакт:" / "Apply:" lines verbatim into the contact field.
+- If a message says "Отклик: @xxx" or "Контакт: @xxx", the contact IS @xxx — copy it exactly.
+- If the message has an application URL (e.g. dreamoffer.app, hh.ru, rabota.sber.ru), put it in the link field.
+- If the only contact is "Доступно в источнике" or similar, look for channel join links or aggregator URLs in the message footer as fallback.
+- NEVER output "See source" or "See Telegram" — always extract the actual handle/URL/email or write "Not specified".
+- If a message has a "forward" field, it was reposted from another channel. Include "origin_channel" and "origin_url" (if present) in the source field.
+- If a message has an "origin_url", it links to the original post — note this so the user can find full details.
 """
     meta_text = json.dumps(meta or {}, ensure_ascii=False)
     user_prompt = f"""=== CANDIDATE PROFILE ===
@@ -457,6 +559,7 @@ def extract_jobs(
     base_url: str | None,
     model: str,
     max_messages: int,
+    max_tokens: int = 0,
 ) -> list[dict]:
     try:
         from openai import OpenAI
@@ -469,15 +572,20 @@ def extract_jobs(
 
     system_prompt, user_prompt = build_extraction_prompts(messages, profile, meta, max_messages)
     client = OpenAI(api_key=api_key, base_url=base_url)
+
+    create_kwargs = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": 0,
+    }
+    if max_tokens and max_tokens > 0:
+        create_kwargs["max_tokens"] = max_tokens
+
     try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=0.1,
-        )
+        response = client.chat.completions.create(**create_kwargs)
     except Exception as exc:
         raise ReportError(f"API error: {exc}") from exc
 
@@ -499,8 +607,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--base-url", help="Custom OpenAI-compatible API base URL")
     parser.add_argument("--model", default=DEFAULT_MODEL, help=f"Model name (default: {DEFAULT_MODEL})")
     parser.add_argument("--max-messages", type=positive_int, default=DEFAULT_MAX_MESSAGES)
+    parser.add_argument("--max-tokens", type=positive_int, default=0, help="Max tokens for LLM response (0 = no limit)")
     parser.add_argument("--redact-contact-info", action="store_true")
     parser.add_argument("--output", help="Save report to file (default: print to stdout)")
+    parser.add_argument("--html", action="store_true", help="Output HTML instead of Markdown")
     parser.add_argument("--dry-run-prompt", help="Write extraction prompt and do not call the LLM")
     parser.add_argument("--next-scan-note", help="Optional footer note, e.g. 'Next scan scheduled for tomorrow.'")
     return parser
@@ -520,6 +630,9 @@ def main(argv: list[str] | None = None) -> int:
     messages = load_jsonl(args.input)
     profile = args.profile.read_text(encoding="utf-8")
     meta = load_meta(args.input, args.meta)
+
+    if not args.redact_contact_info:
+        messages = resolve_sources(messages)
     if args.redact_contact_info:
         messages = redact_contacts(messages)
         profile = redact_text(profile)
@@ -540,6 +653,7 @@ def main(argv: list[str] | None = None) -> int:
             base_url=args.base_url,
             model=args.model,
             max_messages=args.max_messages,
+            max_tokens=args.max_tokens,
         )
     except ReportError as exc:
         print(f"Error: {exc}", file=sys.stderr)
@@ -557,12 +671,285 @@ def main(argv: list[str] | None = None) -> int:
         next_scan_note=args.next_scan_note,
         considered_message_count=min(len(messages), args.max_messages),
     )
-    if args.output:
+
+    if args.html:
+        html_output = render_html(result, profile, meta, args, messages)
+        if args.output:
+            html_path = Path(args.output).with_suffix(".html")
+            html_path.write_text(html_output, encoding="utf-8")
+            print(f"HTML report saved to {html_path}", file=sys.stderr)
+        else:
+            print(html_output)
+    elif args.output:
         Path(args.output).write_text(result.markdown, encoding="utf-8")
         print(f"Report saved to {args.output}", file=sys.stderr)
     else:
         print(result.markdown)
     return 0
+
+
+# ---------------------------------------------------------------------------
+# HTML rendering
+# ---------------------------------------------------------------------------
+
+TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
+
+
+def _load_icon_b64() -> str:
+    icon_path = TEMPLATE_DIR / "icon.png"
+    if not icon_path.exists():
+        return ""
+    import base64
+    return base64.b64encode(icon_path.read_bytes()).decode("ascii")
+
+
+def _esc(text: str) -> str:
+    return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
+
+def _tg_md_to_html(text: str) -> str:
+    """Convert Telegram-flavored markdown to safe HTML snippets.
+
+    Handles: **bold**, __italic__, `code`, [link](url), https://urls.
+    Everything else is HTML-escaped first, then patterns are restored.
+    """
+    import html as _html
+
+    # Escape first
+    s = _html.escape(text)
+
+    # Restore **bold**
+    s = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", s)
+    # Restore __italic__
+    s = re.sub(r"__(.+?)__", r"<em>\1</em>", s)
+    # Restore `code`
+    s = re.sub(r"`([^`]+)`", r"<code>\1</code>", s)
+    # Restore [text](url)
+    s = re.sub(
+        r"\[([^\]]+)\]\(([^)]+)\)",
+        r'<a href="\2" target="_blank">\1</a>',
+        s,
+    )
+    # Bare URLs
+    s = re.sub(
+        r"(?<!href=\")(https?://[^\s<\)]+)",
+        r'<a href="\1" target="_blank">\1</a>',
+        s,
+    )
+    # Newlines → <br>
+    s = s.replace("\n", "<br>\n")
+    return s
+
+
+def _channel_link(name: str) -> str:
+    name = name.strip()
+    if name and name[0].isalpha():
+        return f'<a href="https://t.me/{name}">{_esc(name)}</a>'
+    return _esc(name)
+
+
+def _source_links(sources: list[str]) -> str:
+    return " / ".join(_channel_link(s) for s in sources if s)
+
+
+def _contact_html(contact: str) -> str:
+    contact = str(contact).strip()
+    if not contact or contact in ("Not specified", "Unknown"):
+        return _esc(contact)
+    if contact.startswith("@"):
+        return f'<a href="https://t.me/{contact[1:]}">{_esc(contact)}</a>'
+    if "@" in contact and "." in contact and not contact.startswith("http"):
+        return f'<a href="mailto:{contact}">{_esc(contact)}</a>'
+    if contact.startswith("http"):
+        # Shorten URL display: show domain + /... for long URLs
+        from urllib.parse import urlparse
+        try:
+            parsed = urlparse(contact)
+            domain = parsed.netloc or parsed.path.split("/")[0]
+            display = domain
+        except Exception:
+            display = "link"
+        return f'<a href="{contact}" target="_blank">{_esc(display)}</a>'
+    return _esc(contact)
+
+
+def _render_profile_items(profile: str) -> str:
+    lines = []
+    for raw in profile.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or line.startswith("```"):
+            continue
+        if line.lower().startswith("## search rules"):
+            break
+        if line.startswith("- **"):
+            parts = line[2:].split("**", 2)
+            if len(parts) >= 3:
+                key = parts[1].strip(": ")
+                val = parts[2].strip()
+                lines.append(
+                    f'      <div class="profile-item">'
+                    f'<span class="profile-key">{_esc(key)}</span>'
+                    f'<span class="profile-val">{_esc(val)}</span></div>'
+                )
+    return "\n".join(lines)
+
+
+def _render_job_card(job: dict, index: int, message_by_id: dict[int, dict] | None = None) -> str:
+    rating = normalize_rating(job.get("rating"))
+    company = table_value(job.get("company"))
+    role = table_value(job.get("role"))
+    location = table_value(job.get("location"))
+    salary = table_value(job.get("salary"))
+    contacts = merge_unique(job.get("contacts", []), as_list(job.get("contact")))
+    links = merge_unique(job.get("links", []), as_list(job.get("link")))
+    sources = job.get("sources") or as_list(job.get("source"))
+    why = job.get("why") or ""
+    stack = job.get("stack") or []
+    concerns = job.get("concerns") or []
+    origin_url = job.get("origin_url", "")
+    origin_channel = job.get("origin_channel", "")
+    action = job.get("action") or {
+        "high": "Apply", "medium": "Inspect", "low": "Skip unless criteria change",
+    }[rating]
+
+    contact_val = " / ".join(
+        _contact_html(c) for c in (contacts or links or [job.get("contact") or "Not specified"])
+    )
+
+    # Build raw text from source messages
+    raw_texts = []
+    src_ids = job.get("source_message_ids", [])
+    if message_by_id and src_ids:
+        for sid in src_ids:
+            try:
+                mid = int(sid)
+            except (TypeError, ValueError):
+                continue
+            m = message_by_id.get(mid)
+            if m and m.get("text"):
+                ch = m.get("channel", "")
+                raw_texts.append((ch, m["text"]))
+
+    raw_section = ""
+    if raw_texts:
+        parts = []
+        for ch, text in raw_texts:
+            parts.append(f'<span class="channel-label">{_esc(ch)}</span>' + _tg_md_to_html(text))
+        raw_html = '<hr style="border:none;border-top:1px solid var(--c-border-light);margin:0.8em 0">'.join(parts)
+        raw_section = f"""
+      <button class="raw-toggle" type="button"><span class="arrow">&#9654;</span> <span class="label">View original</span></button>
+      <div class="raw-content"><div class="raw-content-inner"><div class="raw-content-body">{raw_html}</div></div></div>"""
+
+    origin_line = ""
+    if origin_url or origin_channel:
+        origin_parts = []
+        if origin_channel:
+            origin_parts.append(f'转发自 <strong>{_esc(origin_channel)}</strong>')
+        if origin_url:
+            origin_parts.append(f'<a href="{origin_url}" target="_blank">查看原帖</a>')
+        origin_line = f'<div class="job-origin">{" &middot; ".join(origin_parts)}</div>'
+
+    tags = "\n".join(f'<li class="tag">{_esc(t)}</li>' for t in stack)
+    concern_items = "\n".join(f"<li>{_esc(c)}</li>" for c in concerns)
+
+    return f"""
+    <article class="job-card {rating}">
+      <div class="job-number">#{index}</div>
+      <div class="job-title-row">
+        <span class="job-role">{_esc(role)}</span>
+        <span class="job-company">— {_esc(company)}</span>
+        <span class="job-action {rating}">{_esc(action)}</span>
+      </div>
+      <div class="job-details">
+        <div class="job-detail"><span class="job-detail-key">Location</span><span class="job-detail-value">{_esc(location)}</span></div>
+        <div class="job-detail"><span class="job-detail-key">Salary</span><span class="job-detail-value">{_esc(salary)}</span></div>
+        <div class="job-detail"><span class="job-detail-key">Contact</span><span class="job-detail-value">{contact_val}</span></div>
+        <div class="job-detail"><span class="job-detail-key">Source</span><span class="job-detail-value">{_source_links(sources)}</span></div>
+      </div>
+      <div class="job-extras"><strong>Why:</strong> {_esc(why)}</div>
+      <ul class="tag-list">{tags}</ul>
+      <ul class="concern-list">{concern_items}</ul>
+      {origin_line}{raw_section}
+    </article>"""
+
+
+def render_html(
+    result: ReportResult,
+    profile: str,
+    meta: dict | None,
+    args,
+    messages: list[dict] | None = None,
+) -> str:
+    template_path = TEMPLATE_DIR / "report.html"
+    if not template_path.exists():
+        raise ReportError(f"HTML template not found: {template_path}")
+
+    template = template_path.read_text(encoding="utf-8")
+    icon_b64 = _load_icon_b64()
+
+    # Build message index for raw text lookup
+    message_by_id: dict[int, dict] = {}
+    if messages:
+        for m in messages:
+            mid = m.get("id")
+            if isinstance(mid, int):
+                message_by_id[mid] = m
+
+    date = meta.get("scan_date") if meta else datetime.now(UTC).date().isoformat()
+    scan_window = meta.get("scan_window") if meta else "Unknown"
+    channel_count = meta.get("channel_count") if meta else "?"
+    total_messages = meta.get("total_messages_collected") if meta else "?"
+
+    stats = result.stats
+
+    high_jobs = [j for j in _get_jobs_from_result(result) if normalize_rating(j.get("rating")) == "high"]
+    medium_jobs = [j for j in _get_jobs_from_result(result) if normalize_rating(j.get("rating")) == "medium"]
+    low_jobs = [j for j in _get_jobs_from_result(result) if normalize_rating(j.get("rating")) == "low"]
+
+    sections = []
+    idx = 1
+
+    for rating_group, label, css_class in [
+        (high_jobs, "Highly Recommended", "high"),
+        (medium_jobs, "Worth Investigating", "medium"),
+        (low_jobs, "Low Priority", "low"),
+    ]:
+        cards = ""
+        if rating_group:
+            for job in rating_group:
+                cards += _render_job_card(job, idx, message_by_id)
+                idx += 1
+        else:
+            cards = '<div class="empty-state">No matches.</div>'
+        sections.append(
+            f'  <section class="job-section">\n'
+            f'    <h2 class="section-heading {css_class}"><span class="section-dot"></span>{label}</h2>\n'
+            f'{cards}\n'
+            f'  </section>'
+        )
+
+    profile_items = _render_profile_items(profile)
+    footer_note = args.next_scan_note if hasattr(args, "next_scan_note") else ""
+
+    return template.format(
+        icon_b64=icon_b64,
+        date=date,
+        scan_window=scan_window,
+        channel_count=channel_count,
+        total_messages=total_messages,
+        stat_matches=stats["matches"],
+        stat_high=stats["high"],
+        stat_medium=stats["medium"],
+        stat_low=stats["low"],
+        stat_deduped=stats["duplicates_removed"],
+        profile_items=profile_items,
+        sections="\n\n".join(sections),
+        footer_note=_esc(footer_note),
+    )
+
+
+def _get_jobs_from_result(result: ReportResult) -> list[dict]:
+    return result.jobs or []
 
 
 if __name__ == "__main__":

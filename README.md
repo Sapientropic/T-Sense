@@ -56,7 +56,7 @@ source .venv/bin/activate
 # Errors go to output/scan_YYYYMMDD_HHMMSS.errors.log
 ```
 
-The scanner reads messages via Telethon (MTProto user client) with a precise UTC cutoff. It increases the read limit until all messages in the time window are collected; if a channel still reaches `SCAN_MAX_LIMIT`, the scan exits non-zero and marks that channel incomplete instead of silently dropping messages.
+The scanner reads messages via Telethon (MTProto user client) with a precise UTC cutoff. It uses `iter_messages` with early termination — as soon as it encounters a message older than the cutoff, it stops. This avoids over-fetching from high-volume channels. `SCAN_MAX_LIMIT` serves as a safety cap against runaway reads.
 
 Useful environment variables:
 
@@ -67,6 +67,23 @@ SCAN_DELAY=1             # seconds between channels
 SCAN_MAX_FLOOD_WAIT_SECONDS=300  # fail the channel instead of sleeping longer
 TG_SCANNER_CONFIG_DIR=~/.config/tgcli  # optional config/session directory override
 ```
+
+### Export channels from a Telegram folder
+
+If you organize channels into Telegram chat folders, you can export them directly:
+
+```bash
+# List all folders
+python scripts/export_folder.py --list
+
+# Export a folder by name
+python scripts/export_folder.py --folder "Jobs" --output channel_lists/jobs.txt
+
+# Export by folder ID (from --list)
+python scripts/export_folder.py --folder-id 2 --output channel_lists/jobs.txt
+```
+
+The exported file works as a regular channel list for `scan.py`.
 
 ### Generate a daily job report
 
@@ -90,6 +107,9 @@ python scripts/report.py --input output/scan_XXXX.jsonl --profile profiles/examp
 
 # One command: scan then generate today's report
 python scripts/daily_report.py channel_lists/example.txt --profile profiles/example.md
+
+# Generate HTML report alongside Markdown (card layout, inline links, self-contained)
+python scripts/daily_report.py channel_lists/example.txt --profile profiles/example.md --html
 ```
 
 `report.py` sends selected messages and the profile to your configured OpenAI-compatible API. The LLM handles semantic matching, reasons, concerns, and action recommendations; Python handles deduplication, statistics, and the final Markdown template. For remote LLM providers, `--redact-contact-info` is recommended unless contact details are needed for applying. Use `--dry-run-prompt` to review the exact payload before sending.
@@ -179,11 +199,15 @@ tg-channel-scanner/
 │   ├── scan.sh              # Batch channel reader (Mac/Linux)
 │   ├── scan.bat             # Batch channel reader (Windows)
 │   ├── scan.py              # Cross-platform scanner core (Telethon)
+│   ├── export_folder.py     # Export channels from a Telegram chat folder
 │   ├── media_ocr.py         # Shared OCR/STT helpers
 │   ├── ocr_media.py         # Standalone OCR re-processor
-│   ├── report.py            # Deterministic daily job report generator
+│   ├── report.py            # Deterministic daily job report generator (Markdown + HTML)
 │   ├── daily_report.py      # Scan + report convenience pipeline
 │   └── summarize.py         # Optional LLM summarizer
+├── templates/
+│   ├── report.html          # HTML report template (OKLCH palette, Bricolage Grotesque)
+│   └── icon.png             # Report favicon/header icon
 ├── output/                  # Scan results (gitignored)
 └── docs/
     ├── tos-risk-analysis.md
@@ -258,7 +282,7 @@ scripts\scan.bat channel_lists\example.txt
 | `.sh` scripts `Permission denied` | `chmod +x setup.sh scripts/scan.sh` |
 | my.telegram.org shows ERROR | See [docs/getting-api-credentials.md](docs/getting-api-credentials.md) |
 | 0 messages collected | Check `output/*.errors.log` for failures |
-| Scan exits with incomplete channel | Raise `SCAN_MAX_LIMIT` or narrow the time window |
+| Scan exits with incomplete channel | Rare with iter_messages; raise `SCAN_MAX_LIMIT` if still hitting cap |
 | Session expired / not authorized | Delete `~/.config/tgcli/session` and re-run; scan.py will prompt for login |
 | OCR does not run | Pass `--ocr` explicitly and set `XAI_API_KEY` or `OPENAI_API_KEY` |
 

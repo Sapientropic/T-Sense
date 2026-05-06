@@ -31,6 +31,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--base-url")
     parser.add_argument("--model")
     parser.add_argument("--max-messages", type=int)
+    parser.add_argument("--html", action="store_true", help="Also output HTML report")
     parser.add_argument("--redact-contact-info", action="store_true")
     parser.add_argument("--next-scan-note")
     parser.add_argument("--allow-incomplete", action="store_true")
@@ -81,6 +82,25 @@ def main(argv: list[str] | None = None) -> int:
         report_cmd.extend(["--next-scan-note", args.next_scan_note])
 
     subprocess.run(report_cmd, check=True)
+
+    if args.html:
+        html_output = report_output.with_suffix(".html")
+        html_cmd = [
+            sys.executable,
+            str(script_dir / "report.py"),
+            "--input", str(scan_file),
+            "--profile", str(args.profile),
+            "--html",
+            "--output", str(html_output),
+        ]
+        if args.base_url:
+            html_cmd.extend(["--base-url", args.base_url])
+        if args.model:
+            html_cmd.extend(["--model", args.model])
+        if args.max_messages:
+            html_cmd.extend(["--max-messages", str(args.max_messages)])
+        subprocess.run(html_cmd, check=True)
+
     print(f"Daily report saved to {report_output}")
     return 0
 

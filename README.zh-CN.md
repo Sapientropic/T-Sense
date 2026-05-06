@@ -56,7 +56,7 @@ source .venv/bin/activate
 # 错误日志在 output/scan_YYYYMMDD_HHMMSS.errors.log
 ```
 
-扫描器通过 Telethon（MTProto user client）读取消息，使用精确 UTC cutoff。若读取结果达到 limit 上限，脚本会自动扩大 limit；如果频道达到 `SCAN_MAX_LIMIT` 仍可能不完整，脚本会非零退出并在日志里标记 incomplete，不会静默漏消息。
+扫描器通过 Telethon（MTProto user client）读取消息，使用精确 UTC cutoff。采用 `iter_messages` 流式读取 + 时间截断——遇到超过 cutoff 的消息立刻停止，避免从高流量频道过度拉取。`SCAN_MAX_LIMIT` 作为安全上限防止失控读取。
 
 常用环境变量：
 
@@ -67,6 +67,23 @@ SCAN_DELAY=1             # 频道之间等待秒数
 SCAN_MAX_FLOOD_WAIT_SECONDS=300  # 超过该 FloodWait 秒数就让该频道失败
 TG_SCANNER_CONFIG_DIR=~/.config/tgcli  # 可选：配置和 session 目录
 ```
+
+### 从 Telegram 文件夹导出频道
+
+如果你在 Telegram 里用聊天文件夹整理频道，可以直接导出：
+
+```bash
+# 列出所有文件夹
+python scripts/export_folder.py --list
+
+# 按名称导出
+python scripts/export_folder.py --folder "Jobs" --output channel_lists/jobs.txt
+
+# 按 ID 导出（从 --list 获取）
+python scripts/export_folder.py --folder-id 2 --output channel_lists/jobs.txt
+```
+
+导出的文件可直接用于 `scan.py`。
 
 ### 生成求职日报
 
@@ -90,6 +107,9 @@ python scripts/report.py --input output/scan_XXXX.jsonl --profile profiles/examp
 
 # 一条命令：先扫描，再生成今天的日报
 python scripts/daily_report.py channel_lists/example.txt --profile profiles/example.md
+
+# 同时生成 HTML 报告（卡片布局，内联链接，单文件可移植）
+python scripts/daily_report.py channel_lists/example.txt --profile profiles/example.md --html
 ```
 
 `report.py` 会把选中的消息和 profile 发送到你配置的 OpenAI-compatible API。LLM 负责语义筛选、匹配理由、风险点和 action 建议；Python 负责去重、统计和固定 Markdown 版式。使用远程 LLM 时，推荐先用 `--dry-run-prompt` 审查 payload；除非申请职位确实需要保留联系人信息，否则可以加 `--redact-contact-info`。
@@ -179,11 +199,15 @@ tg-channel-scanner/
 │   ├── scan.sh              # 批量频道读取（Mac/Linux）
 │   ├── scan.bat             # 批量频道读取（Windows）
 │   ├── scan.py              # 跨平台扫描核心（Telethon）
+│   ├── export_folder.py     # 从 Telegram 聊天文件夹导出频道列表
 │   ├── media_ocr.py         # 共享 OCR/STT helper
 │   ├── ocr_media.py         # 独立 OCR 重新处理脚本
-│   ├── report.py            # 稳定求职日报生成器
+│   ├── report.py            # 稳定求职日报生成器（Markdown + HTML）
 │   ├── daily_report.py      # 扫描 + 日报便利入口
 │   └── summarize.py         # 可选 LLM 摘要
+├── templates/
+│   ├── report.html          # HTML 报告模板（OKLCH 色板，Bricolage Grotesque）
+│   └── icon.png             # 报告 favicon/header 图标
 ├── output/                  # 扫描结果（已 gitignore）
 └── docs/
     ├── tos-risk-analysis.md         # ToS 风险分析
@@ -258,7 +282,7 @@ scripts\scan.bat channel_lists\example.txt
 | `.sh` 脚本 `Permission denied` | `chmod +x setup.sh scripts/scan.sh` |
 | my.telegram.org 显示 ERROR | 见 [获取凭证指南](docs/getting-api-credentials.md) |
 | 扫描到 0 条消息 | 检查 `output/*.errors.log` 中的错误 |
-| 扫描提示 incomplete | 提高 `SCAN_MAX_LIMIT` 或缩小时间窗口 |
+| 扫描提示 incomplete | 使用 iter_messages 后较少出现；如仍触发可提高 `SCAN_MAX_LIMIT` |
 | Session 过期/未授权 | 删除 `~/.config/tgcli/session` 后重新运行，scan.py 会引导登录 |
 | OCR 没有运行 | 需要显式传 `--ocr`，并设置 `XAI_API_KEY` 或 `OPENAI_API_KEY` |
 

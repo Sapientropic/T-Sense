@@ -434,7 +434,16 @@ async def interactive_login(client: TelegramClient) -> None:
 async def resolve_entity(client: TelegramClient, name: str):
     name = name.strip()
     if name.lstrip("-").isdigit():
-        return await client.get_entity(int(name))
+        entity_id = int(name)
+        try:
+            return await client.get_entity(entity_id)
+        except Exception:
+            pass
+        # Fallback: search dialogs for matching ID
+        async for dialog in client.iter_dialogs():
+            if dialog.entity.id == entity_id:
+                return dialog.entity
+        raise ScanError(f"Cannot resolve entity: {name}")
     try:
         return await client.get_entity(name)
     except Exception:
@@ -485,6 +494,19 @@ def message_to_dict(msg, channel_name: str) -> dict:
     if msg.reply_to:
         reply_to_msg_id = msg.reply_to.reply_to_msg_id
 
+    forward = None
+    if msg.forward:
+        fwd = msg.forward
+        forward = {}
+        if hasattr(fwd, 'from_id') and fwd.from_id:
+            forward["from_id"] = str(fwd.from_id)
+        if getattr(fwd, 'channel_post', None):
+            forward["channel_post"] = fwd.channel_post
+        if getattr(fwd, 'from_name', None):
+            forward["from_name"] = fwd.from_name
+        if fwd.date:
+            forward["date"] = fwd.date.isoformat()
+
     result = {
         "id": msg.id,
         "date": msg.date.isoformat() if msg.date else None,
@@ -495,6 +517,7 @@ def message_to_dict(msg, channel_name: str) -> dict:
         "has_photo": has_photo,
         "media_type": media_type,
         "media_group": media_group,
+        "forward": forward,
     }
 
     # Attach video metadata for "is this worth watching?" decisions
@@ -546,58 +569,64 @@ async def read_channel(
     ocr: OcrConfig | None = None,
     max_flood_wait_seconds: int = DEFAULT_MAX_FLOOD_WAIT_SECONDS,
 ) -> ChannelResult:
-    if initial_limit > max_limit:
-        raise ValueError("initial_limit cannot exceed max_limit")
+    """Stream messages via iter_messages, stop immediately at cutoff.
 
-    limit = initial_limit
+    Uses iter_messages with early termination: as soon as we encounter a
+    message older than cutoff, we break — no exponential doubling, no
+    over-fetching. max_limit serves as a safety cap against runaway reads.
+    """
+    cutoff_utc = cutoff.astimezone(UTC)
+    safety_cap = max_limit
 
-    while True:
-        messages = await _fetch_with_retry(
-            client,
-            entity,
-            channel_name,
-            limit,
-            max_flood_wait_seconds=max_flood_wait_seconds,
-        )
-        raw_count = len(messages)
-        kept_msgs, skipped_missing_date = _filter_raw_messages(messages, cutoff)
-        saturated = raw_count >= limit
+    kept_msgs: list = []
+    raw_count = 0
+    skipped_missing_date = 0
+    hit_cap = False
 
-        # OCR media on the final iteration only
-        if not saturated or limit >= max_limit:
-            ocr_texts: dict[int, str] = {}
-            ocr_count = 0
-            ocr_errors: list[str] = []
-            if ocr:
-                for m in kept_msgs:
-                    if m.media:
-                        try:
-                            text = await process_message(client, m, ocr)
-                        except Exception as exc:
-                            ocr_errors.append(f"OCR failed for message {m.id}: {exc}")
-                            continue
-                        if text:
-                            ocr_texts[m.id] = text
-                            ocr_count += 1
-                            print(f"    OCR [{channel_name}:{m.id}] -> {len(text)} chars")
+    async for msg in client.iter_messages(entity, limit=safety_cap):
+        raw_count += 1
+        if msg.date is None:
+            skipped_missing_date += 1
+            continue
+        d = msg.date if msg.date.tzinfo else msg.date.replace(tzinfo=UTC)
+        if d.astimezone(UTC) < cutoff_utc:
+            break
+        kept_msgs.append(msg)
 
-            dicts = [message_to_dict(m, channel_name) for m in kept_msgs]
-            for d in dicts:
-                if d["id"] in ocr_texts:
-                    d["ocr_text"] = ocr_texts[d["id"]]
+    hit_cap = raw_count >= safety_cap
 
-            return ChannelResult(
-                channel=channel_name,
-                messages=dicts,
-                raw_count=raw_count,
-                skipped_missing_date=skipped_missing_date,
-                limit=limit,
-                incomplete=saturated,
-                ocr_count=ocr_count,
-                stderr="\n".join(ocr_errors),
-            )
+    # OCR media
+    ocr_texts: dict[int, str] = {}
+    ocr_count = 0
+    ocr_errors: list[str] = []
+    if ocr:
+        for m in kept_msgs:
+            if m.media:
+                try:
+                    text = await process_message(client, m, ocr)
+                except Exception as exc:
+                    ocr_errors.append(f"OCR failed for message {m.id}: {exc}")
+                    continue
+                if text:
+                    ocr_texts[m.id] = text
+                    ocr_count += 1
+                    print(f"    OCR [{channel_name}:{m.id}] -> {len(text)} chars")
 
-        limit = min(limit * 2, max_limit)
+    dicts = [message_to_dict(m, channel_name) for m in kept_msgs]
+    for d in dicts:
+        if d["id"] in ocr_texts:
+            d["ocr_text"] = ocr_texts[d["id"]]
+
+    return ChannelResult(
+        channel=channel_name,
+        messages=dicts,
+        raw_count=raw_count,
+        skipped_missing_date=skipped_missing_date,
+        limit=safety_cap,
+        incomplete=hit_cap,
+        ocr_count=ocr_count,
+        stderr="\n".join(ocr_errors),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -752,10 +781,16 @@ async def _run_scan(args) -> int:
             print(f"[{index}] Reading: {channel_name}")
             try:
                 entity = await resolve_entity(client, channel_name)
+                # Use title for display if channel_name is a bare numeric ID
+                display_name = channel_name
+                if channel_name.lstrip("-").isdigit():
+                    title = getattr(entity, "title", None) or getattr(entity, "first_name", None)
+                    if title:
+                        display_name = title
                 result = await read_channel(
                     client=client,
                     entity=entity,
-                    channel_name=channel_name,
+                    channel_name=display_name,
                     cutoff=cutoff,
                     initial_limit=args.initial_limit,
                     max_limit=args.max_limit,
