@@ -40,3 +40,48 @@
 cp profiles/example.md profiles/my-profile.md
 # Edit profiles/my-profile.md with your details
 ```
+
+---
+
+*Advanced: to customize extraction schema, prompts, or report labels, add the
+optional sections below to your profile. If omitted, the built-in job-mode
+defaults are used.*
+
+<!--
+## Extraction Schema
+mode: job
+top_level_key: jobs
+dedup_fields: [company, role]
+fields:
+  - name: company
+    required: true
+  - name: role
+    required: true
+  - name: location
+  - name: salary
+  - name: contact
+    extract_all: true
+  - name: link
+  - name: source
+  - name: rating
+    values: [high, medium, low]
+  - name: why
+  - name: stack
+    type: list
+  - name: concerns
+    type: list
+  - name: action
+    values: [Apply, Inspect, "Skip unless criteria change"]
+
+## Extraction Prompt
+system_prompt: |
+  You extract job listings from Telegram messages...
+
+## Report Labels
+report_title: "Job Scan Report"
+section_high: "Highly Recommended (apply now)"
+section_medium: "Worth Investigating (check details first)"
+section_low: "Low Priority (only if criteria change)"
+stats_label: "Matches"
+output_filename: "job-scan-report-{date}.md"
+-->

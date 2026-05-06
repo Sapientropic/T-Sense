@@ -8,10 +8,22 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
+try:
+    from scripts.profile_schema import parse_profile_config
+except ModuleNotFoundError:
+    _PROJECT_ROOT = str(Path(__file__).resolve().parent.parent)
+    if _PROJECT_ROOT not in sys.path:
+        sys.path.insert(0, _PROJECT_ROOT)
+    from scripts.profile_schema import parse_profile_config
 
-def default_report_output_path(output_dir: Path, scan_date: str | None = None) -> Path:
+
+def default_report_output_path(
+    output_dir: Path,
+    scan_date: str | None = None,
+    filename_template: str = "job-scan-report-{date}.md",
+) -> Path:
     date = scan_date or datetime.now(UTC).date().isoformat()
-    return output_dir / f"job-scan-report-{date}.md"
+    return output_dir / filename_template.format(date=date)
 
 
 def find_latest_scan(output_dir: Path) -> Path:
@@ -22,7 +34,7 @@ def find_latest_scan(output_dir: Path) -> Path:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run a Telegram scan and generate a daily job report")
+    parser = argparse.ArgumentParser(description="Run a Telegram scan and generate a daily report")
     parser.add_argument("channel_list", type=Path, help="Text file with one channel username per line")
     parser.add_argument("--profile", required=True, type=Path, help="Candidate profile MD")
     parser.add_argument("--hours", type=int, default=24, help="Look back this many hours (default: 24)")
@@ -45,6 +57,10 @@ def main(argv: list[str] | None = None) -> int:
     script_dir = Path(__file__).resolve().parent
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
+    # Parse profile to get filename template
+    profile_config = parse_profile_config(args.profile.read_text(encoding="utf-8"))
+    filename_template = profile_config.labels.output_filename
+
     scan_cmd = [
         sys.executable,
         str(script_dir / "scan.py"),
@@ -58,7 +74,7 @@ def main(argv: list[str] | None = None) -> int:
 
     subprocess.run(scan_cmd, check=True)
     scan_file = find_latest_scan(args.output_dir)
-    report_output = args.report_output or default_report_output_path(args.output_dir)
+    report_output = args.report_output or default_report_output_path(args.output_dir, filename_template=filename_template)
 
     report_cmd = [
         sys.executable,
@@ -99,6 +115,10 @@ def main(argv: list[str] | None = None) -> int:
             html_cmd.extend(["--model", args.model])
         if args.max_messages:
             html_cmd.extend(["--max-messages", str(args.max_messages)])
+        if args.redact_contact_info:
+            html_cmd.append("--redact-contact-info")
+        if args.next_scan_note:
+            html_cmd.extend(["--next-scan-note", args.next_scan_note])
         subprocess.run(html_cmd, check=True)
 
     print(f"Daily report saved to {report_output}")

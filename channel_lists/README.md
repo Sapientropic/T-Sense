@@ -7,7 +7,7 @@ This directory holds text files listing Telegram channels to scan.
 One channel name per line. Lines starting with `#` are comments. Empty lines are ignored.
 
 ```
-# My job search channels
+# My monitoring channels
 remote_italic
 dev_jobs_remote
 react_jobs

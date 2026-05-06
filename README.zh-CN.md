@@ -1,8 +1,8 @@
 # TG 频道扫描器
 
-按需读取 Telegram 频道消息，按关键词/候选人 profile 过滤，生成 AI 摘要报告。
+按需读取 Telegram 频道消息，按 profile 过滤，生成 AI 摘要报告。
 
-最初为求职者监控多个 Telegram 招聘频道设计，但适用于任何频道监控场景。
+多模式支持：内置求职扫描模式，同时支持 profile 驱动的自定义模式（空投监控、新闻追踪、活动筛选等）。
 
 [**English**](README.md)
 
@@ -85,7 +85,9 @@ python scripts/export_folder.py --folder-id 2 --output channel_lists/jobs.txt
 
 导出的文件可直接用于 `scan.py`。
 
-### 生成求职日报
+### 生成报告
+
+求职模式（默认）和自定义模式都由 profile 驱动。求职 profile 生成职位扫描报告；自定义 profile 用你自己的字段、schema 和标签生成报告。
 
 ```bash
 # 稳定日报：LLM 做职位语义判断，Python 负责统计和 Markdown 模板
@@ -112,7 +114,7 @@ python scripts/daily_report.py channel_lists/example.txt --profile profiles/exam
 python scripts/daily_report.py channel_lists/example.txt --profile profiles/example.md --html
 ```
 
-`report.py` 会把选中的消息和 profile 发送到你配置的 OpenAI-compatible API。LLM 负责语义筛选、匹配理由、风险点和 action 建议；Python 负责去重、统计和固定 Markdown 版式。使用远程 LLM 时，推荐先用 `--dry-run-prompt` 审查 payload；除非申请职位确实需要保留联系人信息，否则可以加 `--redact-contact-info`。
+`report.py` 会把选中的消息和 profile 发送到你配置的 OpenAI-compatible API。LLM 负责语义筛选；Python 负责去重、统计和渲染。提取 schema、系统提示词和报告标签都由 profile 驱动。使用远程 LLM 时，推荐先用 `--dry-run-prompt` 审查 payload；除非确实需要保留联系人信息，否则可以加 `--redact-contact-info`。
 
 `daily_report.py` 只是本地便利入口，不会创建系统定时任务。需要每天自动运行时，请用 cron 或 Windows Task Scheduler 调用它。
 
@@ -173,14 +175,14 @@ Telegram 频道
   → Telethon 读取消息（MTProto，精确时间过滤，含 media 信息）
     → scanner 做饱和检测 + 完整性检查
     → 保存到 output/（JSONL + metadata sidecar）
-      → LLM 抽取匹配职位、理由、风险点和 action
-        → Python 去重、统计并渲染固定 Markdown 日报
+      → LLM 按 profile 中的 schema 抽取匹配项
+        → Python 去重、统计并渲染 Markdown/HTML 报告
 ```
 
 1. **读取**：Telethon（MTProto user client）读取你已订阅频道的消息，包括图片等 media 元数据
 2. **过滤**：`scripts/scan.py` 按精确时间过滤，并拒绝静默接受已打满的读取上限
 3. **保存**：消息保存为 JSONL，包含日期、发送者、文本、频道信息、media 字段，并同步写 `.meta.json`
-4. **日报**：LLM 做语义匹配，Python 生成可复现统计和固定 Markdown 分区
+4. **报告**：LLM 按 profile 中的提取 schema 做语义匹配；Python 渲染可复现的统计和 Markdown/HTML 报告
 
 ## 目录结构
 
@@ -191,8 +193,9 @@ tg-channel-scanner/
 ├── requirements-llm.txt     # 锁定可选摘要依赖
 ├── requirements-dev.txt     # 锁定测试依赖
 ├── setup.sh / setup.bat     # 一键安装脚本
-├── profiles/                # 候选人/筛选 profile
-│   └── example.md           # 示例：前端工程师求职
+├── profiles/                # 筛选 profile（求职或自定义模式）
+│   ├── example.md           # 示例：前端工程师求职
+│   └── example-airdrop.md   # 示例：加密空投监控（自定义模式）
 ├── channel_lists/           # 频道名称列表（每行一个）
 │   └── example.txt          # 示例频道列表
 ├── scripts/
@@ -202,12 +205,14 @@ tg-channel-scanner/
 │   ├── export_folder.py     # 从 Telegram 聊天文件夹导出频道列表
 │   ├── media_ocr.py         # 共享 OCR/STT helper
 │   ├── ocr_media.py         # 独立 OCR 重新处理脚本
-│   ├── report.py            # 稳定求职日报生成器（Markdown + HTML）
-│   ├── daily_report.py      # 扫描 + 日报便利入口
+│   ├── profile_schema.py    # Profile 解析器和模式配置
+│   ├── report.py            # 多模式报告生成器（Markdown + HTML）
+│   ├── daily_report.py      # 扫描 + 报告便利入口
 │   └── summarize.py         # 可选 LLM 摘要
 ├── templates/
-│   ├── report.html          # HTML 报告模板（OKLCH 色板，Bricolage Grotesque）
-│   └── icon.png             # 报告 favicon/header 图标
+│   ├── report-job.html      # 求职模式 HTML 模板（OKLCH 色板）
+│   ├── report-generic.html  # 自定义模式通用 HTML 模板
+│   └── icon-job.png         # 报告 favicon/header 图标
 ├── output/                  # 扫描结果（已 gitignore）
 └── docs/
     ├── tos-risk-analysis.md         # ToS 风险分析
@@ -230,6 +235,16 @@ tg-channel-scanner/
 - 去重（同公司 + 同岗位）
 - 排除：纯后端、移动端、DevOps...
 ```
+
+### 自定义模式 Profile
+
+要使用自定义模式（如空投监控、新闻追踪、活动筛选），在 profile 中添加可选的 `## Extraction Schema`、`## Extraction Prompt`、`## Report Labels` 三个 section 即可覆盖内置的求职模式默认值。完整示例见 `profiles/example-airdrop.md`。
+
+| Section | 控制什么 |
+|---------|----------|
+| `## Extraction Schema` | 字段定义、去重键、JSON 顶层 key |
+| `## Extraction Prompt` | 系统提示词、位置/联系人过滤规则 |
+| `## Report Labels` | 报告标题、分区标题、输出文件名 |
 
 ## 创建自己的频道列表
 

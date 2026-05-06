@@ -2,7 +2,7 @@
 
 Read Telegram channel messages on demand, filter by keywords/profiles, and generate AI-powered digests.
 
-Designed for job seekers monitoring multiple Telegram job channels, but works for any channel monitoring use case.
+Multi-mode: built-in job scanning mode plus profile-driven custom modes for any monitoring scenario (airdrops, news, events, etc.).
 
 [**中文文档**](README.zh-CN.md)
 
@@ -85,7 +85,19 @@ python scripts/export_folder.py --folder-id 2 --output channel_lists/jobs.txt
 
 The exported file works as a regular channel list for `scan.py`.
 
-### Generate a daily job report
+### Generate a report
+
+Job mode (default) and custom mode are both driven by the profile. A job-mode profile produces a job scan report; a custom-mode profile produces a report with your own fields, schema, and labels.
+
+```bash
+# Job report (default)
+export OPENAI_API_KEY=sk-your-key
+python scripts/report.py --input output/scan_XXXX.jsonl --profile profiles/example.md \
+  --output output/job-scan-report-2026-05-06.md
+
+# Custom mode: airdrop monitor
+python scripts/report.py --input output/scan_XXXX.jsonl --profile profiles/example-airdrop.md \
+  --output output/airdrop-report-2026-05-06.md
 
 ```bash
 # Stable report pipeline: LLM extracts job reasoning; Python renders stats + Markdown
@@ -112,7 +124,7 @@ python scripts/daily_report.py channel_lists/example.txt --profile profiles/exam
 python scripts/daily_report.py channel_lists/example.txt --profile profiles/example.md --html
 ```
 
-`report.py` sends selected messages and the profile to your configured OpenAI-compatible API. The LLM handles semantic matching, reasons, concerns, and action recommendations; Python handles deduplication, statistics, and the final Markdown template. For remote LLM providers, `--redact-contact-info` is recommended unless contact details are needed for applying. Use `--dry-run-prompt` to review the exact payload before sending.
+`report.py` sends selected messages and the profile to your configured OpenAI-compatible API. The LLM handles semantic matching; Python handles deduplication, statistics, and rendering. The extraction schema, system prompt, and report labels are all driven by the profile. For remote LLM providers, `--redact-contact-info` is recommended unless contact details are needed. Use `--dry-run-prompt` to review the exact payload before sending.
 
 `daily_report.py` is a local convenience wrapper. It does not install a scheduler; use cron or Windows Task Scheduler if you want it to run daily.
 
@@ -173,14 +185,14 @@ Telegram Channels
   → Telethon reads messages (MTProto, precise time filter)
     → scanner detects saturation + completeness
     → saved to output/ (JSONL + metadata sidecar)
-      → LLM extracts matching jobs with reasons/concerns/actions
-        → Python deduplicates, counts, and renders the daily Markdown report
+      → LLM extracts matching items (schema from profile)
+        → Python deduplicates, counts, and renders Markdown/HTML report
 ```
 
 1. **Read**: Telethon (MTProto user client) reads messages from channels you've subscribed to, including media metadata
 2. **Filter**: `scripts/scan.py` filters by precise timestamp and refuses to silently accept saturated limits
 3. **Save**: Messages are saved as JSONL with date, sender, text, channel info, media fields, and a `.meta.json` scan sidecar
-4. **Report**: The LLM performs semantic job matching; Python renders deterministic stats and Markdown sections
+4. **Report**: The LLM performs semantic matching using the extraction schema from your profile; Python renders deterministic stats and Markdown/HTML sections
 
 ## Directory Structure
 
@@ -191,8 +203,9 @@ tg-channel-scanner/
 ├── requirements-llm.txt     # Pinned optional summarizer dependency
 ├── requirements-dev.txt     # Pinned test dependency
 ├── setup.sh / setup.bat     # One-command installer
-├── profiles/                # Candidate/filter profiles
-│   └── example.md           # Example: Frontend Developer job search
+├── profiles/                # Filter profiles (job or custom mode)
+│   ├── example.md           # Example: Frontend Developer job search
+│   └── example-airdrop.md   # Example: Crypto airdrop monitor (custom mode)
 ├── channel_lists/           # Channel name lists (one per line)
 │   └── example.txt          # Example channel list
 ├── scripts/
@@ -202,12 +215,14 @@ tg-channel-scanner/
 │   ├── export_folder.py     # Export channels from a Telegram chat folder
 │   ├── media_ocr.py         # Shared OCR/STT helpers
 │   ├── ocr_media.py         # Standalone OCR re-processor
-│   ├── report.py            # Deterministic daily job report generator (Markdown + HTML)
+│   ├── profile_schema.py    # Profile parser and mode configuration
+│   ├── report.py            # Multi-mode report generator (Markdown + HTML)
 │   ├── daily_report.py      # Scan + report convenience pipeline
 │   └── summarize.py         # Optional LLM summarizer
 ├── templates/
-│   ├── report.html          # HTML report template (OKLCH palette, Bricolage Grotesque)
-│   └── icon.png             # Report favicon/header icon
+│   ├── report-job.html      # HTML template for job mode (OKLCH palette)
+│   ├── report-generic.html  # HTML template for custom modes
+│   └── icon-job.png         # Report favicon/header icon
 ├── output/                  # Scan results (gitignored)
 └── docs/
     ├── tos-risk-analysis.md
@@ -230,6 +245,18 @@ Copy `profiles/example.md` and edit the matching criteria. The profile tells the
 - Remove duplicates (same company + title)
 - Exclude: Backend-only, Mobile, DevOps...
 ```
+
+### Custom mode profiles
+
+To use a custom mode (e.g. monitoring airdrops, news, events), add the optional `## Extraction Schema`, `## Extraction Prompt`, and `## Report Labels` sections to your profile. These override the built-in job-mode defaults. See `profiles/example-airdrop.md` for a complete example.
+
+Key configuration sections:
+
+| Section | What it controls |
+|---------|-----------------|
+| `## Extraction Schema` | Field definitions, dedup keys, top-level JSON key |
+| `## Extraction Prompt` | System prompt, location/contact filter overrides |
+| `## Report Labels` | Report title, section headers, output filename |
 
 ## Creating Your Own Channel List
 
