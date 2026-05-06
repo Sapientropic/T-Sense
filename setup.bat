@@ -6,10 +6,25 @@ cd /d "%~dp0"
 
 echo === TG Channel Scanner Setup ===
 
+REM Check Python version (require 3.12+)
 python --version 2>nul || (
     echo Error: Python not found. Install from https://python.org
     exit /b 1
 )
+
+for /f "tokens=2 delims= " %%v in ('python --version 2^>^&1') do set PYVER=%%v
+for /f "tokens=1,2 delims=." %%a in ("%PYVER%") do set PYMAJOR=%%a& set PYMINOR=%%b
+
+if %PYMAJOR% lss 3 (
+    echo Error: Python 3.12+ required. Found %PYVER%. Install from https://python.org
+    exit /b 1
+)
+if %PYMAJOR% equ 3 if %PYMINOR% lss 12 (
+    echo Error: Python 3.12+ required. Found %PYVER%. Install from https://python.org
+    exit /b 1
+)
+
+echo Found Python %PYVER%
 
 if not exist ".venv" (
     echo Creating virtual environment...

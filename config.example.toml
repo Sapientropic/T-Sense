@@ -4,4 +4,4 @@
 
 api_id = 0
 api_hash = "your_api_hash_here"
-session_store = "file"
+session_store = "file"  # "file" stores session locally; "memory" is ephemeral but less secure. Keep session files secret.

@@ -1,37 +1,30 @@
-# IT Job Channels (Russian-speaking market)
-# One channel per line. Lines starting with # are ignored.
-# Empty lines are skipped.
+# Example Channel List
+# These are illustrative example names — replace with real channels you subscribe to.
+# One channel per line. Lines starting with # are ignored. Empty lines are skipped.
 # Customize this list for your needs.
 
 # General IT jobs
-remote_italic
-rabota_italy
-italy_vacancy
-dev_jobs_remote
-remote_work_it
+example_remote_jobs
+example_it_vacancies
+example_dev_careers
 
 # Frontend-specific
-frontend_jobs
-react_jobs
+example_frontend_jobs
+example_react_jobs
 
-# Russian IT community
-thedevs
-proghub
-python_jobs
-golang_jobs
-javascript_jobs
-javascript_channel
+# Programming communities
+example_python_jobs
+example_golang_jobs
+example_js_jobs
 
 # Startup / Product
-startup_jobs
-product_jobs
+example_startup_jobs
+example_product_hiring
 
 # Relocation
-relocate_us
-relocate_eu
-relocate_uk
-dev_relocation
+example_relocate_us
+example_relocate_eu
 
 # Remote-specific
-remote_dev
-remote_jobs_daily
+example_remote_dev
+example_remote_daily

@@ -9,7 +9,7 @@ Reading your own Telegram messages at a reasonable frequency is safe. Bulk scrap
 - Reading messages from channels you've joined via your own account
 - Automated summaries for personal use (job hunting, news digests)
 - Scanning at reasonable intervals (≤ once per day)
-- Reading a reasonable number of channels (< 30)
+- Reading a reasonable number of channels (≤ 25)
 
 ## What's NOT Allowed
 
@@ -26,7 +26,7 @@ This tool is designed for **personal job search assistance**:
 | Parameter | Recommended Limit |
 |-----------|-------------------|
 | Scan frequency | ≤ 1× per day |
-| Channels per scan | ≤ 30 |
+| Channels per scan | ≤ 25 |
 | Messages per channel | ≤ 100 |
 | Delay between channels | ≥ 1 second |
 | Data retention | Delete after summarization |
