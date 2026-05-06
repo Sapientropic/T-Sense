@@ -43,12 +43,20 @@ if [ -z "${VIRTUAL_ENV:-}" ]; then
 fi
 
 # Install dependencies
-echo "Installing tgcli..."
+echo "Installing pinned core dependencies..."
 pip install --upgrade pip --quiet
-pip install pytgcli --quiet
+pip install -r requirements.txt --quiet
 
-echo "Installing optional dependencies (openai for summarize.py)..."
-pip install openai --quiet 2>/dev/null || echo "  (openai not installed — summarize.py will need it later)"
+echo "Installing optional pinned LLM dependencies (openai for summarize.py)..."
+pip install -r requirements-llm.txt --quiet 2>/dev/null || echo "  (openai not installed — summarize.py will need it later)"
+
+EXPECTED_TG_VERSION="0.9.0"
+TG_VERSION="$(tg --version 2>/dev/null || true)"
+if [ "$TG_VERSION" != "$EXPECTED_TG_VERSION" ]; then
+    echo "Error: expected tgcli $EXPECTED_TG_VERSION, got '${TG_VERSION:-not found}'." >&2
+    echo "Check requirements.txt before continuing." >&2
+    exit 1
+fi
 
 # Configure tgcli (writes to global config at ~/.config/tgcli/)
 TGCLI_CONFIG_DIR="$HOME/.config/tgcli"

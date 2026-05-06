@@ -1,0 +1,2 @@
+# Optional summarizer dependency. Installed by setup scripts when available.
+openai==2.34.0

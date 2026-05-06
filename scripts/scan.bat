@@ -1,62 +1,32 @@
 @echo off
-setlocal enabledelayedexpansion
-REM Batch-read Telegram channels (Windows)
-REM Usage: scripts\scan.bat <channel_list.txt> [hours]
+setlocal
+REM Thin Windows wrapper for the cross-platform Python scanner.
+REM Usage: scripts\scan.bat <channel_list.txt> [hours] [scan.py options]
 
 cd /d "%~dp0\.."
 
-set LIST=%1
-set HOURS=%2
-if "%HOURS%"=="" set HOURS=24
-
-if "%LIST%"=="" (
+if "%~1"=="" (
     echo Error: Missing channel list argument.
-    echo Usage: scripts\scan.bat ^<channel_list.txt^> [hours]
+    echo Usage: scripts\scan.bat ^<channel_list.txt^> [hours] [scan.py options]
     exit /b 1
 )
 
-if not exist "%LIST%" (
-    echo Error: Channel list not found: %LIST%
+if not exist ".venv\Scripts\activate.bat" (
+    echo Error: .venv not found. Run setup.bat first.
     exit /b 1
 )
 
-call .venv\Scripts\activate.bat
-
-for /f %%i in ('python -c "from datetime import datetime,timedelta,timezone; print((datetime.now(timezone.utc)-timedelta(hours=%HOURS%)).strftime('%%Y-%%m-%%d'))"') do set AFTER=%%i
-
-if not exist "output" mkdir output
-for /f %%i in ('python -c "from datetime import datetime,timezone; print(datetime.now(timezone.utc).strftime('%%Y%%m%%d_%%H%%M'))"') do set TS=%%i
-set OUTPUT=output\scan_%TS%.jsonl
-set ERRORS=output\scan_%TS%.errors.log
-
-echo Time window: past %HOURS%h (since %AFTER%)
-echo Output: %OUTPUT%
-echo ---
-
-set CHANNELS=0
-set FAILURES=0
-for /f "usebackq eol=# delims=" %%ch in ("%LIST%") do (
-    if "%%ch"=="" goto :skip_read
-    set /a CHANNELS+=1
-    echo [!CHANNELS!] Reading: %%ch
-    tg read "%%ch" --after %AFTER% --limit 100 >> "%OUTPUT%" 2>>"%ERRORS%"
-    if errorlevel 1 (
-        echo   WARNING: Failed: %%ch (see %ERRORS%)
-        set /a FAILURES+=1
-    )
-    timeout /t 1 /nobreak >nul
-    :skip_read
+call ".venv\Scripts\activate.bat"
+if errorlevel 1 (
+    echo Error: Failed to activate .venv.
+    exit /b 1
 )
 
-for /f %%i in ('python -c "import sys; print(sum(1 for _ in open(r'%OUTPUT%', encoding='utf-8')))"') do set COUNT=%%i
-
-echo ---
-echo Done. %CHANNELS% channels scanned, %COUNT% messages collected.
-if %FAILURES% gtr 0 (
-    echo WARNING: %FAILURES% channels failed. See: %ERRORS%
+where tg >nul 2>nul
+if errorlevel 1 (
+    echo Error: tg command not found in venv. Run setup.bat first.
+    exit /b 1
 )
-echo Output: %OUTPUT%
-echo.
-echo Next: Summarize with your preferred AI:
-echo   OpenAI/DeepSeek: python scripts\summarize.py --input %OUTPUT% --profile profiles\YOUR_PROFILE.md
-echo   Codex/Claude:    Point your agent at %OUTPUT% + profiles\YOUR_PROFILE.md
+
+python "scripts\scan.py" %*
+exit /b %ERRORLEVEL%

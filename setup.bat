@@ -33,12 +33,21 @@ if not exist ".venv" (
 
 call .venv\Scripts\activate.bat
 
-echo Installing tgcli...
+echo Installing pinned core dependencies...
 pip install --upgrade pip --quiet
-pip install pytgcli --quiet
+pip install -r requirements.txt --quiet
 
-echo Installing optional dependencies (openai for summarize.py)...
-pip install openai --quiet 2>nul || echo   ^(openai not installed - summarize.py will need it later^)
+echo Installing optional pinned LLM dependencies (openai for summarize.py)...
+pip install -r requirements-llm.txt --quiet 2>nul || echo   ^(openai not installed - summarize.py will need it later^)
+
+set EXPECTED_TG_VERSION=0.9.0
+set TG_VERSION=
+for /f "delims=" %%v in ('tg --version 2^>nul') do set TG_VERSION=%%v
+if not "%TG_VERSION%"=="%EXPECTED_TG_VERSION%" (
+    echo Error: expected tgcli %EXPECTED_TG_VERSION%, got "%TG_VERSION%".
+    echo Check requirements.txt before continuing.
+    exit /b 1
+)
 
 REM Configure tgcli (writes to %USERPROFILE%\.config\tgcli\)
 set TGCLI_DIR=%USERPROFILE%\.config\tgcli

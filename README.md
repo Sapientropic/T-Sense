@@ -1,6 +1,6 @@
 # TG Channel Scanner
 
-Read Telegram channel messages on schedule, filter by keywords/profiles, and generate AI-powered digests.
+Read Telegram channel messages on demand, filter by keywords/profiles, and generate AI-powered digests.
 
 Designed for job seekers monitoring multiple Telegram job channels, but works for any channel monitoring use case.
 
@@ -25,7 +25,7 @@ chmod +x setup.sh scripts/scan.sh
 ./setup.sh
 ```
 
-> `setup.sh` installs [pytgcli](https://github.com/tksohishi/tgcli) (provides the `tg` command) and writes config to `~/.config/tgcli/config.toml`.
+> `setup.sh` installs pinned dependencies from `requirements.txt` / `requirements-llm.txt`, verifies [pytgcli](https://github.com/tksohishi/tgcli) provides the expected `tg` command, and writes config to `~/.config/tgcli/config.toml`.
 
 ### Configure
 
@@ -45,17 +45,27 @@ tg auth status
 ### Run a scan
 
 ```bash
-# Activate venv first
-source .venv/bin/activate
-
 # Scan all channels in a list, past 24 hours
 ./scripts/scan.sh channel_lists/example.txt
 
 # Scan past 7 days
 ./scripts/scan.sh channel_lists/example.txt 168
 
+# Scan since a precise ISO-8601 cutoff
+./scripts/scan.sh channel_lists/example.txt --since 2026-05-06T07:30:00Z
+
 # Output goes to output/scan_YYYYMMDD_HHMMSS.jsonl
 # Errors go to output/scan_YYYYMMDD_HHMMSS.errors.log
+```
+
+The scanner uses an exact UTC cutoff. Because `tgcli` currently accepts date-only `--after` values, the wrapper over-reads from that UTC date and filters JSONL locally. It increases `tg read --limit` until the result is no longer saturated; if a channel still reaches `SCAN_MAX_LIMIT`, the scan exits non-zero and marks that channel incomplete instead of silently dropping messages.
+
+Useful environment variables:
+
+```bash
+SCAN_INITIAL_LIMIT=200   # first tg read limit per channel
+SCAN_MAX_LIMIT=5000      # hard cap before reporting incomplete
+SCAN_DELAY=1             # seconds between channels
 ```
 
 ### Summarize with AI
@@ -64,6 +74,10 @@ source .venv/bin/activate
 # Option 1: Python script (OpenAI-compatible API)
 export OPENAI_API_KEY=sk-your-key
 python scripts/summarize.py --input output/scan_XXXX.jsonl --profile profiles/example.md
+
+# Optional: redact emails, phone numbers, and Telegram handles before sending
+python scripts/summarize.py --input output/scan_XXXX.jsonl --profile profiles/example.md \
+  --redact-contact-info
 
 # Works with DeepSeek, Ollama, etc:
 python scripts/summarize.py --input output/scan_XXXX.jsonl --profile profiles/example.md \
@@ -77,27 +91,33 @@ python scripts/summarize.py --input output/scan_XXXX.jsonl --profile profiles/ex
 #     "Read output/scan_XXXX.jsonl and filter jobs matching profiles/my-profile.md"
 ```
 
+`summarize.py` sends the selected JSONL messages and profile to your configured OpenAI-compatible API. Telegram messages are treated as untrusted content in the prompt, but you should still review your LLM provider's privacy/data-use terms before sending private channel data.
+
 ---
 
 ## How It Works
 
 ```
 Telegram Channels
-  → tgcli reads messages (JSONL)
+  → tgcli reads messages (JSONL, date floor)
+    → scanner filters exact cutoff + completeness
     → saved to output/
       → AI agent filters + summarizes
         → structured report
 ```
 
 1. **Read**: `tgcli` (Telethon-based CLI) reads messages from channels you've subscribed to
-2. **Filter**: Messages saved as JSONL with date, sender, text, channel info
-3. **Summarize**: Your preferred LLM generates a filtered, deduplicated report
+2. **Filter**: `scripts/scan.py` filters by precise timestamp and refuses to silently accept saturated limits
+3. **Save**: Messages are saved as JSONL with date, sender, text, channel info
+4. **Summarize**: Your preferred LLM generates a filtered, deduplicated report
 
 ## Directory Structure
 
 ```
 tg-channel-scanner/
 ├── config.example.toml      # Template (actual config at ~/.config/tgcli/)
+├── requirements.txt         # Pinned scanner dependency
+├── requirements-llm.txt     # Pinned optional summarizer dependency
 ├── setup.sh                 # One-command installer
 ├── profiles/                # Candidate/filter profiles
 │   └── example.md           # Example: Frontend Developer job search
@@ -106,6 +126,7 @@ tg-channel-scanner/
 ├── scripts/
 │   ├── scan.sh              # Batch channel reader (Mac/Linux)
 │   ├── scan.bat             # Batch channel reader (Windows)
+│   ├── scan.py              # Cross-platform scanner core
 │   └── summarize.py         # Optional LLM summarizer
 ├── output/                  # Scan results (gitignored)
 └── docs/
@@ -182,6 +203,8 @@ scripts\scan.bat channel_lists\example.txt
 | `Permission denied` on `.sh` | `chmod +x setup.sh scripts/scan.sh` |
 | my.telegram.org shows ERROR | See [docs/getting-api-credentials.md](docs/getting-api-credentials.md) |
 | 0 messages collected | Check `output/*.errors.log` for failures |
+| Scan exits with incomplete channel | Raise `SCAN_MAX_LIMIT` or narrow the time window; the script refused to claim completeness after reaching the cap |
+| tgcli version mismatch during setup | Re-run setup after checking `requirements.txt`; this repo is verified against pinned `pytgcli` |
 
 ## License
 

@@ -29,6 +29,9 @@ A profile tells the AI what to filter for. Include your role, tech stack, prefer
 ```bash
 # Summarize with a specific profile
 python scripts/summarize.py --input output/scan_YYYYMMDD_HHMMSS.jsonl --profile profiles/my-profile.md
+
+# Redact emails, phone numbers, and Telegram handles before sending to the LLM
+python scripts/summarize.py --input output/scan_YYYYMMDD_HHMMSS.jsonl --profile profiles/my-profile.md --redact-contact-info
 ```
 
 ## Tips
@@ -36,3 +39,4 @@ python scripts/summarize.py --input output/scan_YYYYMMDD_HHMMSS.jsonl --profile 
 - Keep profiles focused — a generic profile produces generic results
 - Create multiple profiles for different job searches (e.g., `frontend.md`, `fullstack.md`)
 - Update profiles as your preferences or skills change
+- Do not put secrets, API keys, private notes, or unrelated personal data in profiles. The summarizer sends the profile to your configured LLM API.

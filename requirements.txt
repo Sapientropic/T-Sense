@@ -1,0 +1,3 @@
+# Core scanner dependency. Keep this pinned because tgcli is still alpha and
+# its command/config surface is part of this repo's runtime contract.
+pytgcli==0.9.0
