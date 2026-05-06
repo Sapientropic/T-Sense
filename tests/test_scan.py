@@ -145,10 +145,9 @@ class ScanTests(unittest.TestCase):
         msg.date = datetime(2026, 5, 6, 8, 0, tzinfo=timezone.utc)
         msg.text = "hello"
         msg.sender_id = 123
-        msg.media = MagicMock()
-        msg.media.__class__ = scan.MessageMediaPhoto
-        msg.media.__class__.__name__ = "MessageMediaPhoto"
         msg.reply_to = None
+        msg.voice = False
+        msg.video = False
 
         # Use a real MessageMediaPhoto instance for isinstance check
         from telethon.tl.types import MessageMediaPhoto as RealPhoto
@@ -158,6 +157,8 @@ class ScanTests(unittest.TestCase):
         result = scan.message_to_dict(msg, "test_channel")
         self.assertTrue(result["has_photo"])
         self.assertEqual(result["media_type"], "MessageMediaPhoto")
+        self.assertEqual(result["media_group"], "photo")
+        self.assertNotIn("media_path", result)
 
 
 if __name__ == "__main__":

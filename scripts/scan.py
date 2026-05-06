@@ -266,9 +266,16 @@ def message_to_dict(msg, channel_name: str) -> dict:
     """Convert a Telethon Message to a JSONL-compatible dict."""
     media_type = None
     has_photo = False
+    media_group = None
     if msg.media:
         media_type = type(msg.media).__name__
         has_photo = isinstance(msg.media, MessageMediaPhoto)
+        if msg.voice:
+            media_group = "voice"
+        elif msg.video:
+            media_group = "video"
+        elif has_photo:
+            media_group = "photo"
 
     reply_to_msg_id = None
     if msg.reply_to:
@@ -283,6 +290,7 @@ def message_to_dict(msg, channel_name: str) -> dict:
         "reply_to_msg_id": reply_to_msg_id,
         "has_photo": has_photo,
         "media_type": media_type,
+        "media_group": media_group,
     }
 
 
