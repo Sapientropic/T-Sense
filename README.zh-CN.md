@@ -140,6 +140,7 @@ python scripts/daily_report.py channel_lists/example.txt \
   --profile profiles/example.md --html
 
 # 自定义 LLM 端点（DeepSeek、Ollama 等）
+# 如果只设置了 DEEPSEEK_API_KEY，report.py 会自动使用 DeepSeek 默认端点和模型。
 python scripts/report.py --input output/scan_XXXX.jsonl \
   --profile profiles/example.md \
   --base-url https://api.deepseek.com/v1 --model deepseek-chat

@@ -45,6 +45,8 @@ except ModuleNotFoundError:
 
 DEFAULT_MAX_MESSAGES = 200
 DEFAULT_MODEL = "gpt-4o-mini"
+DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
+DEFAULT_DEEPSEEK_MODEL = "deepseek-chat"
 
 _DEFAULT_ACTIONS = {"high": "Apply", "medium": "Inspect", "low": "Skip unless criteria change"}
 
@@ -343,6 +345,17 @@ def bullet_list(items: list[str]) -> str:
     return "\n".join(f"- {item}" for item in items)
 
 
+def action_for_rating(item: dict, rating: str, profile_config: ProfileConfig | None = None) -> str:
+    explicit = item.get("action")
+    if explicit:
+        return str(explicit)
+    if profile_config:
+        value = getattr(profile_config.actions, rating, None)
+        if value:
+            return str(value)
+    return _DEFAULT_ACTIONS[rating]
+
+
 def render_job(job: dict, index: int, profile_config: ProfileConfig | None = None) -> str:
     # Title: use first two dedup fields if available, else role/company
     dedup_fields = (profile_config.mode.dedup_fields if profile_config else None) or ["company", "role"]
@@ -354,8 +367,8 @@ def render_job(job: dict, index: int, profile_config: ProfileConfig | None = Non
     contact_value = contacts or links or [job.get("contact") or job.get("link") or "Not specified"]
     sources = job.get("sources") or as_list(job.get("source"))
 
-    actions = profile_config.actions if profile_config else None
-    action = job.get("action") or (actions or _DEFAULT_ACTIONS)[normalize_rating(job.get("rating"))]
+    rating = normalize_rating(job.get("rating"))
+    action = action_for_rating(job, rating, profile_config)
 
     # Build table rows from profile fields (custom) or hardcoded (job default)
     if profile_config and profile_config.mode.mode != "job":
@@ -964,6 +977,16 @@ def extract_jobs(
     return parse_extraction_response(raw_response, top_key)
 
 
+def resolve_llm_settings(base_url: str | None, model: str) -> tuple[str | None, str]:
+    resolved_base_url = base_url or os.environ.get("OPENAI_BASE_URL")
+    only_deepseek_key = bool(os.environ.get("DEEPSEEK_API_KEY")) and not os.environ.get("OPENAI_API_KEY")
+    if only_deepseek_key and not resolved_base_url:
+        resolved_base_url = DEFAULT_DEEPSEEK_BASE_URL
+        if model == DEFAULT_MODEL:
+            model = DEFAULT_DEEPSEEK_MODEL
+    return resolved_base_url, model
+
+
 def debug_response_path(output: str | None, input_path: Path) -> Path:
     if output:
         return Path(output).with_suffix(".llm-response.txt")
@@ -1037,12 +1060,13 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Parsed {len(raw_jobs)} jobs from {args.html_only} ({matched} with original text)", file=sys.stderr)
     else:
         try:
+            base_url, model = resolve_llm_settings(args.base_url, args.model)
             raw_jobs = extract_jobs(
                 messages=messages,
                 profile=profile,
                 meta=meta,
-                base_url=args.base_url,
-                model=args.model,
+                base_url=base_url,
+                model=model,
                 max_messages=args.max_messages,
                 max_tokens=args.max_tokens,
                 profile_config=profile_config,
@@ -1104,14 +1128,7 @@ def _read_template_asset(name: str) -> str:
 
 
 def _action_for_rating(item: dict, rating: str, profile_config: ProfileConfig | None = None) -> str:
-    explicit = item.get("action")
-    if explicit:
-        return str(explicit)
-    if profile_config:
-        value = getattr(profile_config.actions, rating, None)
-        if value:
-            return str(value)
-    return _DEFAULT_ACTIONS[rating]
+    return action_for_rating(item, rating, profile_config)
 
 
 def _load_icon_b64(job_mode: bool = True) -> str:

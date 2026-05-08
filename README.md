@@ -140,6 +140,7 @@ python scripts/daily_report.py channel_lists/example.txt \
   --profile profiles/example.md --html
 
 # Custom LLM endpoint (DeepSeek, Ollama, etc.)
+# If only DEEPSEEK_API_KEY is set, these DeepSeek defaults are selected automatically.
 python scripts/report.py --input output/scan_XXXX.jsonl \
   --profile profiles/example.md \
   --base-url https://api.deepseek.com/v1 --model deepseek-chat

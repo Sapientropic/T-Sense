@@ -431,6 +431,61 @@ section_low: "Archive"
         self.assertIn("data-theme-toggle", html)
         self.assertNotIn("{shared_css}", html)
 
+    def test_custom_markdown_render_uses_profile_action_mapping(self):
+        report = load_report_module(self)
+        profile = """# Custom watchlist
+
+## Extraction Schema
+mode: custom
+top_level_key: items
+dedup_fields: [project, event]
+fields:
+  - name: project
+    required: true
+  - name: event
+  - name: rating
+    values: [high, medium, low]
+  - name: action
+    values: ["Join now", "Review source", "Skip"]
+  - name: why
+"""
+        profile_config = report.parse_profile_config(profile)
+
+        rendered = report.render_job(
+            {
+                "project": "Example Protocol",
+                "event": "Quest opens",
+                "rating": "high",
+                "why": "Fresh campaign with explicit source.",
+            },
+            1,
+            profile_config,
+        )
+
+        self.assertIn("**Action**: **Join now**", rendered)
+
+    def test_deepseek_key_gets_matching_default_endpoint_and_model(self):
+        report = load_report_module(self)
+
+        with patch.dict("os.environ", {"DEEPSEEK_API_KEY": "sk-test"}, clear=True):
+            base_url, model = report.resolve_llm_settings(None, report.DEFAULT_MODEL)
+
+        self.assertEqual(base_url, report.DEFAULT_DEEPSEEK_BASE_URL)
+        self.assertEqual(model, report.DEFAULT_DEEPSEEK_MODEL)
+
+    def test_openai_key_keeps_openai_defaults_when_both_keys_exist(self):
+        report = load_report_module(self)
+
+        with patch.dict(
+            "os.environ",
+            {"OPENAI_API_KEY": "sk-openai", "DEEPSEEK_API_KEY": "sk-deepseek"},
+            clear=True,
+        ):
+            base_url, model = report.resolve_llm_settings(None, report.DEFAULT_MODEL)
+
+        self.assertIsNone(base_url)
+        self.assertEqual(model, report.DEFAULT_MODEL)
+
     def test_html_output_writes_markdown_and_html_from_one_extraction(self):
         report = load_report_module(self)
 
