@@ -7,10 +7,13 @@ import json
 import mimetypes
 import subprocess
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from pathlib import PurePosixPath
 from urllib.parse import unquote, urlparse
 
 try:
@@ -24,10 +27,33 @@ except ModuleNotFoundError:
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 GIT_TIMEOUT_SECONDS = 25
+LOOPBACK_DASHBOARD_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
 
 class DashboardGitError(Exception):
     """Raised when repository update checks or pulls cannot be completed safely."""
+
+
+class DashboardArtifactError(Exception):
+    """Raised when a requested dashboard artifact is missing or outside output/runs."""
+
+
+def dashboard_host_warning(host: str) -> str | None:
+    normalized = host.strip().lower()
+    if normalized in LOOPBACK_DASHBOARD_HOSTS:
+        return None
+    return (
+        "Dashboard host is not loopback. Dashboard state can include local workflow context "
+        "and report artifacts may include raw context; only bind this server to a trusted interface."
+    )
+
+
+@contextmanager
+def close_after_use(conn) -> Iterator:
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 
 def _utc_now() -> str:
@@ -152,6 +178,67 @@ def _git_pull_latest() -> dict:
     return after
 
 
+def resolve_run_artifact_path(requested_path: str, *, artifact_root: Path | None = None) -> Path:
+    decoded = unquote(requested_path).replace("\\", "/").lstrip("/")
+    parts = PurePosixPath(decoded).parts
+    if ".." in parts or not parts:
+        raise DashboardArtifactError("artifact_path_outside_output_runs")
+    if "runs" not in parts:
+        raise DashboardArtifactError("artifact_path_must_include_runs")
+    run_index = parts.index("runs")
+    if run_index >= len(parts) - 2:
+        raise DashboardArtifactError("artifact_path_missing")
+    if parts[-1].lower() not in {"report.html", "report.md"}:
+        raise DashboardArtifactError("artifact_type_not_report")
+
+    root = (artifact_root or PROJECT_ROOT.joinpath(*parts[: run_index + 1])).resolve()
+    relative = "/".join(parts[run_index + 1 :])
+    if not relative:
+        raise DashboardArtifactError("artifact_path_missing")
+
+    candidate = (root / relative).resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError as exc:
+        raise DashboardArtifactError("artifact_path_outside_output_runs") from exc
+    if not candidate.exists() or not candidate.is_file():
+        raise DashboardArtifactError("artifact_not_found")
+    return candidate
+
+
+def dashboard_relative_path(path: Path) -> str:
+    try:
+        return str(path.resolve().relative_to(PROJECT_ROOT.resolve())).replace("\\", "/")
+    except ValueError:
+        return str(path)
+
+
+def write_feedback_export(conn, *, output_path: Path | None = None) -> dict:
+    target = output_path or PROJECT_ROOT / "output" / "dashboard-feedback.jsonl"
+    entries = monitor_state.export_feedback_entries(conn)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    lines = [json.dumps(entry, ensure_ascii=False) for entry in entries]
+    target.write_text(("\n".join(lines) + "\n") if lines else "", encoding="utf-8")
+    return {
+        "schema_version": "feedback_export_result_v1",
+        "feedback_count": len(entries),
+        "output_path": dashboard_relative_path(target),
+    }
+
+
+def resolve_static_path(request_path: str, *, static_dir: Path) -> Path:
+    relative = "index.html" if request_path in {"", "/"} else unquote(request_path.lstrip("/"))
+    candidate = (static_dir / relative).resolve()
+    static_root = static_dir.resolve()
+    try:
+        candidate.relative_to(static_root)
+    except ValueError:
+        return static_root / "index.html"
+    if not candidate.exists() or candidate.is_dir():
+        return static_root / "index.html"
+    return candidate
+
+
 class DashboardHandler(BaseHTTPRequestHandler):
     db_path: Path
     static_dir: Path
@@ -182,11 +269,17 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
-        if parsed.path == "/api/state":
-            with self._connect() as conn:
-                self._json(HTTPStatus.OK, monitor_state.dashboard_snapshot(conn))
-            return
-        self._serve_static(parsed.path)
+        try:
+            if parsed.path == "/api/state":
+                with close_after_use(self._connect()) as conn:
+                    self._json(HTTPStatus.OK, monitor_state.dashboard_snapshot(conn))
+                return
+            if parsed.path.startswith("/artifacts/"):
+                self._serve_artifact(parsed.path.removeprefix("/artifacts/"))
+                return
+            self._serve_static(parsed.path)
+        except (ValueError, json.JSONDecodeError, monitor_state.MonitorStateError) as exc:
+            self._json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": str(exc)})
 
     def do_POST(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
@@ -200,9 +293,14 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     raise DashboardGitError("Pull latest requires explicit confirmation.")
                 self._json(HTTPStatus.OK, {"ok": True, "git": _git_pull_latest()})
                 return
+            if parsed.path == "/api/feedback/export":
+                with close_after_use(self._connect()) as conn:
+                    result = write_feedback_export(conn)
+                self._json(HTTPStatus.OK, {"ok": True, "export": result})
+                return
             if parsed.path.startswith("/api/review-cards/") and parsed.path.endswith("/action"):
                 card_id = unquote(parsed.path.split("/")[3])
-                with self._connect() as conn:
+                with close_after_use(self._connect()) as conn:
                     card = monitor_state.set_card_action(
                         conn,
                         card_id=card_id,
@@ -211,10 +309,26 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     )
                 self._json(HTTPStatus.OK, {"ok": True, "card": card})
                 return
+            if parsed.path.startswith("/api/profiles/") and parsed.path.endswith("/alert-mode"):
+                profile_id = unquote(parsed.path.split("/")[3])
+                with close_after_use(self._connect()) as conn:
+                    profile = monitor_state.update_profile_alert_mode(
+                        conn,
+                        profile_id=profile_id,
+                        mode=str(body.get("mode") or ""),
+                    )
+                self._json(HTTPStatus.OK, {"ok": True, "profile": profile})
+                return
             if parsed.path.startswith("/api/profile-patches/") and parsed.path.endswith("/apply"):
                 patch_id = unquote(parsed.path.split("/")[3])
-                with self._connect() as conn:
+                with close_after_use(self._connect()) as conn:
                     result = monitor_state.apply_profile_patch(conn, patch_id=patch_id)
+                self._json(HTTPStatus.OK, {"ok": True, "result": result})
+                return
+            if parsed.path.startswith("/api/profile-patches/") and parsed.path.endswith("/revert"):
+                patch_id = unquote(parsed.path.split("/")[3])
+                with close_after_use(self._connect()) as conn:
+                    result = monitor_state.revert_profile_patch(conn, patch_id=patch_id)
                 self._json(HTTPStatus.OK, {"ok": True, "result": result})
                 return
             self._json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "not_found"})
@@ -232,11 +346,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 },
             )
             return
-        relative = "index.html" if request_path in {"", "/"} else unquote(request_path.lstrip("/"))
-        candidate = (self.static_dir / relative).resolve()
-        static_root = self.static_dir.resolve()
-        if not str(candidate).startswith(str(static_root)) or not candidate.exists() or candidate.is_dir():
-            candidate = static_root / "index.html"
+        candidate = resolve_static_path(request_path, static_dir=self.static_dir)
         if not candidate.exists():
             self._json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "static_file_not_found"})
             return
@@ -245,6 +355,21 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self.send_response(HTTPStatus.OK.value)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _serve_artifact(self, encoded_path: str) -> None:
+        try:
+            candidate = resolve_run_artifact_path(encoded_path)
+        except DashboardArtifactError as exc:
+            self._json(HTTPStatus.NOT_FOUND, {"ok": False, "error": str(exc)})
+            return
+        body = candidate.read_bytes()
+        content_type = mimetypes.guess_type(str(candidate))[0] or "application/octet-stream"
+        self.send_response(HTTPStatus.OK.value)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
 
@@ -271,13 +396,17 @@ def main(argv: list[str] | None = None) -> int:
     DashboardHandler.db_path = db_path
     DashboardHandler.static_dir = static_dir
     server = ThreadingHTTPServer((args.host, args.port), DashboardHandler)
+    warning = dashboard_host_warning(str(args.host))
     if agent_cli.is_json_format(args):
+        payload = {"url": f"http://{args.host}:{args.port}", "db_path": str(db_path)}
+        if warning:
+            payload["warning"] = warning
         agent_cli.print_json(
-            agent_cli.envelope_success(
-                {"url": f"http://{args.host}:{args.port}", "db_path": str(db_path)}
-            )
+            agent_cli.envelope_success(payload)
         )
     else:
+        if warning:
+            print(f"Warning: {warning}", file=sys.stderr)
         print(f"TGCS dashboard listening on http://{args.host}:{args.port}")
     try:
         server.serve_forever()

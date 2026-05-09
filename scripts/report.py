@@ -17,11 +17,13 @@ import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Iterable
+from time import perf_counter
+from typing import Any, Iterable
 from urllib.parse import urlparse
 
 try:
     from scripts import agent_cli, decision_intelligence, report_diagnostics, source_registry, state_store
+    from scripts.item_display import display_item_title, display_title_parts, meaningful_text
     from scripts.profile_schema import ProfileConfig, build_json_schema_prompt, parse_profile_config
     from scripts.summarize import (
         positive_int,
@@ -34,6 +36,7 @@ except ModuleNotFoundError:
     if _PROJECT_ROOT not in sys.path:
         sys.path.insert(0, _PROJECT_ROOT)
     from scripts import agent_cli, decision_intelligence, report_diagnostics, source_registry, state_store
+    from scripts.item_display import display_item_title, display_title_parts, meaningful_text
     from scripts.profile_schema import ProfileConfig, build_json_schema_prompt, parse_profile_config
     from scripts.summarize import (
         positive_int,
@@ -45,8 +48,12 @@ except ModuleNotFoundError:
 
 DEFAULT_MAX_MESSAGES = 200
 DEFAULT_MODEL = "gpt-4o-mini"
-DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
-DEFAULT_DEEPSEEK_MODEL = "deepseek-chat"
+DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash"
+DEFAULT_MINIMAX_BASE_URL = "https://api.minimax.io/v1"
+DEFAULT_MINIMAX_CN_BASE_URL = "https://api.minimaxi.com/v1"
+DEFAULT_MINIMAX_TOKEN_PLAN_BASE_URL = DEFAULT_MINIMAX_CN_BASE_URL
+DEFAULT_MINIMAX_MODEL = "MiniMax-M2.7"
 AGENT_EXTRACTION_REQUEST_SCHEMA_VERSION = "agent_extraction_request_v1"
 SEMANTIC_ITEMS_SCHEMA_VERSION = "semantic_items_v1"
 
@@ -75,6 +82,12 @@ class ReportResult:
     source_summary: dict | None = None
     state_summary: dict | None = None
     state: dict | None = None
+
+
+@dataclass
+class ExtractionResult:
+    items: list[dict]
+    llm: dict
 
 
 def load_jsonl(path: Path) -> list[dict]:
@@ -573,6 +586,15 @@ def table_value(value: object) -> str:
     return text.replace("|", "\\|").replace("\n", " ").strip() or "Not specified"
 
 
+def field_label(name: str) -> str:
+    special = {"negative_evidence": "Negative evidence"}
+    if name in special:
+        return special[name]
+    acronyms = {"url": "URL", "id": "ID", "ids": "IDs", "api": "API", "llm": "LLM", "ocr": "OCR"}
+    parts = str(name or "").replace("_", " ").split()
+    return " ".join(acronyms.get(part.casefold(), part.capitalize()) for part in parts)
+
+
 def bullet_list(items: list[str]) -> str:
     if not items:
         return "- Not specified"
@@ -591,10 +613,9 @@ def action_for_rating(item: dict, rating: str, profile_config: ProfileConfig | N
 
 
 def render_job(job: dict, index: int, profile_config: ProfileConfig | None = None) -> str:
-    # Title: use first two dedup fields if available, else role/company
+    # Title: use the same placeholder-aware display logic as dashboard cards.
     dedup_fields = (profile_config.mode.dedup_fields if profile_config else None) or ["company", "role"]
-    title_parts = [str(job.get(f) or f"Unknown {f}").strip() for f in dedup_fields[:2]]
-    title = " -- ".join(title_parts) if title_parts else "Unknown item"
+    title = display_item_title(job, dedup_fields=dedup_fields, fallback="Unknown item")
 
     contacts = merge_unique(job.get("contacts", []), as_list(job.get("contact")))
     links = merge_unique(job.get("links", []), as_list(job.get("link")))
@@ -617,7 +638,7 @@ def render_job(job: dict, index: int, profile_config: ProfileConfig | None = Non
                 val = contact_value
             elif f.name == "source":
                 val = sources
-            label = "Negative evidence" if f.name == "negative_evidence" else f.name.replace("_", " ").title()
+            label = field_label(f.name)
             table_rows.append(f"| **{label}** | {table_value(val)} |")
         table_block = "\n".join(table_rows) or "| **Item** | See details above |"
     else:
@@ -1161,11 +1182,13 @@ Contact extraction rules (CRITICAL):
 - If a message has a "forward" field, it was reposted from another channel. Include "origin_channel" and "origin_url" (if present) in the source field.
 - If a message has an "origin_url", it links to the original post — note this so the user can find full details.
 """
-    meta_text = json.dumps(meta or {}, ensure_ascii=False)
-    user_prompt = f"""=== CANDIDATE PROFILE ===
-{profile}
+    system_prompt += f"""
 
-=== SCAN METADATA ===
+=== CANDIDATE PROFILE ===
+{profile.strip()}
+"""
+    meta_text = json.dumps(meta or {}, ensure_ascii=False)
+    user_prompt = f"""=== SCAN METADATA ===
 {meta_text}
 
 === UNTRUSTED TELEGRAM MESSAGES ({len(selected)} of {len(messages)}) ===
@@ -1184,6 +1207,7 @@ def write_prompt_file(path: str, system_prompt: str, user_prompt: str) -> None:
 
 
 def strip_json_fence(text: str) -> str:
+    text = re.sub(r"^\s*<think>.*?</think>\s*", "", text.strip(), flags=re.DOTALL | re.IGNORECASE)
     match = re.search(r"```(?:json)?\s*(.*?)```", text, flags=re.DOTALL | re.IGNORECASE)
     if match:
         return match.group(1).strip()
@@ -1203,7 +1227,119 @@ def parse_extraction_response(text: str, top_level_key: str = "jobs") -> list[di
 
 
 def llm_key_available() -> bool:
-    return bool(os.environ.get("OPENAI_API_KEY") or os.environ.get("DEEPSEEK_API_KEY"))
+    return bool(
+        os.environ.get("OPENAI_API_KEY")
+        or os.environ.get("DEEPSEEK_API_KEY")
+        or os.environ.get("MINIMAX_API_KEY")
+        or os.environ.get("MINIMAX_TOKEN_PLAN_KEY")
+    )
+
+
+def llm_provider(base_url: str | None, model: str) -> str:
+    marker = f"{base_url or ''} {model}".casefold()
+    if "deepseek" in marker:
+        return "deepseek"
+    if "minimax" in marker:
+        return "minimax"
+    if "openai" in marker or not base_url:
+        return "openai"
+    return "custom"
+
+
+def api_key_for_provider(provider: str) -> str | None:
+    if provider == "deepseek":
+        return os.environ.get("DEEPSEEK_API_KEY") or os.environ.get("OPENAI_API_KEY")
+    if provider == "minimax":
+        return os.environ.get("MINIMAX_TOKEN_PLAN_KEY") or os.environ.get("MINIMAX_API_KEY")
+    return (
+        os.environ.get("OPENAI_API_KEY")
+        or os.environ.get("DEEPSEEK_API_KEY")
+        or os.environ.get("MINIMAX_TOKEN_PLAN_KEY")
+        or os.environ.get("MINIMAX_API_KEY")
+    )
+
+
+def default_minimax_base_url() -> str:
+    region = (os.environ.get("MINIMAX_REGION") or os.environ.get("MINIMAX_API_REGION") or "").strip().casefold()
+    if region in {"cn", "china", "mainland", "zh-cn"}:
+        return DEFAULT_MINIMAX_CN_BASE_URL
+    return DEFAULT_MINIMAX_TOKEN_PLAN_BASE_URL if os.environ.get("MINIMAX_TOKEN_PLAN_KEY") else DEFAULT_MINIMAX_BASE_URL
+
+
+def normalized_usage(usage: object) -> dict:
+    if usage is None:
+        return {}
+    if isinstance(usage, dict):
+        raw = usage
+    elif hasattr(usage, "model_dump"):
+        raw = usage.model_dump()
+    elif hasattr(usage, "dict"):
+        raw = usage.dict()
+    else:
+        raw = {
+            key: getattr(usage, key)
+            for key in (
+                "prompt_tokens",
+                "completion_tokens",
+                "total_tokens",
+                "prompt_cache_hit_tokens",
+                "prompt_cache_miss_tokens",
+            )
+            if hasattr(usage, key)
+        }
+    return json.loads(json.dumps(raw, ensure_ascii=False, default=str))
+
+
+def cache_metrics_from_usage(usage: dict) -> dict:
+    deepseek_hit = usage.get("prompt_cache_hit_tokens")
+    deepseek_miss = usage.get("prompt_cache_miss_tokens")
+    prompt_details = usage.get("prompt_tokens_details")
+    openai_cached = prompt_details.get("cached_tokens") if isinstance(prompt_details, dict) else None
+    hit = deepseek_hit if isinstance(deepseek_hit, int) else openai_cached if isinstance(openai_cached, int) else 0
+    miss = deepseek_miss if isinstance(deepseek_miss, int) else None
+    if miss is None:
+        prompt_tokens = usage.get("prompt_tokens")
+        miss = max(0, int(prompt_tokens) - hit) if isinstance(prompt_tokens, int) else 0
+    total = hit + miss
+    return {
+        "hit_tokens": hit,
+        "miss_tokens": miss,
+        "hit_rate": round(hit / total, 4) if total else 0,
+    }
+
+
+def deepseek_thinking_extra(provider: str, model: str) -> dict | None:
+    # Fast monitor extraction is a narrow structured task. DeepSeek V4 defaults
+    # to thinking mode, which adds latency and token cost without improving the
+    # cheap first-pass gate enough to justify it. Pro/reasoning fallback can be
+    # added as a separate lane when eval data shows Flash recall is insufficient.
+    if provider == "deepseek" and model.startswith("deepseek-v4"):
+        return {"thinking": {"type": "disabled"}}
+    return None
+
+
+def minimax_thinking_extra(provider: str) -> dict | None:
+    # MiniMax M2.x includes <think> content in OpenAI-compatible message.content
+    # unless reasoning is split out. Keep extraction content parseable JSON by
+    # asking the provider to separate reasoning from the final answer.
+    if provider == "minimax":
+        return {"reasoning_split": True}
+    return None
+
+
+def llm_temperature(provider: str) -> float:
+    # MiniMax documents temperature as (0, 1]; temperature=0 is rejected. Keep a
+    # near-deterministic value for extraction while preserving provider validity.
+    return 0.01 if provider == "minimax" else 0
+
+
+def add_token_limit(create_kwargs: dict[str, Any], *, provider: str, max_tokens: int) -> None:
+    if max_tokens <= 0:
+        return
+    if provider == "minimax":
+        create_kwargs["max_completion_tokens"] = max_tokens
+    else:
+        create_kwargs["max_tokens"] = max_tokens
 
 
 def default_extraction_request_path(output: str | None, input_path: Path) -> Path:
@@ -1357,6 +1493,70 @@ def emit_agent_extraction_required(args, request_path: Path, items_output_path: 
         )
 
 
+def extract_jobs_with_metadata(
+    *,
+    messages: list[dict],
+    profile: str,
+    meta: dict | None,
+    base_url: str | None,
+    model: str,
+    max_messages: int,
+    max_tokens: int = 0,
+    profile_config: ProfileConfig | None = None,
+) -> ExtractionResult:
+    try:
+        from openai import OpenAI
+    except ImportError as exc:
+        raise ReportError("Install optional LLM dependencies: pip install -r requirements-llm.txt") from exc
+
+    system_prompt, user_prompt = build_extraction_prompts(messages, profile, meta, max_messages, profile_config)
+    provider = llm_provider(base_url, model)
+    api_key = api_key_for_provider(provider)
+    if not api_key:
+        raise ReportError("No API key. Set OPENAI_API_KEY, DEEPSEEK_API_KEY, MINIMAX_API_KEY, or MINIMAX_TOKEN_PLAN_KEY.")
+    client = OpenAI(api_key=api_key, base_url=base_url)
+
+    create_kwargs = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": llm_temperature(provider),
+    }
+    if provider in {"deepseek", "openai"}:
+        create_kwargs["response_format"] = {"type": "json_object"}
+    thinking_extra = minimax_thinking_extra(provider) or deepseek_thinking_extra(provider, model)
+    if thinking_extra:
+        create_kwargs["extra_body"] = thinking_extra
+    add_token_limit(create_kwargs, provider=provider, max_tokens=max_tokens)
+
+    try:
+        started = perf_counter()
+        response = client.chat.completions.create(**create_kwargs)
+    except Exception as exc:
+        raise ReportError(f"API error: {exc}") from exc
+    latency_ms = int((perf_counter() - started) * 1000)
+
+    raw_response = response.choices[0].message.content or ""
+    top_key = profile_config.mode.top_level_key if profile_config else "jobs"
+    items = parse_extraction_response(raw_response, top_key)
+    usage = normalized_usage(getattr(response, "usage", None))
+    return ExtractionResult(
+        items=items,
+        llm={
+            "provider": provider,
+            "model": model,
+            "base_url": base_url,
+            "thinking": "split" if provider == "minimax" and thinking_extra else "disabled" if thinking_extra else "provider_default",
+            "latency_ms": latency_ms,
+            "usage": usage,
+            "cache": cache_metrics_from_usage(usage),
+            "prompt_prefix_hash": hashlib.sha256(system_prompt.encode("utf-8")).hexdigest()[:24],
+        },
+    )
+
+
 def extract_jobs(
     *,
     messages: list[dict],
@@ -1368,46 +1568,42 @@ def extract_jobs(
     max_tokens: int = 0,
     profile_config: ProfileConfig | None = None,
 ) -> list[dict]:
-    try:
-        from openai import OpenAI
-    except ImportError as exc:
-        raise ReportError("Install optional LLM dependencies: pip install -r requirements-llm.txt") from exc
-
-    api_key = os.environ.get("OPENAI_API_KEY") or os.environ.get("DEEPSEEK_API_KEY")
-    if not api_key:
-        raise ReportError("No API key. Set OPENAI_API_KEY or DEEPSEEK_API_KEY.")
-
-    system_prompt, user_prompt = build_extraction_prompts(messages, profile, meta, max_messages, profile_config)
-    client = OpenAI(api_key=api_key, base_url=base_url)
-
-    create_kwargs = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        "temperature": 0,
-    }
-    if max_tokens and max_tokens > 0:
-        create_kwargs["max_tokens"] = max_tokens
-
-    try:
-        response = client.chat.completions.create(**create_kwargs)
-    except Exception as exc:
-        raise ReportError(f"API error: {exc}") from exc
-
-    raw_response = response.choices[0].message.content or ""
-    top_key = profile_config.mode.top_level_key if profile_config else "jobs"
-    return parse_extraction_response(raw_response, top_key)
+    return extract_jobs_with_metadata(
+        messages=messages,
+        profile=profile,
+        meta=meta,
+        base_url=base_url,
+        model=model,
+        max_messages=max_messages,
+        max_tokens=max_tokens,
+        profile_config=profile_config,
+    ).items
 
 
 def resolve_llm_settings(base_url: str | None, model: str) -> tuple[str | None, str]:
     resolved_base_url = base_url or os.environ.get("OPENAI_BASE_URL")
-    only_deepseek_key = bool(os.environ.get("DEEPSEEK_API_KEY")) and not os.environ.get("OPENAI_API_KEY")
-    if only_deepseek_key and not resolved_base_url:
-        resolved_base_url = DEFAULT_DEEPSEEK_BASE_URL
-        if model == DEFAULT_MODEL:
-            model = DEFAULT_DEEPSEEK_MODEL
+    model_marker = model.casefold()
+    has_openai_key = bool(os.environ.get("OPENAI_API_KEY"))
+    has_deepseek_key = bool(os.environ.get("DEEPSEEK_API_KEY"))
+    has_minimax_key = bool(os.environ.get("MINIMAX_API_KEY") or os.environ.get("MINIMAX_TOKEN_PLAN_KEY"))
+    if "deepseek" in model_marker and not resolved_base_url:
+        resolved_base_url = os.environ.get("DEEPSEEK_BASE_URL") or DEFAULT_DEEPSEEK_BASE_URL
+    if "minimax" in model_marker and not resolved_base_url:
+        resolved_base_url = os.environ.get("MINIMAX_BASE_URL") or default_minimax_base_url()
+    if resolved_base_url and "minimax" in resolved_base_url.casefold() and model == DEFAULT_MODEL:
+        model = DEFAULT_MINIMAX_MODEL
+
+    # If OpenAI is not configured, never pair the default OpenAI model name with
+    # a DeepSeek or MiniMax key. DeepSeek Flash is the fast-lane default because
+    # local evals showed better latency and JSON reliability for the current
+    # monitor workload; MiniMax remains explicit or the fallback when it is the
+    # only non-OpenAI key.
+    if model == DEFAULT_MODEL and not resolved_base_url and not has_openai_key and has_deepseek_key:
+        resolved_base_url = os.environ.get("DEEPSEEK_BASE_URL") or DEFAULT_DEEPSEEK_BASE_URL
+        model = DEFAULT_DEEPSEEK_MODEL
+    if model == DEFAULT_MODEL and not resolved_base_url and not has_openai_key and has_minimax_key:
+        resolved_base_url = os.environ.get("MINIMAX_BASE_URL") or default_minimax_base_url()
+        model = DEFAULT_MINIMAX_MODEL
     return resolved_base_url, model
 
 
@@ -1558,6 +1754,8 @@ def main(argv: list[str] | None = None, *, extract_jobs_override=None) -> int:
         )
         return agent_cli.EXIT_VALIDATION
 
+    llm_metadata: dict | None = None
+
     # --html-only: skip LLM, parse existing Markdown report
     if args.html_only:
         if not args.html_only.exists():
@@ -1589,7 +1787,7 @@ def main(argv: list[str] | None = None, *, extract_jobs_override=None) -> int:
             if args.items_json:
                 raw_jobs = load_semantic_items(args.items_json, messages)
             elif extract_jobs_override:
-                raw_jobs = extract_jobs_override(
+                override_result = extract_jobs_override(
                     messages=messages,
                     profile=profile,
                     meta=meta,
@@ -1599,6 +1797,11 @@ def main(argv: list[str] | None = None, *, extract_jobs_override=None) -> int:
                     max_tokens=args.max_tokens,
                     profile_config=profile_config,
                 )
+                if isinstance(override_result, ExtractionResult):
+                    raw_jobs = override_result.items
+                    llm_metadata = override_result.llm
+                else:
+                    raw_jobs = override_result
             elif args.extractor == "agent" or (
                 args.extractor == "auto" and not llm_key_available()
             ):
@@ -1623,7 +1826,7 @@ def main(argv: list[str] | None = None, *, extract_jobs_override=None) -> int:
                 return agent_cli.EXIT_SUCCESS
             else:
                 base_url, model = resolve_llm_settings(args.base_url, args.model)
-                raw_jobs = extract_jobs(
+                extraction = extract_jobs_with_metadata(
                     messages=messages,
                     profile=profile,
                     meta=meta,
@@ -1633,6 +1836,8 @@ def main(argv: list[str] | None = None, *, extract_jobs_override=None) -> int:
                     max_tokens=args.max_tokens,
                     profile_config=profile_config,
                 )
+                raw_jobs = extraction.items
+                llm_metadata = extraction.llm
         except ReportError as exc:
             if args.items_json:
                 agent_cli.emit_error(
@@ -1717,6 +1922,8 @@ def main(argv: list[str] | None = None, *, extract_jobs_override=None) -> int:
             "state_summary": result.state_summary,
             "items": result.jobs or [],
         }
+        if llm_metadata:
+            data["llm"] = llm_metadata
         if not args.output and not args.html and not args.html_output:
             data["markdown"] = result.markdown
         agent_cli.print_json(agent_cli.envelope_success(data))
@@ -2038,16 +2245,22 @@ def _render_generic_card(
     action = _action_for_rating(item, rating, profile_config)
     dedup_fields = (profile_config.mode.dedup_fields if profile_config else None) or ["company", "role"]
 
-    # Title from first two dedup fields
-    title_parts = [str(item.get(f) or "").strip() for f in dedup_fields[:2]]
-    name = _esc(title_parts[0] or "Unknown")
-    subtitle = _esc(title_parts[1] if len(title_parts) > 1 and title_parts[1] else "")
+    name_text, subtitle_text = display_title_parts(
+        item,
+        dedup_fields=dedup_fields,
+        fallback="Unknown item",
+    )
+    name = _esc(name_text)
+    subtitle = _esc(subtitle_text)
 
     # Build detail grid from profile field definitions
     detail_rows = []
     if profile_config:
         for f in profile_config.mode.fields:
-            if f.name in ("source_message_refs", "source_message_ids", "rating", "action") or f.name in dedup_fields[:2]:
+            if (
+                f.name in ("source_message_refs", "source_message_ids", "rating", "action", "why")
+                or f.name in dedup_fields[:2]
+            ):
                 continue
             val = item.get(f.name)
             if val is None:
@@ -2062,16 +2275,22 @@ def _render_generic_card(
                 rendered = _inline_html_group([_contact_html(c) for c in _split_inline_values(val_list)])
             elif f.name == "source" and val_list:
                 rendered = _source_links(val_list)
-            elif f.name == "link" and val_list:
+            elif f.name == "link":
+                values = val_list or [str(val)]
                 rendered = _inline_html_group(
-                    [_link_or_text(str(v), str(v)) for v in _split_inline_values(val_list)]
+                    [_link_or_text(str(v), str(v)) for v in _split_inline_values(values)]
+                )
+            elif f.name == "url" or f.name.endswith("_url"):
+                values = val_list or [str(val)]
+                rendered = _inline_html_group(
+                    [_link_or_text(str(v), str(v)) for v in _split_inline_values(values)]
                 )
             else:
                 display = ", ".join(str(v) for v in val_list) if val_list else str(val)
                 rendered = _esc(display)
 
             detail_rows.append(
-                f'<div class="item-detail"><span class="item-detail-key">{_esc(f.name.title())}</span>'
+                f'<div class="item-detail"><span class="item-detail-key">{_esc(field_label(f.name))}</span>'
                 f'<span class="item-detail-value">{rendered}</span></div>'
             )
 
@@ -2099,7 +2318,7 @@ def _render_generic_card(
         {detail_block}
       </div>""" if detail_block else ""
 
-    item_title = " - ".join(part for part in title_parts[:2] if part.strip()) or "Unknown item"
+    item_title = display_item_title(item, dedup_fields=dedup_fields, fallback="Unknown item")
 
     return f"""
     <article class="item-card {rating}" {_feedback_attrs(item, item_title, message_lookup)}>
@@ -2130,8 +2349,11 @@ def _render_job_card(
     profile_config: ProfileConfig | None = None,
 ) -> str:
     rating = normalize_rating(job.get("rating"))
-    company = table_value(job.get("company"))
-    role = table_value(job.get("role"))
+    heading_role, heading_company = display_title_parts(
+        job,
+        dedup_fields=["company", "role"],
+        fallback="Unknown role",
+    )
     location = table_value(job.get("location"))
     salary = table_value(job.get("salary"))
     contacts = merge_unique(job.get("contacts", []), as_list(job.get("contact")))
@@ -2193,7 +2415,12 @@ def _render_job_card(
     tags = "\n".join(f'<li class="tag">{_esc(t)}</li>' for t in stack)
     concern_items = "\n".join(f"<li>{_esc(c)}</li>" for c in concerns)
 
-    item_title = f"{role} - {company}"
+    item_title = display_item_title(job, dedup_fields=["company", "role"], fallback="Unknown item")
+    company_title_html = (
+        f'\n            <span class="job-company">— {_esc(heading_company)}</span>'
+        if meaningful_text(heading_company)
+        else ""
+    )
 
     return f"""
     <article class="job-card {rating}" {_feedback_attrs(job, item_title, message_lookup)}>
@@ -2201,8 +2428,7 @@ def _render_job_card(
         <div>
           <div class="job-number">Dispatch {index:02d}</div>
           <div class="job-title-row">
-            <span class="job-role">{_esc(role)}</span>
-            <span class="job-company">— {_esc(company)}</span>
+            <span class="job-role">{_esc(heading_role)}</span>{company_title_html}
           </div>
         </div>
         <span class="job-action {rating}">{_esc(action)}</span>

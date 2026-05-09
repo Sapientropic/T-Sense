@@ -144,6 +144,142 @@ class DecisionIntelligenceTests(unittest.TestCase):
         self.assertNotIn("note", stored)
         self.assertNotIn("raw private note", str(state))
 
+    def test_item_title_and_key_ignore_placeholder_dedup_values(self):
+        decision_intelligence, _ = load_decision_module(self)
+        from scripts.profile_schema import parse_profile_config
+
+        config = parse_profile_config(
+            """# Developer Opportunities
+
+## Extraction Schema
+mode: custom
+top_level_key: items
+dedup_fields: [company, role]
+fields:
+  - name: company
+  - name: role
+    required: true
+  - name: rating
+    values: [high, medium, low]
+"""
+        )
+        item = {"company": "Unknown", "role": "AI Engineer"}
+
+        title = decision_intelligence.item_title(item, config.mode.dedup_fields)
+        key = decision_intelligence.item_key(item, config, "# Developer Opportunities")
+
+        self.assertEqual(title, "AI Engineer")
+        self.assertIn("role:ai-engineer", key)
+        self.assertNotIn("company:unknown", key)
+
+    def test_placeholder_dedup_key_change_reuses_legacy_memory_entry(self):
+        decision_intelligence, state_store = load_decision_module(self)
+        from scripts.profile_schema import parse_profile_config
+
+        config = parse_profile_config(
+            """# Developer Opportunities
+
+## Extraction Schema
+mode: custom
+top_level_key: items
+dedup_fields: [company, role, apply_url]
+fields:
+  - name: company
+  - name: role
+  - name: apply_url
+  - name: rating
+    values: [high, medium, low]
+"""
+        )
+        state = state_store.default_item_memory()
+        legacy_key = (
+            f"{decision_intelligence.profile_key('# Developer Opportunities')}:"
+            "company:unknown|role:ai-engineer|apply_url:not-specified"
+        )
+        state["items"][legacy_key] = {
+            "first_seen_at": "2026-05-08T09:00:00Z",
+            "last_seen_at": "2026-05-08T09:00:00Z",
+            "seen_count": 1,
+            "fingerprint": "old",
+            "rating_history": [{"at": "2026-05-08T09:00:00Z", "rating": "high"}],
+        }
+
+        enriched, migrated_state, summary = decision_intelligence.enrich_items(
+            [
+                {
+                    "company": "Unknown",
+                    "role": "AI Engineer",
+                    "apply_url": "Not specified",
+                    "rating": "high",
+                }
+            ],
+            profile="# Developer Opportunities",
+            profile_config=config,
+            state=state,
+            observed_at="2026-05-09T09:00:00Z",
+        )
+
+        new_key = enriched[0]["decision_state"]["semantic_cluster"]
+        self.assertEqual(enriched[0]["decision_state"]["status"], "changed")
+        self.assertEqual(summary["changed"], 1)
+        self.assertIn(new_key, migrated_state["items"])
+        self.assertNotIn(legacy_key, migrated_state["items"])
+        self.assertNotIn("company:unknown", new_key)
+
+    def test_changed_extracted_fields_reuse_memory_by_source_refs(self):
+        decision_intelligence, state_store = load_decision_module(self)
+        from scripts.profile_schema import parse_profile_config
+
+        config = parse_profile_config(
+            """# Developer Opportunities
+
+## Extraction Schema
+mode: custom
+top_level_key: items
+dedup_fields: [company, role, apply_url]
+fields:
+  - name: company
+  - name: role
+  - name: apply_url
+  - name: rating
+    values: [high, medium, low]
+"""
+        )
+        state = state_store.default_item_memory()
+        old_key = (
+            f"{decision_intelligence.profile_key('# Developer Opportunities')}:"
+            "company:unknown|role:ai-engineer|apply_url:not-specified"
+        )
+        state["items"][old_key] = {
+            "first_seen_at": "2026-05-08T09:00:00Z",
+            "last_seen_at": "2026-05-08T09:00:00Z",
+            "seen_count": 1,
+            "fingerprint": "old",
+            "source_message_refs": [{"channel": "jobs", "id": 42}],
+        }
+
+        enriched, migrated_state, summary = decision_intelligence.enrich_items(
+            [
+                {
+                    "company": "Fintech",
+                    "role": "AI Engineer",
+                    "apply_url": "https://example.com/apply",
+                    "rating": "high",
+                    "source_message_refs": [{"channel": "jobs", "id": 42}],
+                }
+            ],
+            profile="# Developer Opportunities",
+            profile_config=config,
+            state=state,
+            observed_at="2026-05-09T09:00:00Z",
+        )
+
+        new_key = enriched[0]["decision_state"]["semantic_cluster"]
+        self.assertEqual(enriched[0]["decision_state"]["status"], "changed")
+        self.assertEqual(summary["changed"], 1)
+        self.assertIn(new_key, migrated_state["items"])
+        self.assertNotIn(old_key, migrated_state["items"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,11 +1,31 @@
 import subprocess
+import tempfile
 import unittest
+import json
+from contextlib import AbstractContextManager
+from http import HTTPStatus
+from pathlib import Path
 from unittest.mock import patch
 
-from scripts import dashboard_server
+from scripts import dashboard_server, monitor_state
 
 
 class DashboardServerGitTests(unittest.TestCase):
+    def test_close_after_use_closes_connection_handle(self):
+        class FakeConnection:
+            closed = False
+
+            def close(self):
+                self.closed = True
+
+        fake = FakeConnection()
+
+        with dashboard_server.close_after_use(fake) as conn:
+            self.assertIs(conn, fake)
+            self.assertIsInstance(dashboard_server.close_after_use(fake), AbstractContextManager)
+
+        self.assertTrue(fake.closed)
+
     def test_run_git_wraps_timeout(self):
         with patch.object(
             dashboard_server.subprocess,
@@ -74,6 +94,232 @@ class DashboardServerGitTests(unittest.TestCase):
         run_mock.assert_called_once_with(["pull", "--ff-only"], timeout=60)
         self.assertEqual(result["status"], "up_to_date")
         self.assertEqual(result["pull_output"], "Fast-forward")
+
+    def test_resolve_run_artifact_allows_encoded_output_runs_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifact_root = root / "output" / "runs"
+            report = artifact_root / "run-1" / "report.html"
+            report.parent.mkdir(parents=True)
+            report.write_text("<html>report</html>", encoding="utf-8")
+
+            resolved = dashboard_server.resolve_run_artifact_path(
+                "output%2Fruns%2Frun-1%2Freport.html",
+                artifact_root=artifact_root,
+            )
+
+        self.assertEqual(resolved, report.resolve())
+
+    def test_resolve_run_artifact_allows_custom_output_dir_report(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifact_root = root / "out" / "runs"
+            report = artifact_root / "run-1" / "report.html"
+            report.parent.mkdir(parents=True)
+            report.write_text("<html>report</html>", encoding="utf-8")
+
+            resolved = dashboard_server.resolve_run_artifact_path(
+                "out/runs/run-1/report.html",
+                artifact_root=artifact_root,
+            )
+
+        self.assertEqual(resolved, report.resolve())
+
+    def test_resolve_run_artifact_defaults_to_output_dir_from_requested_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            report = root / "out" / "runs" / "run-1" / "report.html"
+            report.parent.mkdir(parents=True)
+            report.write_text("<html>report</html>", encoding="utf-8")
+
+            with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                resolved = dashboard_server.resolve_run_artifact_path("out/runs/run-1/report.html")
+
+        self.assertEqual(resolved, report.resolve())
+
+    def test_resolve_run_artifact_rejects_raw_scan_jsonl(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifact_root = root / "output" / "runs"
+            scan = artifact_root / "run-1" / "scan.jsonl"
+            scan.parent.mkdir(parents=True)
+            scan.write_text('{"text":"raw"}\n', encoding="utf-8")
+
+            with self.assertRaises(dashboard_server.DashboardArtifactError):
+                dashboard_server.resolve_run_artifact_path(
+                    "output/runs/run-1/scan.jsonl",
+                    artifact_root=artifact_root,
+                )
+
+    def test_resolve_run_artifact_rejects_non_report_html(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifact_root = root / "output" / "runs"
+            other = artifact_root / "run-1" / "other.html"
+            other.parent.mkdir(parents=True)
+            other.write_text("<html>other</html>", encoding="utf-8")
+
+            with self.assertRaises(dashboard_server.DashboardArtifactError):
+                dashboard_server.resolve_run_artifact_path(
+                    "output/runs/run-1/other.html",
+                    artifact_root=artifact_root,
+                )
+
+    def test_resolve_run_artifact_rejects_path_traversal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifact_root = root / "output" / "runs"
+            artifact_root.mkdir(parents=True)
+            (root / "output" / "secret.html").write_text("secret", encoding="utf-8")
+
+            with self.assertRaises(dashboard_server.DashboardArtifactError):
+                dashboard_server.resolve_run_artifact_path(
+                    "output/runs/../secret.html",
+                    artifact_root=artifact_root,
+                )
+
+    def test_resolve_static_path_rejects_sibling_prefix_traversal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            static_dir = root / "dist"
+            sibling = root / "dist_evil"
+            static_dir.mkdir()
+            sibling.mkdir()
+            index = static_dir / "index.html"
+            secret = sibling / "secret.txt"
+            index.write_text("index", encoding="utf-8")
+            secret.write_text("secret", encoding="utf-8")
+
+            resolved = dashboard_server.resolve_static_path("/../dist_evil/secret.txt", static_dir=static_dir)
+
+        self.assertEqual(resolved, index.resolve())
+
+    def test_dashboard_host_warning_only_warns_for_non_loopback_hosts(self):
+        self.assertIsNone(dashboard_server.dashboard_host_warning("127.0.0.1"))
+        self.assertIsNone(dashboard_server.dashboard_host_warning("localhost"))
+        self.assertIsNone(dashboard_server.dashboard_host_warning("::1"))
+
+        warning = dashboard_server.dashboard_host_warning("0.0.0.0")
+
+        self.assertIsNotNone(warning)
+        self.assertIn("report artifacts", (warning or "").lower())
+
+    def test_write_feedback_export_writes_note_free_dashboard_jsonl(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            db_path = root / ".tgcs" / "tgcs.db"
+            output_path = root / "output" / "dashboard-feedback.jsonl"
+            conn = monitor_state.connect(db_path)
+            try:
+                cards = monitor_state.upsert_review_cards(
+                    conn,
+                    profile_id="jobs-fast",
+                    run_id="run-1",
+                    items=[
+                        {
+                            "topic": "Contract role",
+                            "rating": "high",
+                            "source_message_refs": [{"channel": "jobs", "id": 1}],
+                        }
+                    ],
+                )
+                monitor_state.set_card_action(conn, card_id=cards[0]["card_id"], action="keep", note="private")
+
+                result = dashboard_server.write_feedback_export(conn, output_path=output_path)
+            finally:
+                conn.close()
+
+            rows = [json.loads(line) for line in output_path.read_text(encoding="utf-8").splitlines()]
+
+        self.assertEqual(result["feedback_count"], 1)
+        self.assertEqual(rows[0]["feedback"], "keep")
+        self.assertEqual(rows[0]["note"], "")
+
+    def test_serve_artifact_rejects_raw_scan_over_http_handler(self):
+        class FakeHandler:
+            status = None
+            payload = None
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            scan = root / "output" / "runs" / "run-1" / "scan.jsonl"
+            scan.parent.mkdir(parents=True)
+            scan.write_text('{"text":"raw"}\n', encoding="utf-8")
+
+            with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                handler = FakeHandler()
+                dashboard_server.DashboardHandler._serve_artifact(handler, "output/runs/run-1/scan.jsonl")
+
+        self.assertEqual(handler.status, HTTPStatus.NOT_FOUND)
+        self.assertEqual(handler.payload["error"], "artifact_type_not_report")
+
+    def test_get_state_returns_json_error_when_snapshot_fails(self):
+        class FakeHandler:
+            path = "/api/state"
+            status = None
+            payload = None
+
+            def _connect(self):
+                class FakeConnection:
+                    def close(self):
+                        pass
+
+                return FakeConnection()
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        with patch.object(
+            dashboard_server.monitor_state,
+            "dashboard_snapshot",
+            side_effect=dashboard_server.monitor_state.MonitorStateError("state failed"),
+        ):
+            handler = FakeHandler()
+            dashboard_server.DashboardHandler.do_GET(handler)
+
+        self.assertEqual(handler.status, HTTPStatus.BAD_REQUEST)
+        self.assertEqual(handler.payload, {"ok": False, "error": "state failed"})
+
+    def test_profile_patch_revert_endpoint_calls_monitor_state(self):
+        class FakeConnection:
+            closed = False
+
+            def close(self):
+                self.closed = True
+
+        class FakeHandler:
+            path = "/api/profile-patches/patch_123/revert"
+            status = None
+            payload = None
+            conn = FakeConnection()
+
+            def _read_json_body(self):
+                return {}
+
+            def _connect(self):
+                return self.conn
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        with patch.object(
+            dashboard_server.monitor_state,
+            "revert_profile_patch",
+            return_value={"patch_id": "patch_123", "status": "reverted"},
+        ) as revert_mock:
+            handler = FakeHandler()
+            dashboard_server.DashboardHandler.do_POST(handler)
+
+        revert_mock.assert_called_once_with(handler.conn, patch_id="patch_123")
+        self.assertTrue(handler.conn.closed)
+        self.assertEqual(handler.status, HTTPStatus.OK)
+        self.assertEqual(handler.payload["result"]["status"], "reverted")
 
 
 if __name__ == "__main__":

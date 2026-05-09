@@ -15,13 +15,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 try:
-    from scripts import agent_cli, source_registry
+    from scripts import agent_cli, report, source_registry
     from scripts.profile_schema import parse_profile_config
 except ModuleNotFoundError:
     _PROJECT_ROOT = str(Path(__file__).resolve().parent.parent)
     if _PROJECT_ROOT not in sys.path:
         sys.path.insert(0, _PROJECT_ROOT)
-    from scripts import agent_cli, source_registry
+    from scripts import agent_cli, report, source_registry
     from scripts.profile_schema import parse_profile_config
 
 
@@ -32,6 +32,7 @@ DEFAULT_CONFIG_DIR = Path(
 )
 DEFAULT_CONFIG_PATH = DEFAULT_CONFIG_DIR / "config.toml"
 DEFAULT_SESSION_PATH = DEFAULT_CONFIG_DIR / "session"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 @dataclass
@@ -73,6 +74,63 @@ def _read_channel_list(path: Path) -> list[str]:
         if line and not line.startswith("#"):
             channels.append(line)
     return channels
+
+
+def _is_invite_link_reference(value: str) -> bool:
+    lowered = value.strip().casefold()
+    return (
+        "t.me/+" in lowered
+        or "telegram.me/+" in lowered
+        or "t.me/joinchat/" in lowered
+        or "telegram.me/joinchat/" in lowered
+    )
+
+
+def _channel_list_review(channels: list[str]) -> dict:
+    seen: set[str] = set()
+    duplicate_refs: list[str] = []
+    invite_refs: list[str] = []
+    for channel in channels:
+        if _is_invite_link_reference(channel):
+            invite_refs.append(channel)
+        normalized = source_registry.normalize_channel_name(channel).casefold()
+        if normalized in seen:
+            duplicate_refs.append(channel)
+        else:
+            seen.add(normalized)
+    return {
+        "duplicate_refs": duplicate_refs,
+        "invite_refs": invite_refs,
+    }
+
+
+def _placeholder_source_count(sources: list[dict]) -> int:
+    count = 0
+    for source in sources:
+        username = str(source.get("username") or "").strip().casefold()
+        label = str(source.get("label") or "").strip().casefold()
+        if username.startswith("example_") or label.startswith("example_"):
+            count += 1
+    return count
+
+
+def _placeholder_import_next_step(sources: list[dict]) -> str:
+    labels = " ".join(
+        str(source.get("username") or source.get("label") or "").casefold()
+        for source in sources
+        if isinstance(source, dict)
+    )
+    topic = "jobs" if any(token in labels for token in ("job", "career", "hiring", "remote")) else ""
+    list_name = "jobs.txt" if topic == "jobs" else "channels.txt"
+    command = f"tgcs sources import channel_lists/{list_name}"
+    if topic:
+        command = f"{command} --topic {topic}"
+    if topic == "jobs":
+        return (
+            "Run `tgcs init --starter jobs --force` to replace placeholder sources, "
+            f"or import real Telegram channels with `{command}`, then rerun tgcs doctor."
+        )
+    return f"Import real Telegram channels with `{command}`, then rerun tgcs doctor."
 
 
 def check_python_runtime() -> CheckResult:
@@ -169,7 +227,27 @@ def check_channel_list(path: Path) -> CheckResult:
         return _fail("channel_list", f"Channel list cannot be read: {exc}", "Check file permissions.")
     if not channels:
         return _fail("channel_list", f"Channel list is empty: {path}", "Add at least one Telegram username or channel id.")
-    return _pass("channel_list", f"Channel list has {len(channels)} sources.", details={"count": len(channels)})
+    review = _channel_list_review(channels)
+    duplicate_count = len(review["duplicate_refs"])
+    invite_count = len(review["invite_refs"])
+    details = {
+        "count": len(channels),
+        "duplicate_count": duplicate_count,
+        "unsupported_invite_count": invite_count,
+    }
+    if duplicate_count or invite_count:
+        issue_parts = []
+        if duplicate_count:
+            issue_parts.append(f"{duplicate_count} duplicate")
+        if invite_count:
+            issue_parts.append(f"{invite_count} invite link")
+        return _warn(
+            "channel_list",
+            f"Channel list has {len(channels)} sources, but {' and '.join(issue_parts)} needs review.",
+            "Remove duplicates. For invite links, join the channel first and use a username, numeric channel id, or Telegram folder import.",
+            details=details,
+        )
+    return _pass("channel_list", f"Channel list has {len(channels)} sources.", details=details)
 
 
 def check_source_registry(path: Path) -> CheckResult:
@@ -196,14 +274,25 @@ def check_source_registry(path: Path) -> CheckResult:
             details={"issues": issues, "path": str(path)},
         )
     enabled_count = len(source_registry.enabled_sources(payload))
+    sources = [source for source in payload.get("sources", []) if isinstance(source, dict)]
+    placeholder_count = _placeholder_source_count(sources)
+    details = {
+        "path": str(path),
+        "source_count": len(payload.get("sources", [])),
+        "enabled_count": enabled_count,
+        "placeholder_count": placeholder_count,
+    }
+    if enabled_count and placeholder_count == enabled_count:
+        return _warn(
+            "source_registry",
+            f"Source registry has {enabled_count} enabled placeholder sources.",
+            _placeholder_import_next_step(sources),
+            details=details,
+        )
     return _pass(
         "source_registry",
         f"Source registry has {enabled_count} enabled sources.",
-        details={
-            "path": str(path),
-            "source_count": len(payload.get("sources", [])),
-            "enabled_count": enabled_count,
-        },
+        details=details,
     )
 
 
@@ -241,12 +330,27 @@ def check_profile(path: Path) -> CheckResult:
 
 
 def check_llm_provider() -> CheckResult:
-    if os.environ.get("OPENAI_API_KEY") or os.environ.get("DEEPSEEK_API_KEY"):
-        return _pass("llm_provider", "LLM API key is configured.")
+    providers = []
+    if os.environ.get("OPENAI_API_KEY"):
+        providers.append("openai")
+    if os.environ.get("DEEPSEEK_API_KEY"):
+        providers.append("deepseek")
+    if os.environ.get("MINIMAX_TOKEN_PLAN_KEY") or os.environ.get("MINIMAX_API_KEY"):
+        providers.append("minimax")
+    if providers:
+        details = {"providers": providers}
+        if "minimax" in providers:
+            details["minimax_key_type"] = "token_plan" if os.environ.get("MINIMAX_TOKEN_PLAN_KEY") else "platform"
+            details["minimax_base_url"] = os.environ.get("MINIMAX_BASE_URL") or report.default_minimax_base_url()
+        return _pass(
+            "llm_provider",
+            f"LLM API key is configured for {', '.join(providers)}.",
+            details=details,
+        )
     return _warn(
         "llm_provider",
         "No LLM API key found.",
-        "Set OPENAI_API_KEY or DEEPSEEK_API_KEY before running report generation.",
+        "Set OPENAI_API_KEY, DEEPSEEK_API_KEY, MINIMAX_TOKEN_PLAN_KEY, or MINIMAX_API_KEY before running report generation.",
     )
 
 
@@ -269,6 +373,38 @@ def check_media_dependencies() -> CheckResult:
         "media_dependencies",
         "ffmpeg was not found; thumbnail-only OCR can still work.",
         "Install ffmpeg before using --ocr-full-video or full-video reprocessing.",
+    )
+
+
+def check_dashboard_assets() -> CheckResult:
+    dashboard_dir = PROJECT_ROOT / "dashboard"
+    static_dir = dashboard_dir / "dist"
+    index_path = static_dir / "index.html"
+    if index_path.exists():
+        return _pass(
+            "dashboard_assets",
+            "Dashboard static assets are built.",
+            details={"static_dir": str(static_dir)},
+        )
+    if not (dashboard_dir / "package.json").exists():
+        return _warn(
+            "dashboard_assets",
+            "Dashboard source directory was not found.",
+            "Clone the full repository if you want to use the optional local dashboard.",
+            details={"static_dir": str(static_dir)},
+        )
+    if shutil.which("npm"):
+        return _warn(
+            "dashboard_assets",
+            "Dashboard static assets are not built yet.",
+            "Run tgcs dashboard; it will auto-build dashboard/dist with npm ci and npm run build.",
+            details={"static_dir": str(static_dir), "auto_build": True},
+        )
+    return _warn(
+        "dashboard_assets",
+        "Dashboard static assets are not built and npm was not found.",
+        "Install Node.js/npm before first dashboard launch, or build dashboard/dist on another machine.",
+        details={"static_dir": str(static_dir), "auto_build": False},
     )
 
 
@@ -332,6 +468,7 @@ def run_checks(args) -> list[CheckResult]:
         check_profile(args.profile),
         check_llm_provider(),
         check_media_dependencies(),
+        check_dashboard_assets(),
         check_output_directory(args.output_dir),
     ]
     if args.channel_list:

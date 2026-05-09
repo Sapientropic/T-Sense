@@ -15,6 +15,8 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any
 
+from scripts.item_display import display_item_title
+
 
 TELEGRAM_BOT_TOKEN_ENV = "TGCS_TELEGRAM_BOT_TOKEN"
 
@@ -53,16 +55,7 @@ def _clean_text(value: object, *, max_len: int = 240) -> str:
 
 
 def _item_title(item: dict[str, Any]) -> str:
-    for key in ("topic", "company", "project", "event", "role", "title"):
-        value = item.get(key)
-        if value:
-            return _clean_text(value, max_len=120)
-    refs = item.get("source_message_refs") or []
-    if isinstance(refs, list) and refs:
-        ref = refs[0]
-        if isinstance(ref, dict):
-            return _clean_text(f"{ref.get('channel', 'source')}#{ref.get('id', '')}")
-    return "Telegram signal"
+    return display_item_title(item, fallback="Telegram signal", max_len=120)
 
 
 def _source_refs(item: dict[str, Any]) -> str:

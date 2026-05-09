@@ -23,6 +23,22 @@ class DeliveryTests(unittest.TestCase):
         self.assertIn("cointelegraph#123", text)
         self.assertNotIn("RAW TELEGRAM BODY", text)
 
+    def test_telegram_alert_title_uses_role_when_company_is_placeholder(self):
+        text = delivery.build_telegram_alert_text(
+            item={
+                "company": "Unknown",
+                "role": "AI Engineer",
+                "rating": "high",
+                "why": "Strong fit.",
+                "decision_state": {"status": "new"},
+                "source_message_refs": [{"channel": "jobs", "id": 42}],
+            },
+            card={"card_id": "card_123"},
+        )
+
+        self.assertIn("TGCS alert: AI Engineer", text)
+        self.assertNotIn("TGCS alert: Unknown", text)
+
     def test_dry_run_telegram_delivery_does_not_require_token(self):
         attempt = delivery.send_telegram_bot_message(
             target_id="telegram-bot-default",

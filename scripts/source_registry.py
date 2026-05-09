@@ -92,6 +92,18 @@ def source_from_channel(value: str) -> dict:
     }
 
 
+def normalize_topics(values: list[str] | None) -> list[str]:
+    topics: list[str] = []
+    seen: set[str] = set()
+    for value in values or []:
+        topic = str(value or "").strip().casefold()
+        if not topic or topic in seen:
+            continue
+        seen.add(topic)
+        topics.append(topic)
+    return topics
+
+
 def load_registry(path: Path | None = None, *, missing_ok: bool = False) -> dict:
     registry_path = path or default_registry_path()
     if not registry_path.exists():
@@ -173,6 +185,17 @@ def enabled_sources(payload: dict) -> list[dict]:
     return [source for source in payload.get("sources", []) if source.get("enabled", True)]
 
 
+def sources_matching_topics(sources: list[dict], topics: list[str] | None = None) -> list[dict]:
+    normalized_topics = set(normalize_topics(topics))
+    if not normalized_topics:
+        return sources
+    return [
+        source
+        for source in sources
+        if normalized_topics.intersection(normalize_topics(source.get("topics") or []))
+    ]
+
+
 def channel_value(source: dict) -> str:
     username = normalize_channel_name(source.get("username"))
     if username:
@@ -193,17 +216,50 @@ def source_lookup_by_channel(payload: dict | None) -> dict[str, dict]:
     return lookup
 
 
-def import_channel_list(path: Path, registry_path: Path, *, dry_run: bool = False) -> dict:
+def merge_source_topics(source: dict, topics: list[str]) -> bool:
+    if not topics:
+        return False
+    existing = normalize_topics(source.get("topics") or [])
+    merged = list(existing)
+    changed = False
+    for topic in topics:
+        if topic not in existing:
+            merged.append(topic)
+            existing.append(topic)
+            changed = True
+    if changed:
+        source["topics"] = merged
+    return changed
+
+
+def import_channel_list(
+    path: Path,
+    registry_path: Path,
+    *,
+    dry_run: bool = False,
+    topics: list[str] | None = None,
+) -> dict:
     channels = load_channel_list(path)
+    normalized_topics = normalize_topics(topics)
     payload = load_registry(registry_path, missing_ok=True)
-    existing = {source.get("source_id") for source in payload.get("sources", [])}
+    existing = {
+        source.get("source_id"): source
+        for source in payload.get("sources", [])
+        if isinstance(source, dict)
+    }
     added: list[dict] = []
+    updated: list[dict] = []
     for channel in channels:
         source = source_from_channel(channel)
-        if source["source_id"] in existing:
+        if normalized_topics:
+            source["topics"] = list(normalized_topics)
+        existing_source = existing.get(source["source_id"])
+        if existing_source:
+            if merge_source_topics(existing_source, normalized_topics):
+                updated.append(existing_source)
             continue
         payload.setdefault("sources", []).append(source)
-        existing.add(source["source_id"])
+        existing[source["source_id"]] = source
         added.append(source)
     issues = validate_registry(payload)
     if issues:
@@ -215,17 +271,20 @@ def import_channel_list(path: Path, registry_path: Path, *, dry_run: bool = Fals
         "registry_path": str(registry_path),
         "input_path": str(path),
         "added_count": len(added),
+        "updated_count": len(updated),
         "source_count": len(payload.get("sources", [])),
+        "topics": normalized_topics,
         "sources": added,
     }
 
 
-def export_channel_list(registry_path: Path, output: Path) -> dict:
+def export_channel_list(registry_path: Path, output: Path, *, topics: list[str] | None = None) -> dict:
     payload = load_registry(registry_path)
     issues = validate_registry(payload)
     if issues:
         raise RegistryError(validation_message(issues))
-    channels = [channel_value(source) for source in enabled_sources(payload)]
+    filtered_sources = sources_matching_topics(enabled_sources(payload), topics)
+    channels = [channel_value(source) for source in filtered_sources]
     channels = [channel for channel in channels if channel]
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text("\n".join(channels) + ("\n" if channels else ""), encoding="utf-8")
@@ -233,6 +292,7 @@ def export_channel_list(registry_path: Path, output: Path) -> dict:
         "registry_path": str(registry_path),
         "output_path": str(output),
         "exported_count": len(channels),
+        "topics": normalize_topics(topics),
     }
 
 
@@ -247,16 +307,24 @@ def build_parser() -> argparse.ArgumentParser:
     import_parser = subparsers.add_parser("import-list", help="Import a legacy channel list.")
     import_parser.add_argument("channel_list", type=Path)
     import_parser.add_argument("--dry-run", action="store_true")
+    import_parser.add_argument(
+        "--topic",
+        action="append",
+        default=[],
+        help="Attach a topic tag to imported sources. Repeat for multiple topics.",
+    )
     add_registry_arg(import_parser)
 
     validate_parser = subparsers.add_parser("validate", help="Validate a source registry.")
     add_registry_arg(validate_parser)
 
     list_parser = subparsers.add_parser("list", help="List registry sources.")
+    list_parser.add_argument("--topic", action="append", default=[], help="Filter sources by topic tag.")
     add_registry_arg(list_parser)
 
     export_parser = subparsers.add_parser("export-list", help="Export enabled sources as a channel list.")
     export_parser.add_argument("--output", required=True, type=Path)
+    export_parser.add_argument("--topic", action="append", default=[], help="Filter exported sources by topic tag.")
     add_registry_arg(export_parser)
     return parser
 
@@ -285,7 +353,12 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         if args.command == "import-list":
-            data = import_channel_list(args.channel_list, registry_path, dry_run=args.dry_run)
+            data = import_channel_list(
+                args.channel_list,
+                registry_path,
+                dry_run=args.dry_run,
+                topics=args.topic,
+            )
             _emit_result(args, data)
             return agent_cli.EXIT_SUCCESS
 
@@ -308,19 +381,22 @@ def main(argv: list[str] | None = None) -> int:
             return agent_cli.EXIT_SUCCESS
 
         if args.command == "list":
+            listed_sources = sources_matching_topics(payload.get("sources", []), args.topic)
             _emit_result(
                 args,
                 {
                     "registry_path": str(registry_path),
-                    "sources": payload.get("sources", []),
-                    "source_count": len(payload.get("sources", [])),
-                    "enabled_count": len(enabled_sources(payload)),
+                    "sources": listed_sources,
+                    "source_count": len(listed_sources),
+                    "enabled_count": len(sources_matching_topics(enabled_sources(payload), args.topic)),
+                    "total_source_count": len(payload.get("sources", [])),
+                    "topics": normalize_topics(args.topic),
                 },
             )
             return agent_cli.EXIT_SUCCESS
 
         if args.command == "export-list":
-            _emit_result(args, export_channel_list(registry_path, args.output))
+            _emit_result(args, export_channel_list(registry_path, args.output, topics=args.topic))
             return agent_cli.EXIT_SUCCESS
     except OSError as exc:
         agent_cli.emit_error(

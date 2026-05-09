@@ -8,6 +8,7 @@ import re
 from datetime import UTC, date, datetime
 from typing import Iterable
 
+from scripts.item_display import display_item_title, meaningful_dedup_pairs, meaningful_text
 from scripts.profile_schema import ProfileConfig
 
 
@@ -24,6 +25,12 @@ VOLATILE_FINGERPRINT_FIELDS = {
 
 
 def normalize_text(value: object) -> str:
+    text = meaningful_text(value).casefold().strip()
+    text = re.sub(r"\s+", " ", text)
+    return re.sub(r"[^\w\u0400-\u04ff\u4e00-\u9fff]+", "-", text).strip("-")
+
+
+def legacy_normalize_text(value: object) -> str:
     text = str(value or "").casefold().strip()
     text = re.sub(r"\s+", " ", text)
     return re.sub(r"[^\w\u0400-\u04ff\u4e00-\u9fff]+", "-", text).strip("-")
@@ -59,18 +66,19 @@ def clean_source_refs(value: object) -> list[dict]:
 
 
 def item_title(item: dict, dedup_fields: list[str]) -> str:
-    parts = [str(item.get(field) or "").strip() for field in dedup_fields[:2]]
-    title = " - ".join(part for part in parts if part)
-    return title or "Unknown item"
+    return display_item_title(item, dedup_fields=dedup_fields, fallback="Unknown item")
 
 
 def item_key(item: dict, profile_config: ProfileConfig, profile_text: str) -> str:
     key_prefix = profile_key(profile_text)
     dedup_fields = profile_config.mode.dedup_fields or []
-    dedup_values = [normalize_text(item.get(field)) for field in dedup_fields]
-    if any(dedup_values):
+    dedup_pairs = [
+        (field, normalize_text(value))
+        for field, value in meaningful_dedup_pairs(item, dedup_fields)
+    ]
+    if dedup_pairs:
         field_part = "|".join(
-            f"{field}:{value}" for field, value in zip(dedup_fields, dedup_values, strict=False)
+            f"{field}:{value}" for field, value in dedup_pairs
         )
         return f"{key_prefix}:{field_part}"
     refs = clean_source_refs(item.get("source_message_refs"))
@@ -83,6 +91,38 @@ def item_key(item: dict, profile_config: ProfileConfig, profile_text: str) -> st
         json.dumps(item, ensure_ascii=False, sort_keys=True).encode("utf-8")
     ).hexdigest()[:16]
     return f"{key_prefix}:item:{digest}"
+
+
+def legacy_placeholder_item_key(item: dict, profile_config: ProfileConfig, profile_text: str) -> str | None:
+    key_prefix = profile_key(profile_text)
+    dedup_fields = profile_config.mode.dedup_fields or []
+    dedup_values = [legacy_normalize_text(item.get(field)) for field in dedup_fields]
+    if not any(dedup_values):
+        return None
+    meaningful_values = [normalize_text(item.get(field)) for field in dedup_fields]
+    if dedup_values == meaningful_values:
+        return None
+    field_part = "|".join(
+        f"{field}:{value}" for field, value in zip(dedup_fields, dedup_values, strict=False)
+    )
+    return f"{key_prefix}:{field_part}"
+
+
+def source_ref_memory_key(item: dict, state_items: dict) -> str | None:
+    refs = clean_source_refs(item.get("source_message_refs"))
+    if not refs:
+        return None
+    current_markers = {source_ref_key(ref["channel"], ref["id"]) for ref in refs}
+    if not current_markers:
+        return None
+    for key, previous in state_items.items():
+        if not isinstance(previous, dict):
+            continue
+        previous_refs = clean_source_refs(previous.get("source_message_refs"))
+        previous_markers = {source_ref_key(ref["channel"], ref["id"]) for ref in previous_refs}
+        if current_markers & previous_markers:
+            return str(key)
+    return None
 
 
 def fingerprint_item(item: dict) -> str:
@@ -223,6 +263,15 @@ def enrich_items(
         title = item_title(current, profile_config.mode.dedup_fields or [])
         fingerprint = fingerprint_item(current)
         previous = state["items"].get(key)
+        legacy_key = None
+        if previous is None:
+            legacy_key = legacy_placeholder_item_key(current, profile_config, profile)
+            if legacy_key and legacy_key != key:
+                previous = state["items"].get(legacy_key)
+        if previous is None:
+            legacy_key = source_ref_memory_key(current, state["items"])
+            if legacy_key and legacy_key != key:
+                previous = state["items"].get(legacy_key)
         changed = bool(previous and previous.get("fingerprint") != fingerprint)
         expired = is_expired(current, observed)
 
@@ -279,6 +328,8 @@ def enrich_items(
             "fingerprint": fingerprint,
             "feedback_counts": existing_feedback,
         }
+        if legacy_key and legacy_key != key:
+            state["items"].pop(legacy_key, None)
         summary[status] += 1
         summary["total"] += 1
         enriched.append(current)

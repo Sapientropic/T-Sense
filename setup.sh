@@ -96,10 +96,11 @@ if [ ! -f "$TGCLI_CONFIG" ]; then
     echo "   Get your api_id and api_hash from: https://my.telegram.org/apps"
     echo "   (If the form shows ERROR, see docs/getting-api-credentials.md)"
     echo ""
-    echo "2. Initialize local defaults, log in, then run a report:"
-    echo "   ./tgcs init"
+    echo "2. Check jobs prerequisites, log in, then run a dry monitor:"
+    echo "   ./tgcs quickstart jobs"
+    echo "   ./tgcs doctor --profile jobs"
     echo "   ./tgcs login"
-    echo "   ./tgcs run"
+    echo "   ./tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run"
 else
     echo "Scanner config already exists at $TGCLI_CONFIG — skipping."
     echo "To reconfigure, edit: $TGCLI_CONFIG"
@@ -112,6 +113,16 @@ chmod +x tgcs scripts/scan.sh 2>/dev/null || true
 mkdir -p output
 
 echo ""
-echo "Setup complete. Next: edit config and run a scan"
+echo "Initializing local project defaults (jobs starter)..."
+if ./tgcs init --starter jobs; then
+    echo "Local project defaults ready."
+else
+    echo "Warning: local project defaults were not initialized. Run ./tgcs init --starter jobs after setup."
+fi
+
+echo ""
+echo "Setup complete. Next: edit config and run jobs-fast"
 echo "  Config:  $TGCLI_CONFIG"
-echo "  Run:     ./tgcs init && ./tgcs login && ./tgcs run"
+echo "  Next:    ./tgcs quickstart jobs"
+echo "  Run:     ./tgcs doctor --profile jobs && ./tgcs login && ./tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run"
+echo "  Schedule preview: ./tgcs schedule print --profile-id jobs-fast --interval-minutes 15"

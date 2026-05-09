@@ -42,7 +42,26 @@ class WindowsBatchTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, output)
         self.assertIn("Setup complete", output)
+        self.assertIn("Local project defaults", output)
+        self.assertIn("tgcs.bat quickstart jobs", output)
+        self.assertIn("tgcs.bat doctor --profile jobs", output)
+        self.assertIn("tgcs.bat monitor run --profile-id jobs-fast --delivery-mode dry-run", output)
+        self.assertIn("tgcs.bat schedule print --profile-id jobs-fast", output)
         self.assertTrue(config_exists)
+
+
+class SetupScriptPromptTests(unittest.TestCase):
+    def test_setup_sh_points_to_non_mutating_scheduler_preview(self):
+        setup_text = (ROOT / "setup.sh").read_text(encoding="utf-8")
+
+        self.assertIn("./tgcs init --starter jobs", setup_text)
+        self.assertIn("./tgcs quickstart jobs", setup_text)
+        self.assertIn("./tgcs doctor --profile jobs", setup_text)
+        self.assertIn("./tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run", setup_text)
+        self.assertIn(
+            "./tgcs schedule print --profile-id jobs-fast --interval-minutes 15",
+            setup_text,
+        )
 
 
 if __name__ == "__main__":

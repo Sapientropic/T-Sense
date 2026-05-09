@@ -1,5 +1,6 @@
 import io
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -362,7 +363,7 @@ fields:
             with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}, clear=True):
                 with patch.object(
                     report,
-                    "extract_jobs",
+                    "extract_jobs_with_metadata",
                     side_effect=report.ReportError("LLM response was not valid JSON", "bad"),
                 ):
                     with patch("sys.stderr", stderr):
@@ -518,6 +519,143 @@ fields:
 
         self.assertIn("**Action**: **Join now**", rendered)
 
+    def test_markdown_title_uses_role_when_company_is_placeholder(self):
+        report = load_report_module(self)
+        profile = """# Developer Opportunities
+
+## Extraction Schema
+mode: custom
+top_level_key: items
+dedup_fields: [company, role]
+fields:
+  - name: company
+  - name: role
+    required: true
+  - name: rating
+    values: [high, medium, low]
+"""
+        profile_config = report.parse_profile_config(profile)
+
+        rendered = report.render_job(
+            {
+                "company": "Unknown",
+                "role": "AI Engineer",
+                "rating": "high",
+                "why": "Strong fit.",
+            },
+            1,
+            profile_config,
+        )
+
+        self.assertIn("### 1. AI Engineer", rendered)
+        self.assertNotIn("### 1. Unknown", rendered)
+
+    def test_generic_html_card_uses_role_when_company_is_placeholder(self):
+        report = load_report_module(self)
+        profile = """# Developer Opportunities
+
+## Extraction Schema
+mode: custom
+top_level_key: items
+dedup_fields: [company, role]
+fields:
+  - name: company
+  - name: role
+    required: true
+  - name: rating
+    values: [high, medium, low]
+  - name: why
+"""
+        profile_config = report.parse_profile_config(profile)
+
+        html = report._render_generic_card(
+            {
+                "company": "Unknown",
+                "role": "AI Engineer",
+                "rating": "high",
+                "why": "Strong fit.",
+            },
+            1,
+            {},
+            profile_config,
+        )
+
+        self.assertIn('<span class="item-name">AI Engineer</span>', html)
+        title_row = html.split("item-title-row", 1)[1].split("</div>", 1)[0]
+        self.assertNotIn("Unknown", title_row)
+
+    def test_generic_html_card_avoids_duplicate_why_detail_and_links_apply_url(self):
+        report = load_report_module(self)
+        profile = """# Developer Opportunities
+
+## Extraction Schema
+mode: custom
+top_level_key: items
+dedup_fields: [company, role]
+fields:
+  - name: company
+  - name: role
+  - name: apply_url
+  - name: why
+  - name: rating
+    values: [high, medium, low]
+"""
+        profile_config = report.parse_profile_config(profile)
+
+        html = report._render_generic_card(
+            {
+                "company": "Example Co",
+                "role": "AI Engineer",
+                "apply_url": "https://example.com/apply",
+                "why": "Strong fit.",
+                "rating": "high",
+            },
+            1,
+            {},
+            profile_config,
+        )
+
+        self.assertEqual(html.count("Strong fit."), 1)
+        self.assertIn('href="https://example.com/apply"', html)
+        self.assertIn('rel="noopener noreferrer"', html)
+        self.assertIn("Apply URL", html)
+        self.assertNotIn("Apply_Url", html)
+
+    def test_markdown_field_labels_are_human_readable(self):
+        report = load_report_module(self)
+        profile = """# Developer Opportunities
+
+## Extraction Schema
+mode: custom
+top_level_key: items
+dedup_fields: [company, role]
+fields:
+  - name: company
+  - name: role
+  - name: apply_url
+  - name: urgency_reason
+  - name: rating
+    values: [high, medium, low]
+"""
+        profile_config = report.parse_profile_config(profile)
+
+        rendered = report.render_job(
+            {
+                "company": "Example Co",
+                "role": "AI Engineer",
+                "apply_url": "https://example.com/apply",
+                "urgency_reason": "Fresh post.",
+                "rating": "high",
+            },
+            1,
+            profile_config,
+        )
+
+        self.assertIn("**Apply URL**", rendered)
+        self.assertIn("**Urgency Reason**", rendered)
+        self.assertNotIn("Apply_Url", rendered)
+        self.assertNotIn("Urgency_Reason", rendered)
+
     def test_deepseek_key_gets_matching_default_endpoint_and_model(self):
         report = load_report_module(self)
 
@@ -525,7 +663,196 @@ fields:
             base_url, model = report.resolve_llm_settings(None, report.DEFAULT_MODEL)
 
         self.assertEqual(base_url, report.DEFAULT_DEEPSEEK_BASE_URL)
-        self.assertEqual(model, report.DEFAULT_DEEPSEEK_MODEL)
+        self.assertEqual(model, "deepseek-v4-flash")
+
+    def test_minimax_token_plan_key_gets_china_endpoint_and_model(self):
+        report = load_report_module(self)
+
+        with patch.dict("os.environ", {"MINIMAX_TOKEN_PLAN_KEY": "sk-test"}, clear=True):
+            base_url, model = report.resolve_llm_settings(None, report.DEFAULT_MODEL)
+
+        self.assertEqual(report.DEFAULT_MINIMAX_TOKEN_PLAN_BASE_URL, "https://api.minimaxi.com/v1")
+        self.assertEqual(base_url, report.DEFAULT_MINIMAX_TOKEN_PLAN_BASE_URL)
+        self.assertEqual(model, "MiniMax-M2.7")
+
+    def test_minimax_platform_key_keeps_platform_endpoint(self):
+        report = load_report_module(self)
+
+        with patch.dict("os.environ", {"MINIMAX_API_KEY": "sk-test"}, clear=True):
+            base_url, model = report.resolve_llm_settings(None, report.DEFAULT_MODEL)
+
+        self.assertEqual(base_url, report.DEFAULT_MINIMAX_BASE_URL)
+        self.assertEqual(model, "MiniMax-M2.7")
+
+    def test_minimax_region_cn_uses_china_endpoint(self):
+        report = load_report_module(self)
+
+        with patch.dict("os.environ", {"MINIMAX_API_KEY": "sk-test", "MINIMAX_REGION": "cn"}, clear=True):
+            base_url, model = report.resolve_llm_settings(None, report.DEFAULT_MODEL)
+
+        self.assertEqual(base_url, report.DEFAULT_MINIMAX_CN_BASE_URL)
+        self.assertEqual(model, "MiniMax-M2.7")
+
+    def test_explicit_deepseek_model_gets_deepseek_endpoint_even_when_minimax_key_exists(self):
+        report = load_report_module(self)
+
+        with patch.dict(
+            "os.environ",
+            {"DEEPSEEK_API_KEY": "sk-deepseek", "MINIMAX_TOKEN_PLAN_KEY": "sk-minimax"},
+            clear=True,
+        ):
+            base_url, model = report.resolve_llm_settings(None, "deepseek-v4-flash")
+
+        self.assertEqual(base_url, report.DEFAULT_DEEPSEEK_BASE_URL)
+        self.assertEqual(model, "deepseek-v4-flash")
+
+    def test_deepseek_key_wins_default_when_no_openai_key_and_minimax_also_exists(self):
+        report = load_report_module(self)
+
+        with patch.dict(
+            "os.environ",
+            {"DEEPSEEK_API_KEY": "sk-deepseek", "MINIMAX_TOKEN_PLAN_KEY": "sk-minimax"},
+            clear=True,
+        ):
+            base_url, model = report.resolve_llm_settings(None, report.DEFAULT_MODEL)
+
+        self.assertEqual(base_url, report.DEFAULT_DEEPSEEK_BASE_URL)
+        self.assertEqual(model, "deepseek-v4-flash")
+
+    def test_extraction_prompt_keeps_profile_in_cacheable_prefix(self):
+        report = load_report_module(self)
+
+        system_prompt, user_prompt = report.build_extraction_prompts(
+            sample_messages(),
+            "# Job Profile\nRemote TypeScript roles only.",
+            meta={"scan_started_at": "2026-05-08T08:00:00Z"},
+            max_messages=10,
+        )
+
+        self.assertIn("=== CANDIDATE PROFILE ===", system_prompt)
+        self.assertIn("Remote TypeScript roles only.", system_prompt)
+        self.assertNotIn("=== CANDIDATE PROFILE ===", user_prompt)
+        self.assertLess(user_prompt.index("=== SCAN METADATA ==="), user_prompt.index("=== UNTRUSTED TELEGRAM MESSAGES"))
+
+    def test_deepseek_v4_extraction_disables_thinking_and_reports_cache_usage(self):
+        report = load_report_module(self)
+        captured: dict = {}
+
+        class FakeUsage:
+            def model_dump(self):
+                return {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 2,
+                    "total_tokens": 12,
+                    "prompt_cache_hit_tokens": 8,
+                    "prompt_cache_miss_tokens": 2,
+                }
+
+        class FakeCompletions:
+            def create(self, **kwargs):
+                captured.update(kwargs)
+                return SimpleNamespace(
+                    choices=[SimpleNamespace(message=SimpleNamespace(content='{"jobs": []}'))],
+                    usage=FakeUsage(),
+                )
+
+        class FakeOpenAI:
+            def __init__(self, *, api_key, base_url):
+                captured["api_key"] = api_key
+                captured["base_url"] = base_url
+                self.chat = SimpleNamespace(completions=FakeCompletions())
+
+        with patch.dict("os.environ", {"DEEPSEEK_API_KEY": "sk-test"}, clear=True):
+            with patch.dict(sys.modules, {"openai": SimpleNamespace(OpenAI=FakeOpenAI)}):
+                result = report.extract_jobs_with_metadata(
+                    messages=sample_messages()[:1],
+                    profile="Senior TypeScript roles",
+                    meta=None,
+                    base_url=report.DEFAULT_DEEPSEEK_BASE_URL,
+                    model="deepseek-v4-flash",
+                    max_messages=10,
+                )
+
+        self.assertEqual(result.items, [])
+        self.assertEqual(captured["extra_body"], {"thinking": {"type": "disabled"}})
+        self.assertEqual(captured["response_format"], {"type": "json_object"})
+        self.assertEqual(captured["temperature"], 0)
+        self.assertEqual(result.llm["provider"], "deepseek")
+        self.assertEqual(result.llm["model"], "deepseek-v4-flash")
+        self.assertEqual(result.llm["usage"]["prompt_cache_hit_tokens"], 8)
+        self.assertEqual(result.llm["usage"]["prompt_cache_miss_tokens"], 2)
+        self.assertIn("prompt_prefix_hash", result.llm)
+
+    def test_minimax_m27_extraction_uses_minimax_key_and_provider_safe_request_shape(self):
+        report = load_report_module(self)
+        captured: dict = {}
+
+        class FakeCompletions:
+            def create(self, **kwargs):
+                captured.update(kwargs)
+                return SimpleNamespace(
+                    choices=[SimpleNamespace(message=SimpleNamespace(content='{"jobs": []}'))],
+                    usage={"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12},
+                )
+
+        class FakeOpenAI:
+            def __init__(self, *, api_key, base_url):
+                captured["api_key"] = api_key
+                captured["base_url"] = base_url
+                self.chat = SimpleNamespace(completions=FakeCompletions())
+
+        with patch.dict(
+            "os.environ",
+            {
+                "DEEPSEEK_API_KEY": "sk-deepseek",
+                "MINIMAX_TOKEN_PLAN_KEY": "sk-minimax",
+            },
+            clear=True,
+        ):
+            with patch.dict(sys.modules, {"openai": SimpleNamespace(OpenAI=FakeOpenAI)}):
+                base_url, model = report.resolve_llm_settings(None, "MiniMax-M2.7")
+                result = report.extract_jobs_with_metadata(
+                    messages=sample_messages()[:1],
+                    profile="Senior TypeScript roles",
+                    meta=None,
+                    base_url=base_url,
+                    model=model,
+                    max_messages=10,
+                    max_tokens=512,
+                )
+
+        self.assertEqual(result.items, [])
+        self.assertEqual(captured["api_key"], "sk-minimax")
+        self.assertEqual(captured["base_url"], report.DEFAULT_MINIMAX_CN_BASE_URL)
+        self.assertEqual(captured["extra_body"], {"reasoning_split": True})
+        self.assertGreater(captured["temperature"], 0)
+        self.assertEqual(captured["max_completion_tokens"], 512)
+        self.assertNotIn("max_tokens", captured)
+        self.assertNotIn("response_format", captured)
+        self.assertEqual(result.llm["provider"], "minimax")
+        self.assertEqual(result.llm["thinking"], "split")
+
+    def test_minimax_token_plan_key_takes_precedence_for_minimax_provider(self):
+        report = load_report_module(self)
+
+        with patch.dict(
+            "os.environ",
+            {
+                "MINIMAX_API_KEY": "sk-general",
+                "MINIMAX_TOKEN_PLAN_KEY": "sk-token-plan",
+            },
+            clear=True,
+        ):
+            key = report.api_key_for_provider("minimax")
+
+        self.assertEqual(key, "sk-token-plan")
+
+    def test_extraction_response_strips_minimax_thinking_block_before_json_parse(self):
+        report = load_report_module(self)
+
+        items = report.parse_extraction_response('<think>drafting</think>\n{"jobs": [{"rating": "high"}]}')
+
+        self.assertEqual(items, [{"rating": "high"}])
 
     def test_openai_key_keeps_openai_defaults_when_both_keys_exist(self):
         report = load_report_module(self)
@@ -555,8 +882,9 @@ fields:
             )
             profile_path.write_text("Senior Frontend Developer", encoding="utf-8")
 
+            extraction = report.ExtractionResult(items=sample_extracted_jobs()[:1], llm={"provider": "openai"})
             with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}, clear=True):
-                with patch.object(report, "extract_jobs", return_value=sample_extracted_jobs()[:1]) as extract_jobs:
+                with patch.object(report, "extract_jobs_with_metadata", return_value=extraction) as extract_jobs:
                     exit_code = report.main(
                         [
                             "--input",
@@ -577,6 +905,52 @@ fields:
         extract_jobs.assert_called_once()
         self.assertIn("# Job Scan Report", markdown)
         self.assertIn("<!doctype html>", html.lower())
+
+    def test_json_output_includes_llm_metadata_from_extraction_result(self):
+        report = load_report_module(self)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            input_path = root / "scan_20260506_080000.jsonl"
+            profile_path = root / "profile.md"
+            input_path.write_text(
+                json.dumps(sample_messages()[0], ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+            profile_path.write_text("Senior Frontend Developer", encoding="utf-8")
+            stdout = io.StringIO()
+
+            def fake_extract_jobs(**kwargs):
+                return report.ExtractionResult(
+                    items=sample_extracted_jobs()[:1],
+                    llm={
+                        "provider": "deepseek",
+                        "model": "deepseek-v4-flash",
+                        "usage": {
+                            "prompt_cache_hit_tokens": 80,
+                            "prompt_cache_miss_tokens": 20,
+                        },
+                    },
+                )
+
+            with patch.dict("os.environ", {"DEEPSEEK_API_KEY": "sk-test"}, clear=True):
+                with patch("sys.stdout", stdout):
+                    exit_code = report.main(
+                        [
+                            "--input",
+                            str(input_path),
+                            "--profile",
+                            str(profile_path),
+                            "--format",
+                            "json",
+                        ],
+                        extract_jobs_override=fake_extract_jobs,
+                    )
+            payload = json.loads(stdout.getvalue())
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(payload["data"]["llm"]["provider"], "deepseek")
+        self.assertEqual(payload["data"]["llm"]["usage"]["prompt_cache_hit_tokens"], 80)
 
     def test_html_report_includes_feedback_controls_and_jsonl_export(self):
         report = load_report_module(self)

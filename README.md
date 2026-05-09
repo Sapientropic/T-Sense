@@ -76,26 +76,29 @@ chmod +x setup.sh tgcs scripts/scan.sh
 ```bash
 # 0. Try the offline demo first (no Telegram login or LLM key required)
 ./tgcs demo
+#    Writes output/demo-report.html
 
 # 1. Edit config with your Telegram API credentials
 #    (setup.sh created it at ~/.config/tgcli/config.toml)
 nano ~/.config/tgcli/config.toml
 
-# 2. Create local defaults and check first-run prerequisites
-./tgcs init
-./tgcs doctor
+# 2. Check first-run prerequisites for the developer-opportunity starter
+#    setup.sh already initialized local .tgcs defaults with --starter jobs
+./tgcs quickstart jobs
+./tgcs doctor --profile jobs
 
 # 3. Complete Telegram login once
 ./tgcs login
 
-# 4. Scan and generate today's HTML report
-./tgcs run
+# 4. Run the jobs-fast monitor once without sending alerts
+./tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run
 ```
 
 On Windows, use `tgcs.bat` instead of `./tgcs`. The human facade defaults to
-the `market-news` profile, `.tgcs/sources.json`, `output/`, HTML output, and
-v0.4 local decision memory at `.tgcs/state`. Use `tgcs run --no-state` when
-you need a stateless run.
+the local `.tgcs/config.toml` profile, `.tgcs/sources.json`, `output/`, HTML
+output, and v0.4 local decision memory at `.tgcs/state`. `setup.*` initializes
+the jobs starter by default; use `tgcs run --no-state` when you need a stateless
+daily-report run.
 
 ### v0.5-alpha Monitor & Inbox
 
@@ -106,11 +109,34 @@ state, alert events, and a local review inbox:
 # Write .tgcs/profiles.toml if you want an editable monitor config
 ./tgcs monitor init-config
 
+# For the developer-opportunity lane, initialize directly from channel_lists/jobs.txt
+# Existing .tgcs/sources.json files are kept and merged with the jobs topic tag.
+./tgcs init --starter jobs
+
+# Show the one current next action for the jobs starter
+./tgcs quickstart jobs
+
 # Run one profile monitor; dry-run delivery is the safe default
 ./tgcs monitor run --profile-id market-news --delivery-mode dry-run
 
-# Serve the optional localhost dashboard after building dashboard/
+# Fast developer opportunity alerts: run this from Task Scheduler/cron every 15 minutes
+./tgcs monitor run --profile-id jobs-fast --delivery-mode live
+
+# Import real opportunity channels into the jobs-fast lane
+./tgcs sources import channel_lists/jobs.txt --topic jobs
+
+# Review or export only one profile lane's sources
+./tgcs sources list --topic jobs
+./tgcs sources export --topic jobs --output output/jobs-sources.txt
+
+# Print a scheduler command without installing it
+./tgcs schedule print --profile-id jobs-fast --interval-minutes 15 --delivery-mode live
+
+# Serve the optional localhost dashboard; first launch auto-builds dashboard/dist
 ./tgcs dashboard
+
+# Export reviewed dashboard decisions back into reusable report feedback
+./tgcs feedback export
 ```
 
 Monitor runs write artifacts under `output/runs/<run_id>/`, update a
@@ -118,6 +144,61 @@ Monitor runs write artifacts under `output/runs/<run_id>/`, update a
 new or changed items become alert candidates and pending review cards. Telegram
 Bot delivery reads `TGCS_TELEGRAM_BOT_TOKEN` from the environment and never
 stores the token in SQLite, manifests, or docs.
+
+The built-in `jobs-fast` monitor keeps developer opportunity alerts separate from the daily audit
+report. It scans a 2-hour catch-up window, but only interrupts for high-priority
+new or changed roles, contracts, freelance gigs, or Mini Apps/TON projects whose source message is within the last 60 minutes. The
+high-frequency path first applies a local keyword prefilter, so runs with no
+opportunity-signal keywords skip the report/LLM stage entirely. The dashboard can switch
+each profile between work-hours alerts, all-day alerts, and muted delivery, and
+its Source Yield and Source Actions panels help review which job channels
+produce fresh messages, which sources produce high-value leads, which sources
+need more observation, and which noisy sources may be prune candidates.
+Import real opportunity sources with `./tgcs sources import <channel-list> --topic jobs`;
+the import also adds the topic to existing matching sources, so `jobs-fast`
+will keep using a topic-filtered registry instead of silently falling back to
+placeholder sources.
+
+`./tgcs doctor` also checks whether dashboard assets are already built. Missing
+assets are only a warning because `./tgcs dashboard` can build them on first
+launch when Node/npm is available.
+
+Dashboard keep/skip/false-positive decisions can be exported from Settings or
+as note-free `tgcs-feedback-v1` JSONL with `./tgcs feedback export`, then reused
+by the decision-memory path through `--feedback-jsonl output/dashboard-feedback.jsonl`.
+The first screen also shows a First Useful Report checklist and latest-run
+signal brief: Top 3 sanitized opportunity cards, All Clear state, or the top
+source/report diagnostic when the run failed.
+The Runs tab also opens generated reports through a local-only artifact route
+restricted to `report.html` or `report.md` under workspace-local `runs/`
+directories.
+
+For the interrupt lane, `jobs-fast` caps semantic extraction at 20 matched
+messages and 2000 output tokens. Keep the daily audit/backfill lane for
+exhaustive review over larger windows.
+`./tgcs schedule print` only prints a Windows Task Scheduler or cron command for
+review; it does not create a system task by itself.
+
+When `OPENAI_API_KEY` is not configured and `DEEPSEEK_API_KEY` is present,
+semantic extraction defaults to `deepseek-v4-flash` with thinking disabled and
+JSON output requested, even if MiniMax is also configured. MiniMax M2.7 is also
+supported through the official OpenAI-compatible endpoint: set
+`MINIMAX_TOKEN_PLAN_KEY` for a Token Plan key or `MINIMAX_API_KEY` for a
+standard platform key. Token Plan keys default to the China-region endpoint
+`https://api.minimaxi.com/v1`; standard platform keys default to
+`https://api.minimax.io/v1`. Set `MINIMAX_BASE_URL` when your account needs an
+explicit endpoint override. Use the local eval to compare provider latency,
+JSON reliability, and aggregate token
+usage on your history without copying raw Telegram text into the result
+artifact. Workspace-local input paths are stored as relative paths; external
+input paths are reduced to file names and disambiguated with a short hash only
+when duplicate basenames would collide:
+
+```bash
+python scripts/eval_deepseek_cache.py --sample-size 20 --repeat 3 --format json
+python scripts/eval_deepseek_cache.py --sample-sizes 10,20,30 \
+  --models deepseek-v4-flash,MiniMax-M2.7 --repeat 1 --max-tokens 1000 --format json
+```
 
 ### Agent-Native Mode
 
@@ -129,6 +210,9 @@ source registry at `.tgcs/sources.json`:
 ```bash
 python scripts/source_registry.py import-list channel_lists/example.txt \
   --source-registry .tgcs/sources.json --format json
+
+python scripts/source_registry.py import-list channel_lists/jobs.txt \
+  --source-registry .tgcs/sources.json --topic jobs --format json
 
 python scripts/doctor.py --source-registry .tgcs/sources.json \
   --profile profiles/templates/market-news.md --output-dir output --format json
@@ -154,6 +238,9 @@ python scripts/report.py --input output/scan.jsonl \
 # Optional v0.5-alpha monitor state, manifest, inbox, and alert events
 python scripts/monitor.py run --profile-id market-news \
   --delivery-mode dry-run --format json
+
+python scripts/monitor.py feedback-export \
+  --db .tgcs/tgcs.db --output output/dashboard-feedback.jsonl --format json
 ```
 
 If no LLM provider key exists, `report.py --extractor auto` returns

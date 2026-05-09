@@ -93,6 +93,142 @@ class SourceRegistryTests(unittest.TestCase):
         self.assertEqual(exported_text, "cointelegraph")
         self.assertEqual(export_payload["data"]["exported_count"], 1)
 
+    def test_import_list_tags_new_and_existing_sources(self):
+        source_registry = load_registry_module(self)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            channel_list = root / "channels.txt"
+            registry_path = root / "sources.json"
+            channel_list.write_text("remote_jobs\nremote_jobs_ai\n", encoding="utf-8")
+            registry_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "source_registry_v1",
+                        "sources": [
+                            {
+                                "source_id": "telegram:remote_jobs",
+                                "username": "remote_jobs",
+                                "channel_id": None,
+                                "label": "remote_jobs",
+                                "topics": [],
+                                "priority": "normal",
+                                "expected_language": "",
+                                "scan_window_hours": 24,
+                                "enabled": True,
+                                "notes": "",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            stdout = io.StringIO()
+
+            with patch("sys.stdout", stdout):
+                exit_code = source_registry.main(
+                    [
+                        "import-list",
+                        str(channel_list),
+                        "--source-registry",
+                        str(registry_path),
+                        "--format",
+                        "json",
+                        "--topic",
+                        "jobs",
+                        "--topic",
+                        "remote-work",
+                    ]
+                )
+
+            result = json.loads(stdout.getvalue())
+            payload = json.loads(registry_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(result["data"]["added_count"], 1)
+        self.assertEqual(result["data"]["updated_count"], 1)
+        self.assertEqual(payload["sources"][0]["topics"], ["jobs", "remote-work"])
+        self.assertEqual(payload["sources"][1]["topics"], ["jobs", "remote-work"])
+
+    def test_list_and_export_can_filter_by_topic(self):
+        source_registry = load_registry_module(self)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            registry_path = root / "sources.json"
+            export_path = root / "jobs.txt"
+            registry_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "source_registry_v1",
+                        "sources": [
+                            {
+                                "source_id": "telegram:remote_jobs",
+                                "username": "remote_jobs",
+                                "channel_id": None,
+                                "label": "remote_jobs",
+                                "topics": ["jobs"],
+                                "priority": "normal",
+                                "expected_language": "",
+                                "scan_window_hours": 24,
+                                "enabled": True,
+                                "notes": "",
+                            },
+                            {
+                                "source_id": "telegram:market_news",
+                                "username": "market_news",
+                                "channel_id": None,
+                                "label": "market_news",
+                                "topics": ["market-news"],
+                                "priority": "normal",
+                                "expected_language": "",
+                                "scan_window_hours": 24,
+                                "enabled": True,
+                                "notes": "",
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            stdout = io.StringIO()
+
+            with patch("sys.stdout", stdout):
+                list_exit = source_registry.main(
+                    [
+                        "list",
+                        "--source-registry",
+                        str(registry_path),
+                        "--topic",
+                        "jobs",
+                        "--format",
+                        "json",
+                    ]
+                )
+            listed = json.loads(stdout.getvalue())
+
+            export_exit = source_registry.main(
+                [
+                    "export-list",
+                    "--source-registry",
+                    str(registry_path),
+                    "--output",
+                    str(export_path),
+                    "--topic",
+                    "jobs",
+                    "--format",
+                    "json",
+                ]
+            )
+            exported = export_path.read_text(encoding="utf-8").strip()
+
+        self.assertEqual(list_exit, 0)
+        self.assertEqual(export_exit, 0)
+        self.assertEqual(listed["data"]["source_count"], 1)
+        self.assertEqual(listed["data"]["topics"], ["jobs"])
+        self.assertEqual(listed["data"]["sources"][0]["username"], "remote_jobs")
+        self.assertEqual(exported, "remote_jobs")
+
     def test_validate_rejects_duplicate_ids_and_invalid_fields(self):
         source_registry = load_registry_module(self)
 

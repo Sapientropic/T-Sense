@@ -97,10 +97,11 @@ echo    %TGCLI_CONFIG%
 echo    Get your api_id and api_hash from: https://my.telegram.org/apps
 echo    ^(If the form shows ERROR, see docs\getting-api-credentials.md^)
 echo.
-echo 2. Initialize local defaults, log in, then run a report:
-echo    tgcs.bat init
+echo 2. Check jobs prerequisites, log in, then run a dry monitor:
+echo    tgcs.bat quickstart jobs
+echo    tgcs.bat doctor --profile jobs
 echo    tgcs.bat login
-echo    tgcs.bat run
+echo    tgcs.bat monitor run --profile-id jobs-fast --delivery-mode dry-run
 goto config_done
 
 :config_exists
@@ -112,6 +113,17 @@ echo To reconfigure, edit: %TGCLI_CONFIG%
 if not exist "output" mkdir output
 
 echo.
-echo Setup complete. Next: edit config and run a scan
+echo Initializing local project defaults (jobs starter)...
+call tgcs.bat init --starter jobs
+if errorlevel 1 (
+    echo Warning: local project defaults were not initialized. Run tgcs.bat init --starter jobs after setup.
+) else (
+    echo Local project defaults ready.
+)
+
+echo.
+echo Setup complete. Next: edit config and run jobs-fast
 echo   Config:  %TGCLI_CONFIG%
-echo   Run:     tgcs.bat init ^&^& tgcs.bat login ^&^& tgcs.bat run
+echo   Next:    tgcs.bat quickstart jobs
+echo   Run:     tgcs.bat doctor --profile jobs ^&^& tgcs.bat login ^&^& tgcs.bat monitor run --profile-id jobs-fast --delivery-mode dry-run
+echo   Schedule preview: tgcs.bat schedule print --profile-id jobs-fast --interval-minutes 15

@@ -1,6 +1,6 @@
 # TG Channel Scanner Roadmap
 
-Last researched: 2026-05-07
+Last researched: 2026-05-09
 
 This roadmap is market-informed, but it is still a product plan, not a
 commitment log. Review note: product pages, Telegram platform rules, and
@@ -185,20 +185,48 @@ Already in scope or recently addressed:
 - Thumbnail-first standalone OCR defaults.
 - Explicit scan output handoff in the daily pipeline.
 - Focused tests and `pyproject.toml` tooling.
+- Empty/no-useful-result diagnostics cover no messages, all filtered out,
+  incomplete scans, OCR-disabled media, missing metadata, and provider
+  availability boundaries.
+- Offline `tgcs demo` renders `output/demo-report.html` without Telegram login
+  or LLM keys, so first-run activation can start before credentials.
+- First-run `doctor` checks for runtime dependencies, Telegram credentials,
+  session state, source input, profile parsing, LLM provider keys, media
+  dependencies, dashboard assets, and output directory permissions.
+- `doctor` warns on channel-list duplicates and invite-link references before a
+  real scan, so source import issues show up during first-run checks.
+- `doctor` warns when the local source registry still contains only `example_*`
+  placeholder sources, before monitor runs fail on unresolvable examples.
+- `tgcs sources import <list> --topic jobs` can tag new sources and merge the
+  same tag into existing matching sources, closing the `jobs-fast`
+  topic-filtered import path.
+- `tgcs init --starter jobs` now chooses `channel_lists/jobs.txt`, sets the
+  human facade default profile to jobs, and imports with `--topic jobs`, so the
+  developer-opportunity lane can avoid placeholder sources on first setup. When
+  a source registry already exists, the jobs starter merges `channel_lists/jobs.txt`
+  into it instead of skipping the topic import.
+- `tgcs quickstart jobs` gives a read-only single next action for the Developer
+  Opportunity starter, so users do not need to choose between init, doctor,
+  login, dry-run monitor, and dashboard by reading multiple docs.
+- `setup.sh` and `setup.bat` now call the jobs starter by default and print the
+  jobs doctor + dry-run monitor path instead of routing first-time users back to
+  placeholder market-news examples.
+- Dashboard first-use and latest-run projections now show a First Useful Report
+  checklist, source-access blockers before delivery setup, latest-run Top 3
+  opportunity cards, All Clear state, top diagnostics, and a 14-day local
+  validation summary without opening raw artifacts.
+- Inbox review now includes view-only triage filters for all, high,
+  new/changed, and low/medium cards so high-volume pending queues can be
+  processed without adding risky bulk actions.
+- Built-in profile templates cover jobs, airdrops, market/news, research leads,
+  and competitor monitoring.
 
 Next iterations:
 
-- Add a first-run `doctor` command for config path, Telegram credentials,
-  session state, channel list, LLM provider, media dependencies, and output
-  directory permissions.
-- Add built-in profile templates for jobs, airdrops, market/news, research
-  leads, and competitor monitoring.
-- Improve "no useful results" diagnostics: no messages fetched, all filtered
-  out, scan incomplete, OCR disabled, or LLM unavailable.
-- Add local feedback capture from the report: keep, skip, false positive, false
-  negative, and short user note.
-- Add a tiny sample fixture and documented demo command that does not require a
-  Telegram login.
+- Tighten the first useful report path around real user source import:
+  better folder import guidance and obvious rerun steps after `doctor` warnings.
+- Make local feedback more visibly actionable: show which feedback rows have
+  already influenced decision memory or a proposed profile diff.
 
 Exit criteria:
 
@@ -281,36 +309,39 @@ Goal: make the scanner a dependable repeated habit: high-priority new or
 changed items can interrupt the user, while everything else goes into a local
 review dashboard.
 
-Alpha implementation now started:
+Alpha implementation is in active hardening:
 
 - v0.5-alpha.1 adds `scripts/monitor.py run`, `profile_run_config_v1`,
   `run_manifest_v1`, SQLite-backed review cards/alert events/profile patch
   suggestions, private Telegram Bot delivery dry-run/live modes, and an
   optional Vite React dashboard served from `127.0.0.1`.
+- v0.5-alpha.2 hardening is focused on the Developer Opportunity fast lane:
+  `jobs-fast` prefiltering, alert freshness, bounded semantic batches, dashboard
+  alert-mode overrides, source yield/action suggestions, dashboard feedback
+  export, local artifact links, dashboard run-quality diagnostics,
+  no-side-effect scheduler command printing, local provider evals, first-use
+  checklist recovery, latest-run opportunity summary, and placeholder-safe
+  titles across dashboard cards, alerts, report artifacts, and feedback export.
 - The existing v0.4 scan/report JSON contracts remain the agent-facing base.
   Dashboard state is local `.tgcs/tgcs.db` state, not a raw Telegram archive.
+- A real `jobs-fast` run against imported jobs sources produced high-value
+  cards and a report without requiring raw Telegram text in dashboard state;
+  the current polish priority is now reducing activation friction and making
+  source/report quality visible at first glance.
 
-Planned work:
+Remaining work before calling v0.5 done:
 
 - Treat each profile as a durable monitoring task with its own schedule,
   working hours, source filters, alert rules, and delivery targets.
-- Add a review inbox for pending decision cards with keep, skip,
-  false-positive, and follow-up actions.
-- Add alert mode for high-priority new or changed matches while keeping the full
-  daily report as the audit artifact.
-- Default delivery to a private Telegram bot, with optional webhook, email, and
-  Telegram Saved Messages adapters.
-- Add follow-up-to-profile flow: save the local note, ask whether it should
-  affect future screening, show a profile diff, and apply it with one action.
-- Add scheduler helpers for Windows Task Scheduler, cron, and GitHub Actions
-  self-hosted runners.
-- Add optional SQLite state for runs, review cards, feedback, alert logs,
-  profile snapshots, and source-health snapshots while preserving JSON CLI
-  contracts.
-- Add run manifests that record config/profile/channel-list hashes and generated
-  output paths.
-- Add a local dashboard on `127.0.0.1` focused first on Inbox and Profiles, with
-  minimal Runs and Settings support.
+- Finish follow-up-to-profile UX around already-collected local notes: make it
+  obvious which profile diff is proposed, why, and how to roll it back.
+- Make setup and packaging less brittle on Windows: one obvious install/check
+  path, clearer Telegram source import guidance, and fewer manual rerun steps.
+- Add optional webhook, email, or Telegram Saved Messages adapters only after the
+  private Telegram Bot path proves stable in real use.
+- Decide whether source-health trends need history beyond the current latest-run
+  Source Yield projection, or whether current promote/prune/watch/observe
+  actions are enough for v0.5.
 
 Deferred from v0.5 unless user evidence requires it:
 

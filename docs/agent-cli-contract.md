@@ -1,6 +1,7 @@
 # Agent CLI Contract
 
-This document is the stable agent-facing contract for TG Channel Scanner v0.4.
+This document is the stable agent-facing contract for TG Channel Scanner v0.4
+and the v0.5-alpha monitor/dashboard layer.
 Human output remains best-effort prose; agents should use `--format json`.
 The short `tgcs` facade is for humans and keeps defaults convenient; it does not
 replace the explicit agent contract below.
@@ -86,19 +87,55 @@ Default path resolution:
 Human-oriented facade:
 
 ```powershell
+tgcs demo
 tgcs init
+tgcs init --starter jobs
+tgcs quickstart jobs
+tgcs doctor --profile jobs
 tgcs login
 tgcs run
 tgcs run --profile market-news --hours 72
 tgcs run --no-state
 tgcs sources import channel_lists/example.txt
+tgcs sources import channel_lists/jobs.txt --topic jobs
+tgcs sources list --topic jobs
+tgcs sources export --topic jobs --output output/jobs-sources.txt
 tgcs monitor run --profile-id market-news
+tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run
 tgcs dashboard
+tgcs dashboard --no-build
+tgcs feedback export
+tgcs schedule print --profile-id jobs-fast --interval-minutes 15 --delivery-mode live
 tgcs delivery test telegram-bot --chat-id 123456
 ```
 
-`tgcs run` defaults to `.tgcs/sources.json` when present, the `market-news`
-profile, HTML output, `output/`, and v0.4 decision memory at `.tgcs/state`.
+`tgcs demo` renders the offline fixture report to `output/demo-report.html`
+without Telegram login or LLM provider keys. It is the preferred first
+activation check before asking a human to configure credentials.
+`tgcs init --starter jobs` uses `channel_lists/jobs.txt`, writes the human
+facade default profile as `jobs`, and imports those sources with `--topic jobs`
+so the `jobs-fast` monitor lane is usable without first landing on placeholder
+example sources. If `.tgcs/sources.json` already exists, the jobs starter keeps
+the existing registry and non-destructively merges `channel_lists/jobs.txt` with
+the `jobs` topic tag.
+`tgcs quickstart jobs` is read-only and prints one current next action for the
+Developer Opportunity starter: init, doctor, login, first dry-run, or dashboard.
+It never starts login, scanning, delivery, or scheduler installation.
+`tgcs run` defaults to `.tgcs/sources.json` when present, the local
+`.tgcs/config.toml` profile when initialized, HTML output, `output/`, and v0.4
+decision memory at `.tgcs/state`. Without local config the built-in fallback
+profile remains `market-news`.
+`tgcs sources import --topic <tag>` attaches topic tags to new sources and
+merges them into existing matching sources; use `--topic jobs` before running
+the `jobs-fast` profile against a topic-filtered registry.
+`tgcs dashboard` serves the optional local dashboard and auto-builds the default
+`dashboard/dist` assets when they are missing. `--no-build` skips this for
+packaged/offline environments or custom static asset handling.
+Dashboard artifact links use `/artifacts/<url-encoded-path>` and are restricted
+to `report.html` or `report.md` files under a workspace-local `runs/` directory.
+Traversal, non-run paths, and raw scan artifacts are rejected.
+`tgcs schedule print` is a no-side-effect helper: it prints a Windows Task
+Scheduler or cron command for review and never installs or starts a system task.
 Agents should call the lower-level commands when they need stable JSON output:
 
 ```powershell
@@ -113,7 +150,24 @@ python scripts/report.py --input output/scan.jsonl --profile profiles/templates/
 python scripts/report.py --input output/scan.jsonl --profile profiles/templates/market-news.md --items-json output/extracted-items.json --state-dir .tgcs/state --feedback-jsonl output/report-feedback.jsonl --format json
 python scripts/daily_report.py --source-registry .tgcs/sources.json --profile profiles/templates/market-news.md --html --state-dir .tgcs/state --format json
 python scripts/monitor.py run --profile-id market-news --delivery-mode dry-run --format json
+python scripts/monitor.py feedback-export --db .tgcs/tgcs.db --output output/dashboard-feedback.jsonl --format json
 ```
+
+`doctor.py` reports `dashboard_assets` as pass/warn only; missing dashboard
+static files are not a hard failure because the human `tgcs dashboard` facade
+can build `dashboard/dist` automatically when npm is available. Channel-list
+checks warn on duplicates and `t.me/+...` / `joinchat` invite-link references
+so the human can replace them with usernames, numeric ids, or Telegram folder
+import before the first real scan. Source-registry checks warn when all enabled
+sources are `example_*` placeholders, because those examples are documentation
+fixtures and will not resolve as real Telegram channels. For jobs-style
+placeholder registries, the next step also points to `tgcs init --starter jobs
+--force` as an explicit reset path, alongside the non-reset
+`tgcs sources import channel_lists/jobs.txt --topic jobs` option. The
+`llm_provider` check treats `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`,
+`MINIMAX_TOKEN_PLAN_KEY`, and `MINIMAX_API_KEY` as valid provider credentials,
+without echoing key values. For MiniMax, it reports the non-secret key type and
+effective base URL so Token Plan CN routing is visible during first-run checks.
 
 ## Monitor Runner: `profile_run_config_v1`
 
@@ -138,7 +192,68 @@ enabled = true
 source_registry = ".tgcs/sources.json"
 source_topics = ["market-news"]
 alert_rule = "high_new_or_changed"
+alert_schedule_mode = "work_hours"
 delivery_targets = ["telegram-bot-default"]
+
+[[profiles]]
+id = "jobs-fast"
+path = "profiles/templates/jobs.md"
+enabled = true
+timezone = "Asia/Shanghai"
+work_start = "09:00"
+work_end = "23:00"
+work_interval_minutes = 15
+off_hours_interval_minutes = 60
+scan_window_hours = 2
+source_registry = ".tgcs/sources.json"
+source_topics = ["jobs"]
+alert_rule = "high_new_or_changed"
+alert_max_age_minutes = 60
+alert_schedule_mode = "work_hours"
+delivery_targets = ["telegram-bot-default"]
+prefilter_enabled = true
+semantic_max_messages = 20
+semantic_max_tokens = 2000
+prefilter_keywords = [
+  "hiring",
+  "we're hiring",
+  "is hiring",
+  "job opening",
+  "open role",
+  "remote",
+  "apply",
+  "frontend",
+  "backend",
+  "fullstack",
+  "react",
+  "typescript",
+  "engineer",
+  "developer",
+  "freelance",
+  "contract",
+  "contractor",
+  "gig",
+  "bounty",
+  "paid project",
+  "mini app",
+  "mini apps",
+  "telegram mini app",
+  "ton",
+  "usdt",
+  "budget",
+  "招聘",
+  "招人",
+  "岗位",
+  "职位",
+  "远程",
+  "简历",
+  "外包",
+  "接活",
+  "兼职",
+  "私活",
+  "项目",
+  "预算",
+]
 
 [[delivery]]
 id = "telegram-bot-default"
@@ -160,32 +275,184 @@ chat_id = ""
   "html_path": "output/runs/run_20260508T090000Z_abcd1234/report.html",
   "review_card_count": 3,
   "alert_count": 1,
+  "prefilter": {
+    "enabled": true,
+    "keyword_count": 20,
+    "matched_count": 4,
+    "semantic_stage": "report_ran"
+  },
+  "semantic": {
+    "max_messages": 20,
+    "max_tokens": 2000
+  },
+  "llm": {
+    "provider": "deepseek",
+    "model": "deepseek-v4-flash",
+    "thinking": "disabled",
+    "usage": {
+      "prompt_cache_hit_tokens": 17920,
+      "prompt_cache_miss_tokens": 96
+    },
+    "cache": {
+      "hit_rate": 0.9947
+    }
+  },
   "delivery_attempts": []
 }
 ```
 
+`scripts/monitor.py feedback-export` writes dashboard keep, skip, and
+false-positive decisions as reusable `tgcs-feedback-v1` JSONL. It intentionally
+exports empty `note` fields because dashboard notes may contain private workflow
+context. It may include sanitized `rating` and `decision_status` fields so
+14-day validation can measure false positives by priority and novelty without
+exporting raw Telegram text. The human facade defaults to:
+
+```powershell
+tgcs feedback export
+```
+
+which reads `.tgcs/tgcs.db` and writes `output/dashboard-feedback.jsonl`.
+
 Run manifests use `run_manifest_v1`. They include profile/source hashes,
-scan window, artifact paths, report status, alert count, error summary, and
-delivery attempts. Previous runs are kept under `output/runs/<run_id>/`; only
-`output/latest/run-manifest.path` is updated as a pointer.
+scan window, source filters, alert rule, alert schedule, prefilter status,
+artifact paths, report status, alert count, error summary, executed commands,
+and delivery attempts. Previous runs are kept under `output/runs/<run_id>/`;
+only `output/latest/run-manifest.path` is updated as a pointer.
+
+When `prefilter_enabled=true`, `monitor.py run` first calls `scan.py` and
+performs local keyword matching. If no scanned message matches,
+`data.status = "prefilter_no_match"`, `review_card_count = 0`, and no
+`report.py`/LLM stage is called. If matches exist, they are written to
+`prefiltered-scan.jsonl`; the report stage reads that filtered file while the
+manifest keeps both raw and filtered scan artifacts.
 
 SQLite stores dashboard state using these projections:
 
 - `review_card_v1`: extracted item fields, source refs, card status, run refs.
+  Display titles are placeholder-aware: `Unknown`, `Not specified`, and similar
+  missing-value markers are not allowed to become the primary dashboard,
+  alert, report, or feedback-export title when a more useful role/project/topic
+  field is present in `item_json`. This read-time recovery also keeps legacy
+  cards usable after display-title fixes.
 - `alert_event_v1`: alert target, status, redacted payload, delivery result.
 - `delivery_target_v1`: target id/type/enabled/config; never bot tokens.
 - `profile_patch_suggestion_v1`: follow-up note, diff, proposed profile text.
+  Dashboard projections also include display-only `profile_path` and
+  placeholder-aware `card_title` so the user can see which card created the
+  pending profile diff and which local profile file will be changed.
+- `source_stats`: dashboard projection of source channel value and latest-run
+  yield. It includes all-time review-card counts, high-rate, alert counts, and,
+  when the latest run has a `scan_meta` artifact, source-level `raw_count`,
+  `kept_count`, `scan_keep_rate`, `latest_card_count`, `latest_high_count`, and
+  `card_yield_rate`. This projection reads only `scan.meta.json` source-health
+  counters and must not copy raw Telegram message bodies into SQLite or the
+  dashboard JSON.
+- `source_insights`: dashboard projection of actionable source suggestions:
+  `promote` for high-yield sources, `prune` for false-positive-heavy sources,
+  `watch` for mixed medium-signal sources or latest-run sources with fresh
+  messages but no review cards, `Access`/watch for sources whose latest scan
+  failed, and `observe` for a source with one high signal that needs more sample
+  size before promotion.
+- `feedback_summary`: count of keep, skip, and false-positive feedback rows that
+  can be exported as note-free `tgcs-feedback-v1` JSONL, plus `by_action`
+  counts for dashboard feedback distribution. It also includes `by_rating` and
+  `by_decision_status` so validation can inspect feedback quality without
+  opening exported JSONL.
+- `setup_status`: first-use guidance for the dashboard empty state. Stable
+  fields are `stage`, `next_step`, `has_profiles`, `has_runs`, and delivery
+  booleans; `checks` is a display-oriented list with `check_id`, `label`,
+  `status`, optional `detail`, and optional `command`. Commands are shown to the
+  user for review and are not executed by the dashboard.
+- `opportunity_summary`: latest-run first-screen projection with scanned and
+  prefilter-matched counts, high new/changed count, alert count, top ranked
+  review cards, all-clear state, diagnostic counts, `decision_counts` for the
+  latest run's new/changed/seen/recurring/expired cards, and a display-oriented
+  `next_action` object with `label`, `detail`, and optional reviewable command.
+  It is built from sanitized review-card projections and run manifests, not raw
+  Telegram message bodies. When a run bypassed live scanning through
+  `--scan-input`, the scanned and matched counts may fall back to
+  `scan_meta.total_messages_collected` so replay/offline validation does not
+  show a misleading `0/0` first-screen summary.
+- `runs[*].quality`: dashboard run-quality projection with prefilter ratio,
+  semantic stage, LLM provider/cache/latency, and report diagnostic counts.
 
 Central SQLite state must not store Telegram sessions, API keys, bot tokens, or
 raw Telegram message bodies. Follow-up notes are local workflow data; they do
 not enter `item-memory.json` or future LLM prompts unless the user applies the
-generated profile diff.
+generated profile diff. Creating a follow-up profile diff requires a non-empty
+note; empty generic follow-up rules are rejected to avoid polluting profiles.
+
+HTML/Markdown reports use the same display-title helper as review cards. Custom
+schema field labels are rendered for humans (`apply_url` -> `Apply URL`), and
+URL-like fields are linked in HTML through the existing safe-link sanitizer.
+Narrative fields such as `why` should not be duplicated in both the detail grid
+and the explanatory body.
+
+Decision-memory item keys also ignore those placeholder values for new writes.
+For compatibility with existing local state, the enrichment path checks the
+legacy placeholder-inclusive key once and migrates the entry to the cleaner key
+instead of reclassifying the same item as brand new.
 
 Default alert rule:
 
 ```text
 rating == "high" and decision_state.status in ["new", "changed"]
 ```
+
+Profiles may add `alert_max_age_minutes`. `jobs-fast` defaults to a 2-hour scan
+window and `alert_max_age_minutes=60`, so missed scheduler ticks can be
+recovered without interrupting the user for stale job posts. Dashboard profile
+controls can set `alert_schedule_mode` to `work_hours`, `all_day`, or `muted`;
+this is stored as a local SQLite runtime override and applied by later monitor
+runs.
+
+Live alert suppression is status-aware: a sent `new` alert suppresses repeated
+`new` delivery for the same card, but a later `changed` status remains eligible
+for alerting when it still passes freshness and handled-card gates.
+
+For future provider-specific LLM optimization, keep semantic extraction prompts
+cache-friendly: stable profile/schema/instructions first, incremental scan
+messages last, and a stable cache key per monitor lane when the selected
+provider supports one. [⚠️ 需确认] Cache retention and pricing are
+provider/model-specific.
+
+For the high-frequency `jobs-fast` lane, keep semantic batches bounded with
+`semantic_max_messages=20` and `semantic_max_tokens=2000`. Larger catch-up or
+exhaustive review should run as a backfill/audit lane so interrupt latency does
+not depend on a noisy channel burst.
+
+When `OPENAI_API_KEY` is unavailable and `DEEPSEEK_API_KEY` is set,
+`report.py` now defaults to `deepseek-v4-flash` at `https://api.deepseek.com`,
+even when MiniMax is also configured. DeepSeek V4 calls set thinking mode to
+disabled for the fast extraction lane and request JSON object output. JSON
+responses include `data.llm`; monitor manifests carry the same `llm` projection
+so cache hit/miss tokens and latency can be reviewed per run.
+
+MiniMax M2.7 can be selected explicitly with `--model MiniMax-M2.7`. When
+`MINIMAX_TOKEN_PLAN_KEY` is present, MiniMax defaults to the China-region
+OpenAI-compatible endpoint `https://api.minimaxi.com/v1`; standard
+`MINIMAX_API_KEY` defaults to `https://api.minimax.io/v1`. `MINIMAX_BASE_URL`
+overrides both defaults.
+MiniMax requests use `reasoning_split=true`, `temperature=0.01`, and
+`max_completion_tokens` because the provider's OpenAI-compatible API separates
+reasoning differently and rejects `temperature=0`.
+
+Local provider/cache evaluation:
+
+```powershell
+python scripts/eval_deepseek_cache.py --sample-size 20 --repeat 3 --format json
+python scripts/eval_deepseek_cache.py --sample-sizes 10,20,30 `
+  --models deepseek-v4-flash,MiniMax-M2.7 --repeat 1 --max-tokens 1000 --format json
+```
+
+The single-run artifact uses `deepseek_cache_eval_v1`; matrix runs use
+`deepseek_cache_eval_matrix_v1` for backward compatibility. Both store provider,
+base URL, max token cap, aggregate usage, latency, selected source refs, source
+counts, rating counts, and sanitized paths only. Workspace-local paths are
+relative; external input paths are reduced to file names, with short hash
+suffixes only when duplicate basenames would collide. They must not copy raw
+Telegram message text or contact handles.
 
 Telegram Bot delivery reads the token from `TGCS_TELEGRAM_BOT_TOKEN`. Use
 `--delivery-mode dry-run` for tests and `--delivery-mode live` only when the
@@ -209,8 +476,9 @@ stdin and returns an auth error instead.
 
 ## Agent Semantic Fallback
 
-When no `OPENAI_API_KEY` or `DEEPSEEK_API_KEY` exists, `report.py --extractor auto`
-does not fail. It writes a local request for the calling agent:
+When no `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, `MINIMAX_API_KEY`, or
+`MINIMAX_TOKEN_PLAN_KEY` exists, `report.py --extractor auto` does not fail. It
+writes a local request for the calling agent:
 
 ```powershell
 python scripts/report.py --input output/scan.jsonl --profile profiles/templates/market-news.md --output output/report.md --extractor agent --write-extraction-request output/extract-request.json --format json

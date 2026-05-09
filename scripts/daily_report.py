@@ -230,6 +230,7 @@ def main(argv: list[str] | None = None) -> int:
                     "report_stats": report_data.get("stats"),
                     "source_summary": report_data.get("source_summary"),
                     "state_summary": report_data.get("state_summary"),
+                    "llm": report_data.get("llm"),
                     "items": report_data.get("items"),
                     "extraction_request_path": report_data.get("request_path"),
                     "items_output_path": report_data.get("items_output_path"),
