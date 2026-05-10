@@ -148,6 +148,7 @@ export function SettingsView({
             library={sourceLibrary}
             setSourceEnabled={setSourceEnabled}
             setSourceTopics={setSourceTopics}
+            sourceStats={sourceStats}
           />
         </div>
       </section>
@@ -355,12 +356,14 @@ function SourceLibraryPanel({
   busy,
   setSourceEnabled,
   setSourceTopics,
+  sourceStats,
 }: {
   library: DeskSourcesResult | null;
   error: string | null;
   busy: boolean;
   setSourceEnabled: (sourceId: string, enabled: boolean) => Promise<void>;
   setSourceTopics: (sourceId: string, topics: string[]) => Promise<void>;
+  sourceStats: SourceStat[];
 }) {
   const sources = library?.sources ?? [];
   const isLoading = !library && !error;
@@ -379,6 +382,7 @@ function SourceLibraryPanel({
   const hasFilters = Boolean(query.trim() || selectedTopic);
   const listVisible = showSourceList || hasFilters;
   const managementOpen = libraryOpen || hasFilters || showSourceList || isLoading || Boolean(error) || !sources.length;
+  const activityLabel = sourceLibraryActivityLabel(sourceStats);
   const countLabel = listVisible
     ? sourceLibraryCountLabel(visibleSources.length, filteredSources.length, hasFilters)
     : `${filteredSources.length} saved; search or manage when needed`;
@@ -403,7 +407,7 @@ function SourceLibraryPanel({
             Saved Sources
           </span>
           <strong>{library?.source_count ?? sources.length}</strong>
-          <small>{sources.length ? "Open to search or manage" : "No saved sources yet"}</small>
+          <small>{sources.length ? activityLabel || "Open to search or manage" : "No saved sources yet"}</small>
         </summary>
         {error && (
           <div className="source-library-error" role="status">
@@ -565,6 +569,22 @@ export function sourceLibraryCountLabel(visibleCount: number, filteredCount: num
     return "No saved sources";
   }
   return visible >= filtered ? `Showing all ${filtered}` : `Showing first ${visible} of ${filtered}`;
+}
+
+export function sourceLibraryActivityLabel(sources: SourceStat[]) {
+  if (!sources.length) {
+    return "";
+  }
+  const latestCards = sources.reduce((sum, source) => sum + Math.max(0, source.latest_card_count ?? 0), 0);
+  const alerts = sources.reduce((sum, source) => sum + Math.max(0, source.alert_count ?? 0), 0);
+  const risk = sources.filter((source) => source.scan_failure || source.scan_incomplete).length;
+  const parts = [
+    latestCards ? `${latestCards} latest card${latestCards === 1 ? "" : "s"}` : "No latest cards",
+    alerts ? `${alerts} alert${alerts === 1 ? "" : "s"}` : "",
+    `${sources.length} tracked`,
+    risk ? `${risk} risk` : "",
+  ].filter(Boolean);
+  return parts.join(" · ");
 }
 
 function SourceLibraryRow({

@@ -4,10 +4,11 @@ import {
   SOURCE_LIBRARY_PAGE_SIZE,
   filterDeskSourcesByQuery,
   paginatedDeskSources,
+  sourceLibraryActivityLabel,
   sourceLibraryCountLabel,
   sourceTopicsEditState,
 } from "./settings";
-import type { DeskSource } from "../domain/types";
+import type { DeskSource, SourceStat } from "../domain/types";
 
 function source(overrides: Partial<DeskSource>): DeskSource {
   return {
@@ -18,6 +19,22 @@ function source(overrides: Partial<DeskSource>): DeskSource {
     topics: ["jobs"],
     priority: "normal",
     scan_window_hours: 24,
+    ...overrides,
+  };
+}
+
+function sourceStat(overrides: Partial<SourceStat>): SourceStat {
+  return {
+    channel: "remote_jobs",
+    card_count: 0,
+    high_count: 0,
+    medium_count: 0,
+    low_count: 0,
+    pending_count: 0,
+    handled_count: 0,
+    false_positive_count: 0,
+    alert_count: 0,
+    high_rate: 0,
     ...overrides,
   };
 }
@@ -88,5 +105,14 @@ describe("Settings source topic editor", () => {
     expect(sourceLibraryCountLabel(4, 4, true)).toBe("4 matching shown");
     expect(sourceLibraryCountLabel(8, 82, true)).toBe("8 of 82 matching shown");
     expect(sourceLibraryCountLabel(0, 0, true)).toBe("No matching sources");
+  });
+
+  it("summarizes saved source yield from existing stats only", () => {
+    expect(sourceLibraryActivityLabel([
+      sourceStat({ latest_card_count: 2, alert_count: 1 }),
+      sourceStat({ channel: "quiet" }),
+      sourceStat({ channel: "risk", scan_incomplete: true }),
+    ])).toBe("2 latest cards · 1 alert · 3 tracked · 1 risk");
+    expect(sourceLibraryActivityLabel([])).toBe("");
   });
 });

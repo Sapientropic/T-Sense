@@ -24,7 +24,7 @@ Current truth for the 2026-05-11 quality loop. Product rules stay in `.frontend-
 
 Cannot claim acceptance readiness yet.
 
-The highest current blockers are interaction/information-architecture problems, not build or test failures. Runs, Settings, mobile Review, Profiles, and Start have been materially reduced. Qwen's post-KIMI semantic blockers and KIMI's mobile Settings type-size P1 were fixed locally in Iteration 15; KIMI's mobile Start first-viewport concern was fixed locally in Iteration 16. A full-surface reviewer gate is still needed before any acceptance claim.
+The highest current blockers are interaction/information-architecture problems, not build or test failures. Runs, Settings, mobile Review, Profiles, and Start have been materially reduced. Qwen's post-KIMI semantic blockers and KIMI's mobile Settings type-size P1 were fixed locally in Iteration 15; KIMI's mobile Start first-viewport concern was fixed locally in Iteration 16. Full-surface KIMI task `8d8822766019` is pending; no acceptance claim until it is triaged.
 
 ## Repair Roadmap
 
@@ -49,7 +49,7 @@ The highest current blockers are interaction/information-architecture problems, 
    - Commit checkpoint when a slice is coherent and verified enough to roll back.
 
 5. Current next slice - reviewer follow-up and remaining app polish:
-   - Run a full-surface reviewer gate after Start / Review / Runs / Settings changes.
+   - Poll and triage full-surface KIMI task `8d8822766019`.
    - Keep reducing first-viewport noise without hiding safety or maintenance controls.
    - Use another independent reviewer because Gemini failed again.
    - The recovered Claude Code plans report is now P0/P1-clean locally; the count-bar P2 was handled in Iteration 15.
@@ -545,3 +545,33 @@ The highest current blockers are interaction/information-architecture problems, 
 - Hook enforcement: manual.
 - Artifact hygiene: screenshot evidence remains timestamped under `output/quality-review/`; no extra docs created.
 - Next: commit checkpoint, then dispatch a full-surface reviewer packet.
+
+## Iteration 17 - Settings Yield Summary And Integrity Corrections
+
+- Target: address Qwen's valid concern that collapsed Saved Sources gave count-only management information, and correct process-integrity wording before stronger claims.
+- Changes:
+  - `dashboard/src/components/settings.tsx`: Saved Sources collapsed summary now uses existing `source_stats` to show source yield, for example `3 latest cards · 68 tracked`.
+  - `dashboard/src/components/settings.test.tsx`: added coverage for the source-yield summary helper.
+  - `output/quality-review/20260511-0522-full-after-start/reviewer-packet.md`: softened viewport claims after Qwen integrity review; the packet now says the measurements need independent reviewer confirmation and does not soften Review/Runs/Profile overflow.
+- Verification:
+  - `npm test -- --run src/components/settings.test.tsx`: 1 file / 6 tests passed.
+  - `npm test -- --run`: 11 files / 83 tests passed.
+  - `npm run build`: passed.
+  - Settings real-browser check: `output/quality-review/20260511-0530-settings-yield-summary/`.
+  - Mobile Settings remains 844px with no horizontal overflow and zero small-target findings.
+- External review:
+  - Qwen integrity task `90e39f84d168` returned conditional pass with three concerns.
+  - Accepted and fixed: reviewer packet claims needed clearer pending-review wording.
+  - Accepted as already documented: Review grew from 898px to 948px because clear labels are more important than cryptic compactness for the target user.
+  - KIMI full-surface task `8d8822766019` is still running and must not be counted yet.
+- Triage:
+  - Accepted: collapsed Saved Sources should expose actual yield facts when the data already exists.
+  - Accepted: do not imply acceptance readiness from viewport metrics before full reviewer confirmation.
+  - Deferred: any deeper source recency wording such as `last scan` until a reliable timestamp exists in the data contract.
+- Task state: local checkpoint ready; full-surface KIMI reviewer pending.
+- `needs_human`: final visual/taste acceptance remains user-owned.
+- Residual risk: Gemini remains rate-limited; full heterogeneous reviewer gate is degraded unless another non-KIMI product reviewer is added or Gemini recovers.
+- Memory closeout: pending.
+- Hook enforcement: manual.
+- Artifact hygiene: reviewer packet remains in the timestamped output evidence folder; current truth remains this log and task state.
+- Next: commit checkpoint, then poll KIMI task `8d8822766019`.
