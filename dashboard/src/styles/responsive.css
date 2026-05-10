@@ -305,6 +305,7 @@
 @media (max-width: 680px) {
   .app-shell {
     width: min(100vw - 20px, 720px);
+    padding-bottom: 18px;
     padding-top: 12px;
   }
 
@@ -628,7 +629,22 @@
 
   .run-health-chart {
     grid-template-columns: 1fr;
-    padding: 10px;
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .run-health-summary strong {
+    font-size: 32px;
+  }
+
+  .run-health-decision {
+    gap: 2px;
+    margin-top: 6px;
+    padding: 7px;
+  }
+
+  .run-health-decision span {
+    display: none;
   }
 
   .run-day-bar {
@@ -651,15 +667,15 @@
   .run-compact-timeline {
     display: grid;
     grid-template-columns: repeat(7, minmax(0, 1fr));
-    gap: 4px;
+    gap: 3px;
     align-items: stretch;
   }
 
   .run-compact-tile {
     justify-items: center;
     gap: 2px;
-    min-height: 39px;
-    padding: 5px 2px;
+    min-height: 34px;
+    padding: 4px 2px;
     text-align: center;
   }
 

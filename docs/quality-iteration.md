@@ -13,11 +13,10 @@ Current truth for the 2026-05-11 quality loop. The full historical log is archiv
 
 ## Current Verdict
 
-Cannot claim user acceptance yet; local evidence is strong enough to keep iterating from reviewer-specific P2/P3 rather than broad layout rescue.
+Cannot claim user acceptance yet; local evidence now supports a strong visual-quality checkpoint.
 
 What is locally verified:
-- Mobile Start, Review, Profiles, and Settings are exactly one 390x844 viewport after the latest fixes.
-- Mobile Runs is still over one viewport at 942px.
+- Mobile Start / Review / Profiles / Runs / Settings are exactly one 390x844 viewport.
 - Desktop Start / Review / Profiles / Runs / Settings are one viewport high.
 - Latest full visual audit has no horizontal overflow and zero small-target findings across Start / Review / Profiles / Runs / Settings.
 
@@ -33,6 +32,7 @@ What blocks a stronger claim:
 - Latest full screenshot/audit set after hiding empty profile drafts: `output/quality-review/20260511-0630-full-after-profiles-noise-cut/`.
 - Latest full screenshot/audit set after removing Runs `none` noise: `output/quality-review/20260511-0645-full-after-runs-none-noise-cut/`.
 - Latest full screenshot/audit set after compacting mobile Review: `output/quality-review/20260511-0700-full-review-density/`.
+- Latest full screenshot/audit set with all mobile pages one-screen: `output/quality-review/20260511-0720-full-all-mobile-one-screen/`.
 - Latest Settings yield summary screenshot/audit: `output/quality-review/20260511-0530-settings-yield-summary/`.
 - Full reviewer packet: `output/quality-review/20260511-0522-full-after-start/reviewer-packet.md`.
 - Current task state: `docs/quality-task-state.md`.
@@ -51,7 +51,8 @@ Latest deterministic checks:
 - `55d1b43` - KIMI full-surface P1 fixes: mobile Runs timeline labels are readable without wrapping, Review titles clamp on mobile, and Settings Repository uses human sync copy.
 - `e8b1d23` - Profiles hides the empty `Preference Drafts = 0` panel and returns mobile Profiles to one viewport.
 - `53af224` - Runs compact timeline no longer repeats `none` on empty days; the no-scan meaning remains in `aria-label` / tooltip.
-- Current slice - Mobile Review triage is a compact filter row and the first card fits in one viewport.
+- `c039f8a` - Mobile Review triage is a compact filter row and the first card fits in one viewport.
+- Current slice - Mobile Runs is compacted to one viewport without reintroducing unreadable timeline labels.
 
 ## Latest Fixes
 
@@ -69,6 +70,7 @@ Latest deterministic checks:
   - Count bars now use a shared visible scale so low-volume and high-volume clusters are visually comparable.
   - Mobile compact timeline dates are 11px and no longer split into unreadable fragments.
   - Empty days in the compact timeline show only the date instead of repeating `none`.
+  - Mobile Runs is now exactly 844px; the repeated explanation under `Fix failed scans` is removed because the attention group already carries the action.
 - Settings:
   - Sources / Alerts / Notes / Yield are top-level tasks.
   - Saved Sources defaults to a collapsed management entry.
@@ -100,12 +102,11 @@ Degraded:
 
 ## Residual Risk
 
-- Mobile Runs remains taller than one viewport even though it is under 950px and has no overflow/small-target findings.
 - Full heterogeneous reviewer gate is still degraded because Gemini was rate-limited and DeepSeek lacked repo access.
 - Source yield summary avoids fabricated timestamps; deeper recency wording needs a real timestamp field.
 
 ## Next Action
 
-1. Commit the mobile Review density checkpoint.
+1. Commit the all-mobile-one-screen checkpoint.
 2. Continue reviewer-driven polish only where evidence shows user-visible noise or interaction friction.
 3. Near 2026-05-11 13:00 +08:00, stop opening new work and produce a concise evidence-backed handoff.
