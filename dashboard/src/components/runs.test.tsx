@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { buildRunHealthDecision } from "./runs";
+import {
+  buildCompactRunTimeline,
+  buildRunEvidenceClusters,
+  buildRunEvidenceGroups,
+  buildRunHealthDecision,
+  buildRunOutcome,
+} from "./runs";
 import type { Run } from "../domain/types";
 
 function run(overrides: Partial<Run>): Run {
@@ -47,5 +53,84 @@ describe("run health decision", () => {
       tone: "info",
       headline: "Review 2 alert candidates",
     });
+  });
+
+  it("labels rows by outcome instead of repeating profile and date", () => {
+    expect(buildRunOutcome(run({ review_card_count: 4, alert_count: 0 }))).toMatchObject({
+      tone: "info",
+      title: "4 review cards",
+    });
+    expect(buildRunOutcome(run({ status: "failed", review_card_count: 4 }))).toMatchObject({
+      tone: "danger",
+      title: "Failed scan",
+    });
+  });
+
+  it("groups recent evidence into attention, review, and clean bands", () => {
+    const groups = buildRunEvidenceGroups([
+      run({ run_id: "run-1", status: "failed" }),
+      run({ run_id: "run-2", review_card_count: 2 }),
+      run({ run_id: "run-3", review_card_count: 0, alert_count: 0 }),
+    ]);
+    expect(groups.map((group) => group.key)).toEqual(["attention", "review", "clean"]);
+    expect(groups[1].detail).toBe("2 cards / 0 alerts");
+  });
+
+  it("clusters repeated same-day run outcomes into one evidence row", () => {
+    const clusters = buildRunEvidenceClusters([
+      run({ run_id: "run-1", review_card_count: 3, started_at: "2026-05-10T12:00:00Z" }),
+      run({ run_id: "run-2", review_card_count: 5, started_at: "2026-05-10T08:00:00Z" }),
+      run({ run_id: "run-3", status: "failed", started_at: "2026-05-10T07:00:00Z" }),
+    ]);
+    expect(clusters).toHaveLength(2);
+    expect(clusters[0]).toMatchObject({ cards: 8, alerts: 0 });
+    expect(clusters[0].runs.map((item) => item.run_id)).toEqual(["run-1", "run-2"]);
+  });
+
+  it("keeps diagnostic titles ahead of aggregate alert volume", () => {
+    const clusters = buildRunEvidenceClusters([
+      run({
+        run_id: "run-1",
+        review_card_count: 3,
+        alert_count: 1,
+        quality: { diagnostic_count: 1, diagnostic_warning_count: 1, top_diagnostic_code: "ocr_disabled_media_present" },
+      }),
+      run({
+        run_id: "run-2",
+        review_card_count: 5,
+        alert_count: 3,
+        quality: { diagnostic_count: 1, diagnostic_warning_count: 1, top_diagnostic_code: "ocr_disabled_media_present" },
+      }),
+    ]);
+    expect(clusters).toHaveLength(1);
+    expect(clusters[0].outcome.title).toBe("OCR media skipped");
+  });
+
+  it("compacts seven mobile day labels into three readable timeline segments", () => {
+    const timeline = buildCompactRunTimeline([
+      { key: "2026-05-04", label: "05-04", runs: 0, complete: 0, failed: 0, cards: 0, alerts: 0 },
+      { key: "2026-05-05", label: "05-05", runs: 1, complete: 1, failed: 0, cards: 0, alerts: 0 },
+      { key: "2026-05-06", label: "05-06", runs: 1, complete: 1, failed: 0, cards: 3, alerts: 1 },
+      { key: "2026-05-07", label: "05-07", runs: 0, complete: 0, failed: 0, cards: 0, alerts: 0 },
+      { key: "2026-05-08", label: "05-08", runs: 1, complete: 0, failed: 1, cards: 0, alerts: 0 },
+      { key: "2026-05-09", label: "05-09", runs: 1, complete: 1, failed: 0, cards: 0, alerts: 0 },
+      { key: "2026-05-10", label: "05-10", runs: 0, complete: 0, failed: 0, cards: 0, alerts: 0 },
+    ]);
+    expect(timeline).toHaveLength(3);
+    expect(timeline.map((item) => item.label)).toEqual(["05-04-05-06", "05-07-05-09", "05-10"]);
+    expect(timeline[1]).toMatchObject({ tone: "danger", value: "1 failed" });
+  });
+
+  it("merges adjacent empty mobile timeline segments", () => {
+    const timeline = buildCompactRunTimeline([
+      { key: "2026-05-04", label: "05-04", runs: 0, complete: 0, failed: 0, cards: 0, alerts: 0 },
+      { key: "2026-05-05", label: "05-05", runs: 0, complete: 0, failed: 0, cards: 0, alerts: 0 },
+      { key: "2026-05-06", label: "05-06", runs: 0, complete: 0, failed: 0, cards: 0, alerts: 0 },
+      { key: "2026-05-07", label: "05-07", runs: 0, complete: 0, failed: 0, cards: 0, alerts: 0 },
+      { key: "2026-05-08", label: "05-08", runs: 0, complete: 0, failed: 0, cards: 0, alerts: 0 },
+      { key: "2026-05-09", label: "05-09", runs: 0, complete: 0, failed: 0, cards: 0, alerts: 0 },
+      { key: "2026-05-10", label: "05-10", runs: 1, complete: 0, failed: 1, cards: 0, alerts: 0 },
+    ]);
+    expect(timeline.map((item) => item.label)).toEqual(["05-04-05-09", "05-10"]);
   });
 });

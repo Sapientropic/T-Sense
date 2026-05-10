@@ -253,3 +253,30 @@ The highest current blockers are interaction/information-architecture problems, 
 - Hook enforcement: manual.
 - Artifact hygiene: screenshot evidence remains timestamped.
 - Next: commit this checkpoint, then rebuild the Runs surface.
+
+## Iteration 8 - Runs Timeline And Evidence De-Duplication
+
+- Target: address KIMI's Runs critique directly: mobile timeline readability and repeated Recent Evidence rows.
+- Changes:
+  - `dashboard/src/components/runs.tsx`: added compact mobile timeline segments, outcome-first run labels, evidence grouping, and same-day same-profile same-outcome clustering.
+  - `dashboard/src/styles/runs.css` and `dashboard/src/styles/responsive.css`: mobile hides the seven-label day strip and uses compact timeline tiles; grouped evidence rows keep desktop density without repeating near-identical rows.
+  - `dashboard/src/components/runs.test.tsx`: covered outcome labels, grouping, clustering, diagnostic-title priority, and compact timeline behavior.
+- Verification:
+  - `npm test -- --run src/components/runs.test.tsx`: 1 file / 9 tests passed.
+  - `npm test -- --run`: 11 files / 81 tests passed.
+  - `npm run build`: passed.
+  - Real-browser screenshots and metrics: `output/quality-review/20260511-0314-runs/`.
+  - Mobile Runs scroll height dropped from 2380 to 1317 in the screenshot audit; desktop Runs is one viewport high again.
+  - Mobile Start / Review / Runs / Settings: no horizontal overflow and zero small-target findings.
+- External review:
+  - Pending Orchestra `assign / poll / show / rate` gate with KIMI, Gemini, and Qwen process-integrity review.
+- Triage:
+  - Accepted: grouping without clustering was insufficient; repeated OCR rows still created noise, so the same slice was tightened before checkpoint.
+  - Accepted: diagnostic labels outrank aggregate alert volume, so `OCR media skipped` remains the row title even when the cluster includes alert candidates.
+- Task state: locally verified; reviewer gate pending.
+- `needs_human`: final visual/taste acceptance remains user-owned.
+- Residual risk: Review single-card dead space, mobile Review filter density, and Settings maze remain outside this slice.
+- Memory closeout: pending.
+- Hook enforcement: manual.
+- Artifact hygiene: screenshots and audit JSON stay in timestamped evidence folders only.
+- Next: prepare reviewer packet, run Orchestra gate, then triage findings before choosing the next slice.

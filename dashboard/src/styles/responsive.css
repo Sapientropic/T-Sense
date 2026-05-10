@@ -505,6 +505,7 @@
 
   .run-health-chart {
     grid-template-columns: 1fr;
+    padding: 10px;
   }
 
   .run-day-bar {
@@ -512,7 +513,7 @@
   }
 
   .run-day-bars {
-    gap: 6px;
+    display: none;
   }
 
   .run-day-bucket {
@@ -522,6 +523,21 @@
   .run-day-bucket small {
     display: block;
     white-space: nowrap;
+  }
+
+  .run-compact-timeline {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+    gap: 6px;
+  }
+
+  .run-evidence-head {
+    display: grid;
+    gap: 4px;
+  }
+
+  .run-evidence-head span {
+    text-align: left;
   }
 
   .command-strip,
