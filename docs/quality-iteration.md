@@ -91,3 +91,26 @@ The dashboard has a strong visual language, but Settings currently fails the ord
 - Hook enforcement: manual.
 - Artifact hygiene: retained screenshot sets under `output/quality-review/` as raw evidence; current truth remains this log.
 - Next: docs slice 1.
+
+## Iteration 2 - README / ROADMAP Single Truth Source
+
+- Target: remove duplicate v0.5 Dashboard rules from public docs while preserving ordinary user entry points.
+- Changes:
+  - `README.md`: collapsed v0.5 monitor detail to a Signal Desk app flow plus a short expert command appendix; removed live-delivery examples from the main path.
+  - `README.zh-CN.md`: same cleanup in Chinese; changed the human flow from `Inbox / Runs` to `Review / Runs`.
+  - `ROADMAP.md`: replaced detailed Dashboard hardening bullets with a pointer to `docs/v0.5-alpha-alert-review-inbox.md`; roadmap now keeps phase direction and exit criteria.
+- Verification:
+  - `rg` check found no remaining `delivery-mode live`, stale `Monitor & Inbox`, `Tokens are never saved`, or duplicated Dashboard hardening phrases in README / ROADMAP surfaces.
+  - `git diff --check`: passed, with only Windows line-ending warnings.
+- External review:
+  - Directly addressed reviewer B P1 findings on README / ROADMAP duplication and live CLI path exposure.
+- Triage:
+  - Accepted: README / ROADMAP should point to v0.5 authority instead of mirroring it.
+  - Covered: token save semantics now say local credential storage and no UI echo / SQLite / manifest / report / docs persistence.
+- Task state: checkpoint ready after docs verification.
+- `needs_human`: none for this slice.
+- Residual risk: README is now less exhaustive; expert users must follow the linked agent contract or v0.5 authority for detail.
+- Memory closeout: pending.
+- Hook enforcement: manual.
+- Artifact hygiene: no new raw artifacts.
+- Next: UX slice 3, Start and Runs decision hierarchy.

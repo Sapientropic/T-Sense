@@ -143,121 +143,48 @@ output, and v0.4 local decision memory at `.tgcs/state`. `setup.*` initializes
 the jobs starter by default; use `tgcs run --no-state` when you need a stateless
 daily-report run.
 
-### v0.5-alpha Monitor & Inbox
+### v0.5-alpha Monitor & Review
 
-The v0.5-alpha monitor keeps the CLI-compatible engine and adds repeated-run
-state, alert events, and a local review inbox. Signal Desk is the primary human
-surface; these commands are the expert/agent fallback:
+The v0.5-alpha monitor keeps the CLI-compatible engine and adds repeated runs,
+alert candidates, and a local review inbox. Signal Desk is the primary human
+surface; the detailed v0.5 product and dashboard contract lives in
+[docs/v0.5-alpha-alert-review-inbox.md](docs/v0.5-alpha-alert-review-inbox.md).
+
+Use Signal Desk for the normal app flow:
+
+- `Start`: guided setup, Telegram login, offline demo, doctor checks, dry-run
+  monitor runs, feedback export, and dry-run schedule preview.
+- `Review`: process high-priority new or changed cards first.
+- `Profiles`: pause or tune scan windows and per-run item limits.
+- `Runs`: open local report artifacts and inspect run health.
+- `Settings`: add sources, manage notification settings, export learning
+  decisions, and check repository updates.
+
+Monitor runs write artifacts under `output/runs/<run_id>/`, update a
+`run_manifest_v1`, and store dashboard state in `.tgcs/tgcs.db`. Telegram Bot
+delivery reads `TGCS_TELEGRAM_BOT_TOKEN` first, then a Windows Credential
+Manager token saved from Signal Desk Settings. Tokens, sessions, and raw
+Telegram messages are not echoed into the UI and are not stored in SQLite,
+manifests, reports, or docs.
+
+<details>
+<summary>Expert / agent monitor commands</summary>
 
 ```bash
-# Write .tgcs/profiles.toml if you want an editable monitor config
 ./tgcs monitor init-config
-
-# For the developer-opportunity lane, initialize directly from channel_lists/jobs.txt
-# Existing .tgcs/sources.json files are kept and merged with the jobs topic tag.
 ./tgcs init --starter jobs
-
-# Show the one current next action for the jobs starter
 ./tgcs quickstart jobs
-
-# Run one profile monitor; dry-run delivery is the safe default
 ./tgcs monitor run --profile-id market-news --delivery-mode dry-run
-
-# Fast developer opportunity alerts: install only after live delivery is intentional
-./tgcs monitor run --profile-id jobs-fast --delivery-mode live
-
-# Import real opportunity channels into the jobs-fast lane
 ./tgcs sources import channel_lists/jobs.txt --topic jobs
-
-# Review or export only one profile lane's sources
-./tgcs sources list --topic jobs
-./tgcs sources export --topic jobs --output output/jobs-sources.txt
-
-# Print a dry-run scheduler command without installing it
 ./tgcs schedule print --profile-id jobs-fast --interval-minutes 15 --delivery-mode dry-run
-
-# Serve the optional localhost dashboard; first launch auto-builds dashboard/dist
 ./tgcs dashboard
-
-# Export reviewed dashboard decisions back into reusable report feedback
 ./tgcs feedback export
 ```
 
-Monitor runs write artifacts under `output/runs/<run_id>/`, update a
-`run_manifest_v1`, and store dashboard state in `.tgcs/tgcs.db`. High-priority
-new or changed items become alert candidates and pending review cards. Telegram
-Bot delivery resolves tokens in this order: `TGCS_TELEGRAM_BOT_TOKEN`, then the
-Windows Credential Manager token saved from Signal Desk Settings. Tokens are
-never stored in SQLite, manifests, reports, or docs.
+Live delivery and live schedules remain intentional human-owned boundaries in
+this alpha. Keep first-use validation on dry-run delivery.
 
-Signal Desk's `Start` tab wraps the safe repo-local setup and dry-run flows as
-guided controls: jobs init, offline demo, doctor, source validation and import,
-Telegram setup/login, monitor dry-run, feedback export, scheduler preview,
-Windows dry-run scheduler on/off controls, and a read-only automation status
-check. If notification setup is missing or muted, the Start summary opens the
-Settings notification editor directly instead of asking the user to copy a
-command.
-`Settings` lets a non-CLI user paste Telegram source handles or `t.me` links,
-preview the import, save them into `.tgcs/sources.json`, review saved sources,
-filter saved sources by topic, page through large source libraries, pause or
-resume individual channels, edit the default Telegram notification chat ID,
-save or clear the local bot token on Windows, mute or enable notifications, and
-run a dry-run notification test.
-`Profiles` lets the same user pause or re-enable a monitor profile, change its
-scan window, and adjust the per-run item limit from the Desk before the next
-run, without editing profile TOML.
-Signal Desk hides copyable commands behind troubleshooting details instead of
-making CLI copy the primary action. The only Desk-created system schedule is
-the confirmed Windows Task Scheduler dry-run task for `jobs-fast`; the Desk
-status check only queries whether that fixed task exists. Live schedules,
-Telegram sessions, and raw Telegram messages remain guarded human-owned
-boundaries. Non-Windows token keychain support is not claimed in this alpha.
-Tokens, sessions, and raw Telegram messages are never echoed into the UI.
-
-The built-in `jobs-fast` monitor keeps developer opportunity alerts separate from the daily audit
-report. It scans a 2-hour catch-up window, but only interrupts for high-priority
-new or changed roles, contracts, freelance gigs, or Mini Apps/TON projects whose source message is within the last 60 minutes. The
-high-frequency path first applies a local keyword prefilter, so runs with no
-opportunity-signal keywords skip the report/LLM stage entirely. The dashboard can switch
-each profile between active/paused monitoring, work-hours alerts, all-day alerts, and muted delivery, tune
-the scan window and per-run item limit, and
-its Yield History and Source Actions panels help review which job channels
-produce fresh messages, which sources produce high-value leads, which sources
-need more observation, and which noisy sources may be prune candidates.
-Import real opportunity sources from Signal Desk `Settings` when working as a
-human. The expert CLI fallback is
-`./tgcs sources import <channel-list> --topic jobs`; both paths add the topic to
-existing matching sources, so `jobs-fast` will keep using a topic-filtered
-registry instead of silently falling back to placeholder sources.
-
-`./tgcs doctor` also checks whether dashboard assets are already built. Missing
-assets are only a warning because `./tgcs dashboard` can build them on first
-launch when Node/npm is available.
-
-Dashboard keep/skip/false-positive decisions can be exported from Settings or
-as note-free `tgcs-feedback-v1` JSONL with `./tgcs feedback export`, then reused
-by the decision-memory path through `--feedback-jsonl output/feedback/review-feedback.jsonl`.
-When the latest run has actionable review cards, the first screen opens directly
-on the queue and triage controls. Otherwise the board keeps the latest-run
-summary compact: one human task label, one action/all-clear/source-fix headline,
-and a scanned -> matched -> cards -> action funnel instead of repeating the full
-report in prose.
-The Runs tab also opens generated reports through a local-only artifact route
-restricted to report Markdown/HTML files under workspace-local `runs/`
-directories. Monitor reports use human-readable names such as
-`developer-opportunity-signal-report-2026-05-09-1225.html`, while the dashboard
-displays the profile report title/category instead of raw absolute paths or the
-high-frequency lane id. When a run has both Markdown and HTML reports, the
-dashboard opens HTML by default for phone-friendly reading; Markdown-only
-reports are rendered through the same local route instead of shown as raw text.
-Dashboard state projects runs down to counts, health, a human task label, and
-one report artifact, and projects profiles down to display labels plus
-alert/source limits; raw scan artifacts, full profile config, registry paths,
-hashes, and error files stay in local manifests for debugging. The Dashboard is
-kept ADHD-friendly: top metrics are compact readouts, repository operations stay
-in Settings instead of every board, Inbox uses a triage distribution bar, and
-Runs use a fixed seven-day health chart plus a capped evidence ledger instead of
-an ever-growing row of run cells or repeated report titles.
+</details>
 
 For the interrupt lane, `jobs-fast` caps semantic extraction at 20 matched
 messages and 2000 output tokens. Keep the daily audit/backfill lane for

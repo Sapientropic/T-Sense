@@ -211,39 +211,13 @@ Already in scope or recently addressed:
 - `setup.sh` and `setup.bat` now call the jobs starter by default and print the
   jobs doctor + dry-run monitor path instead of routing first-time users back to
   placeholder market-news examples.
-- Dashboard first-use and latest-run projections now keep the normal Review
-  screen action-first: when latest actionable cards exist, the queue and triage
-  bar are the summary; when there are no latest-action cards or source-access
-  recovery is needed, the active board can show a compact latest-run signal
-  brief, All Clear state, or severity-ranked top diagnostic. First Useful
-  Report setup copy stays limited to empty/blocked/recovery states, and the
-  14-day validation summary is folded evidence rather than a competing top-level
-  report block.
-- Dashboard Settings now distinguishes exportable keep/skip/false-positive
-  feedback from follow-up notes that become reviewable profile diffs, so local
-  feedback no longer looks like a blind total.
-- Dashboard Settings now uses an action-first visual layout: source actions are
-  the primary decision surface, Yield History now combines an all-source heatmap
-  with compact top-source evidence, zero-value chips are suppressed, and
-  exported files/reports use user-facing labels instead of raw internal paths.
-  The Settings board uses plain user-facing settings language and counts only
-  actionable delivery, feedback, and source-decision work rather than total
-  tracked sources.
-  Dashboard state now projects profiles and runs to display fields and
-  report-only artifacts, keeping raw profile config, absolute paths, scan
-  artifacts, registry paths, hashes, and target ids out of the default UI
-  surface.
-- Inbox review now includes a visual triage distribution bar plus view-only
-  filters for all, high, new/changed, and low/medium cards so high-volume
-  pending queues can be processed without adding risky bulk actions.
-- Runs now use a fixed seven-day health chart for recent completion/failure and
-  card/alert output, plus a capped recent evidence ledger, instead of one visual
-  cell or always-visible row per run, so high-frequency monitoring does not
-  crowd the desktop UI.
-- Dashboard visual hierarchy has been tightened for ADHD-friendly use: repeated
-  lane ids, long report names, repository controls, and explanatory prose are
-  suppressed from the main Review/Runs boards unless they directly support the
-  next action.
+- Signal Desk is now the primary human surface for setup, source import,
+  review, runs, profile tuning, notifications, learning export, and repository
+  checks. Detailed Dashboard / Review / Settings / Runs interaction rules live
+  in [`docs/v0.5-alpha-alert-review-inbox.md`](docs/v0.5-alpha-alert-review-inbox.md).
+- Dashboard state is projected down to human labels, counts, health summaries,
+  and report-only artifacts by default; raw scan artifacts, full profile config,
+  registry paths, hashes, and error files stay in local manifests for debugging.
 - Built-in profile templates cover jobs, airdrops, market/news, research leads,
   and competitor monitoring.
 
@@ -335,27 +309,15 @@ Goal: make the scanner a dependable repeated habit: high-priority new or
 changed items can interrupt the user, while everything else goes into a local
 review dashboard.
 
-Alpha implementation is in active hardening:
+Alpha implementation is in active hardening. The shipped surface includes the
+monitor runner, run manifests, SQLite-backed review state, alert candidates,
+profile patch suggestions, dry-run delivery controls, and the local Signal Desk
+dashboard. Detailed alpha interaction rules and shipped hardening notes live in
+[`docs/v0.5-alpha-alert-review-inbox.md`](docs/v0.5-alpha-alert-review-inbox.md);
+this roadmap keeps only phase direction and exit criteria.
 
-- v0.5-alpha.1 adds `scripts/monitor.py run`, `profile_run_config_v1`,
-  `run_manifest_v1`, SQLite-backed review cards/alert events/profile patch
-  suggestions, private Telegram Bot delivery dry-run/live modes, and an
-  optional Vite React dashboard served from `127.0.0.1`.
-- v0.5-alpha.2 hardening is focused on four shipped workstreams: the Developer
-  Opportunity fast lane (`jobs-fast` prefiltering, alert freshness, bounded
-  semantic batches, provider/cache smoke history), the local review inbox
-  (latest-action focus, triage distribution, feedback export, profile-diff
-  visibility), source/run quality controls (Yield History evidence,
-  source-health risk badges, run diagnostics, local report artifact links), and
-  dashboard/report polish (human labels, placeholder-safe titles, compact
-  first-use recovery, report-only run projections, and less machine-looking
-  visual summaries).
-- The existing v0.4 scan/report JSON contracts remain the agent-facing base.
-  Dashboard state is local `.tgcs/tgcs.db` state, not a raw Telegram archive.
-- A real `jobs-fast` run against imported jobs sources produced high-value
-  cards and a report without requiring raw Telegram text in dashboard state;
-  the current polish priority is now reducing activation friction and making
-  source/report quality visible at first glance.
+The existing v0.4 scan/report JSON contracts remain the agent-facing base.
+Dashboard state is local `.tgcs/tgcs.db` state, not a raw Telegram archive.
 
 Remaining work before calling v0.5 done:
 
@@ -368,9 +330,8 @@ Remaining work before calling v0.5 done:
   path, clearer Telegram source import guidance, and fewer manual rerun steps.
 - Add optional webhook, email, or Telegram Saved Messages adapters only after the
   private Telegram Bot path proves stable in real use.
-- Decide whether source-health trends need history beyond the current latest-run
-  Yield History projection, or whether current promote/prune/watch/observe
-  actions are enough for v0.5.
+- Decide whether source-health trends need deeper history, or whether current
+  source actions are enough for v0.5.
 
 Deferred from v0.5 unless user evidence requires it:
 
