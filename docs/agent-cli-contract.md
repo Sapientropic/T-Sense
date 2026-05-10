@@ -105,7 +105,7 @@ tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run
 tgcs dashboard
 tgcs dashboard --no-build
 tgcs feedback export
-tgcs schedule print --profile-id jobs-fast --interval-minutes 15 --delivery-mode live
+tgcs schedule print --profile-id jobs-fast --interval-minutes 15 --delivery-mode dry-run
 tgcs delivery test telegram-bot --chat-id 123456
 ```
 
@@ -128,9 +128,68 @@ profile remains `market-news`.
 `tgcs sources import --topic <tag>` attaches topic tags to new sources and
 merges them into existing matching sources; use `--topic jobs` before running
 the `jobs-fast` profile against a topic-filtered registry.
-`tgcs dashboard` serves the optional local dashboard and auto-builds the default
+`tgcs dashboard` serves the local Signal Desk dashboard and auto-builds the default
 `dashboard/dist` assets when they are missing. `--no-build` skips this for
-packaged/offline environments or custom static asset handling.
+packaged/offline environments or custom static asset handling. `--open` opens
+Signal Desk in the default browser after the server starts. On Windows,
+`Signal Desk.bat` is the no-command-line launcher for first setup and repeated
+use.
+Signal Desk `Start` is the primary human surface. It exposes a small dashboard
+action API for human-friendly wrappers around fixed local commands:
+
+- `GET /api/desk/actions` returns `desk_actions_v1`.
+- `POST /api/desk/actions/<action_id>/run` returns `desk_action_result_v1`.
+- Action IDs are server-side allowlist entries; request bodies are not command
+  input.
+- Execute-mode actions call `sys.executable scripts/tgcs.py ...` with static
+  argv.
+- The Windows-only dry-run scheduler actions require an explicit confirmation
+  body, then call fixed `schtasks.exe` argv for the local `jobs-fast` dry-run
+  task. They do not accept browser-supplied command strings, paths, or argv.
+- `GET /api/desk/scheduler-status` returns `desk_scheduler_status_v1` by
+  querying only that fixed dry-run task. It never returns raw `schtasks` output,
+  local launcher paths, or command strings.
+- Dedicated Telegram setup/login endpoints handle the normal human login path
+  from the browser: `/api/desk/telegram-status`,
+  `/api/desk/telegram-credentials`, `/api/desk/telegram-login/send-code`,
+  `/api/desk/telegram-login/verify-code`, and
+  `/api/desk/telegram-login/cancel`.
+- Dedicated notification target endpoints handle the default Telegram Bot target
+  without accepting command strings or tokens:
+  `/api/desk/delivery-targets/telegram-bot-default` saves `chat_id/enabled`,
+  and `/api/desk/delivery-targets/telegram-bot-default/test` always performs a
+  dry run.
+- Dashboard clients may route the live-delivery setup action to the Settings
+  notification editor instead of running a `needs_human` action. That shortcut
+  must not expose the action's CLI reference as a primary or problem-state UI.
+  Start may summarize notification readiness from sanitized delivery targets as
+  `Enabled`, `Muted`, or `Needs chat ID`, but should not render the chat id in
+  that summary. Missing or muted notification states may show an app CTA that
+  opens the Settings notification editor; it must not execute live delivery.
+- Dedicated source import endpoints let Signal Desk accept pasted Telegram
+  handles or `t.me` links without accepting file paths, commands, or argv:
+  `/api/desk/sources/preview` validates and previews the default
+  `.tgcs/sources.json` import, while `/api/desk/sources/import` writes to that
+  fixed registry only.
+- Dedicated saved-source endpoints let Signal Desk display and pause/resume the
+  fixed workspace registry without accepting browser-supplied paths or commands:
+  `GET /api/desk/sources` returns `desk_sources_v1`, and
+  `POST /api/desk/sources/<source_id>/enabled` accepts only an `enabled`
+  boolean and returns the refreshed source list.
+- `POST /api/desk/sources/<source_id>/topics` accepts only a `topics` string
+  list, validates short topic tags, writes the fixed `.tgcs/sources.json`
+  registry, and returns the refreshed source list. It does not accept registry
+  paths, commands, argv, tokens, or raw Telegram message data.
+- Live delivery, live scheduler installation, non-Windows scheduler
+  installation, token/session access, and raw Telegram message operations return
+  guarded preview / `needs_human` or remain outside the action API.
+- Sensitive Start endpoints require loopback access; non-loopback clients are
+  blocked from running Desk actions, Telegram setup/login, notification target
+  mutations, source import mutations, saved-source mutations, or dry-run
+  scheduler changes.
+
+Desk action result payloads are display summaries, not a second agent contract.
+Agents should keep using CLI JSON output for automation.
 Dashboard artifact links use `/artifacts/<url-encoded-path>` and are restricted
 to report Markdown/HTML files under a workspace-local `runs/` directory.
 Legacy `report.html` / `report.md` names and user-facing names such as
@@ -146,6 +205,9 @@ as rendered HTML by the local artifact route.
 Scheduler or cron command for review and never installs or starts a system task.
 When `--interval-minutes` is omitted, it previews the selected profile's
 `work_interval_minutes`; an explicit `--interval-minutes` remains the override.
+Signal Desk may install or remove only its fixed Windows dry-run scheduler task
+after a browser confirmation; this is intentionally narrower than the expert
+CLI schedule preview.
 Agents should call the lower-level commands when they need stable JSON output:
 
 ```powershell
@@ -443,9 +505,14 @@ rating == "high" and decision_state.status in ["new", "changed"]
 Profiles may add `alert_max_age_minutes`. `jobs-fast` defaults to a 2-hour scan
 window and `alert_max_age_minutes=60`, so missed scheduler ticks can be
 recovered without interrupting the user for stale job posts. Dashboard profile
-controls can set `alert_schedule_mode` to `work_hours`, `all_day`, or `muted`;
-this is stored as a local SQLite runtime override and applied by later monitor
-runs.
+controls can pause or re-enable a profile, set `alert_schedule_mode` to
+`work_hours`, `all_day`, or `muted`, and tune `scan_window_hours` plus
+`semantic_max_messages`; these are stored as local SQLite runtime overrides and
+applied by later monitor runs. The profile enabled endpoint only accepts
+`{ "enabled": true | false }` from localhost. The profile runtime settings
+endpoint only accepts `scan_window_hours` in `1..168` and
+`semantic_max_messages` in `1..500` from localhost. These endpoints are Desk
+setting surfaces, not arbitrary command or agent JSON execution contracts.
 
 Live alert suppression is status-aware: a sent `new` alert suppresses repeated
 `new` delivery for the same card, but a later `changed` status remains eligible
@@ -509,13 +576,32 @@ Telegram message text or contact handles.
 Telegram Bot delivery reads the token from `TGCS_TELEGRAM_BOT_TOKEN`. Use
 `--delivery-mode dry-run` for tests and `--delivery-mode live` only when the
 target chat id and environment token are intentionally configured.
+Signal Desk `Settings` can save the default target `chat_id` and enabled/muted
+state to local SQLite for non-CLI users. Monitor runs merge this Desk override
+before writing targets back to SQLite, so a saved Desk target is not overwritten
+by `.tgcs/profiles.toml` defaults. Signal Desk never accepts or persists a bot
+token; live token setup remains a guarded human-owned boundary in this slice.
+
+Signal Desk `Settings` can also import sources from pasted text. The browser
+body is limited to `sources` and `topic`; source registry paths are fixed to
+`.tgcs/sources.json`, preview is no-write, and import reuses
+`source_registry.py` normalization, topic merge, duplicate handling, and
+validation. The same Settings view can list saved sources, filter them by topic,
+toggle only their `enabled` state, and retag sources through the topic-only
+endpoint. It validates source ids server-side, writes only the fixed
+workspace-local registry, and never accepts command strings, argv, registry
+paths, raw Telegram text, or tokens from the browser.
 
 ## Human Login Boundary
 
-Interactive Telegram login is a human-owned bootstrap step. Agents should not
-try to answer phone/code/password prompts. When a JSON command returns
+Telegram login is human-owned. The normal path is Signal Desk `Start`, where the
+user saves Telegram app credentials locally, requests a login code, enters the
+code, and completes optional 2FA in the browser. Agents should not try to answer
+phone/code/password prompts. When a JSON command returns
 `telegram_session_unauthorized` or `telegram_login_interactive_required`, route
-the task back to the human with:
+the task back to the human with Signal Desk `Start`.
+
+Terminal fallback:
 
 ```powershell
 tgcs login

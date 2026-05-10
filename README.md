@@ -62,7 +62,21 @@ https://github.com/user-attachments/assets/d3a6fd44-7140-4843-86af-b32325abae33
 - Telegram account (phone number)
 - Telegram API credentials (`api_id` + `api_hash` from [my.telegram.org/apps](https://my.telegram.org/apps))
 
-### Install
+### Install And Open Signal Desk
+
+On Windows, open the app-style local dashboard first:
+
+1. Download or clone this repository.
+2. Double-click `Signal Desk.bat`.
+3. Keep the launcher window open while you use Signal Desk in the browser.
+
+The first launch creates the local Python environment, initializes the jobs
+starter workspace, builds dashboard assets when Node/npm is available, and opens
+Signal Desk on `127.0.0.1`. After that, use the `Start` tab for setup, Telegram
+login, demo runs, source checks, first dry-run scans, feedback export, and
+schedule previews.
+
+If you prefer the terminal install path:
 
 ```bash
 git clone https://github.com/Sapientropic/tg-channel-scanner.git
@@ -72,6 +86,31 @@ chmod +x setup.sh tgcs scripts/scan.sh
 ```
 
 ### Configure & Run
+
+Use Signal Desk's `Start` tab for the normal human flow:
+
+- Try the offline demo without Telegram or LLM credentials.
+- Save your Telegram app ID/hash locally.
+- Connect Telegram with phone, code, and 2FA prompts in the browser.
+- Initialize or repair the jobs workspace.
+- Paste Telegram channels in `Settings` -> `Add Sources`, preview duplicates,
+  and import them into the local source registry.
+- Review saved channels in `Settings` -> `Saved Sources`, and pause or resume a
+  source, filter by topic, or edit its topic tags without opening
+  `.tgcs/sources.json`.
+- Run the first `jobs-fast` dry-run scan.
+- Use `Start` -> `Notifications` or open `Settings` directly to set the
+  Telegram notification chat ID, save it muted or live, and run a dry-run
+  notification test without sending a message. `Start` shows whether
+  notifications are `Enabled`, `Muted`, or still missing a chat ID; missing or
+  muted states include an app button that opens the notification settings.
+- Export feedback, preview the dry-run cadence, and turn Windows dry-run
+  automation on or off without typing a command.
+
+Commands remain available for experts and agents:
+
+<details>
+<summary>Expert CLI fallback</summary>
 
 ```bash
 # 0. Try the offline demo first (no Telegram login or LLM key required)
@@ -94,7 +133,10 @@ nano ~/.config/tgcli/config.toml
 ./tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run
 ```
 
-On Windows, use `tgcs.bat` instead of `./tgcs`. The human facade defaults to
+</details>
+
+On Windows, use `tgcs.bat` instead of `./tgcs` when using the expert CLI. The
+human facade defaults to
 the local `.tgcs/config.toml` profile, `.tgcs/sources.json`, `output/`, HTML
 output, and v0.4 local decision memory at `.tgcs/state`. `setup.*` initializes
 the jobs starter by default; use `tgcs run --no-state` when you need a stateless
@@ -102,8 +144,9 @@ daily-report run.
 
 ### v0.5-alpha Monitor & Inbox
 
-The v0.5-alpha monitor keeps the CLI-first workflow and adds repeated-run
-state, alert events, and a local review inbox:
+The v0.5-alpha monitor keeps the CLI-compatible engine and adds repeated-run
+state, alert events, and a local review inbox. Signal Desk is the primary human
+surface; these commands are the expert/agent fallback:
 
 ```bash
 # Write .tgcs/profiles.toml if you want an editable monitor config
@@ -119,7 +162,7 @@ state, alert events, and a local review inbox:
 # Run one profile monitor; dry-run delivery is the safe default
 ./tgcs monitor run --profile-id market-news --delivery-mode dry-run
 
-# Fast developer opportunity alerts: run this from Task Scheduler/cron every 15 minutes
+# Fast developer opportunity alerts: install only after live delivery is intentional
 ./tgcs monitor run --profile-id jobs-fast --delivery-mode live
 
 # Import real opportunity channels into the jobs-fast lane
@@ -129,8 +172,8 @@ state, alert events, and a local review inbox:
 ./tgcs sources list --topic jobs
 ./tgcs sources export --topic jobs --output output/jobs-sources.txt
 
-# Print a scheduler command without installing it
-./tgcs schedule print --profile-id jobs-fast --interval-minutes 15 --delivery-mode live
+# Print a dry-run scheduler command without installing it
+./tgcs schedule print --profile-id jobs-fast --interval-minutes 15 --delivery-mode dry-run
 
 # Serve the optional localhost dashboard; first launch auto-builds dashboard/dist
 ./tgcs dashboard
@@ -145,19 +188,44 @@ new or changed items become alert candidates and pending review cards. Telegram
 Bot delivery reads `TGCS_TELEGRAM_BOT_TOKEN` from the environment and never
 stores the token in SQLite, manifests, or docs.
 
+Signal Desk's `Start` tab wraps the safe repo-local setup and dry-run flows as
+guided controls: jobs init, offline demo, doctor, source validation and import,
+Telegram setup/login, monitor dry-run, feedback export, scheduler preview,
+Windows dry-run scheduler on/off controls, and a read-only automation status
+check. If notification setup is missing or muted, the Start summary opens the
+Settings notification editor directly instead of asking the user to copy a
+command.
+`Settings` lets a non-CLI user paste Telegram source handles or `t.me` links,
+preview the import, save them into `.tgcs/sources.json`, review saved sources,
+filter saved sources by topic, pause or resume individual channels, edit the
+default Telegram notification chat ID, mute or enable notifications, and run a
+dry-run notification test.
+`Profiles` lets the same user pause or re-enable a monitor profile, change its
+scan window, and adjust the per-run item limit from the Desk before the next
+run, without editing profile TOML.
+Signal Desk hides copyable commands behind troubleshooting details instead of
+making CLI copy the primary action. The only Desk-created system schedule is
+the confirmed Windows Task Scheduler dry-run task for `jobs-fast`; the Desk
+status check only queries whether that fixed task exists. Live delivery
+schedules, bot tokens, sessions, and raw Telegram messages remain
+guarded human-owned boundaries. Tokens, sessions, and raw Telegram messages are
+never echoed into the UI.
+
 The built-in `jobs-fast` monitor keeps developer opportunity alerts separate from the daily audit
 report. It scans a 2-hour catch-up window, but only interrupts for high-priority
 new or changed roles, contracts, freelance gigs, or Mini Apps/TON projects whose source message is within the last 60 minutes. The
 high-frequency path first applies a local keyword prefilter, so runs with no
 opportunity-signal keywords skip the report/LLM stage entirely. The dashboard can switch
-each profile between work-hours alerts, all-day alerts, and muted delivery, and
+each profile between active/paused monitoring, work-hours alerts, all-day alerts, and muted delivery, tune
+the scan window and per-run item limit, and
 its Yield History and Source Actions panels help review which job channels
 produce fresh messages, which sources produce high-value leads, which sources
 need more observation, and which noisy sources may be prune candidates.
-Import real opportunity sources with `./tgcs sources import <channel-list> --topic jobs`;
-the import also adds the topic to existing matching sources, so `jobs-fast`
-will keep using a topic-filtered registry instead of silently falling back to
-placeholder sources.
+Import real opportunity sources from Signal Desk `Settings` when working as a
+human. The expert CLI fallback is
+`./tgcs sources import <channel-list> --topic jobs`; both paths add the topic to
+existing matching sources, so `jobs-fast` will keep using a topic-filtered
+registry instead of silently falling back to placeholder sources.
 
 `./tgcs doctor` also checks whether dashboard assets are already built. Missing
 assets are only a warning because `./tgcs dashboard` can build them on first
@@ -480,8 +548,10 @@ Or export directly from Telegram: `python scripts/export_folder.py --folder "Job
 
 ### Source Registry
 
-For agent-maintained source operations, prefer a private source registry over
-editing channel lists in place. `.tgcs/` is gitignored by default, so real
+For human source setup, prefer Signal Desk `Settings`: paste channels in `Add
+Sources`, then use `Saved Sources` to filter by topic, pause, resume, or retag
+individual channels. For agent-maintained source operations, prefer a private
+source registry over editing channel lists in place. `.tgcs/` is gitignored by default, so real
 source notes and priorities stay local:
 
 ```bash
@@ -561,7 +631,7 @@ See [docs/tos-risk-analysis.md](docs/tos-risk-analysis.md) for details.
 | `.sh` scripts `Permission denied` | `chmod +x setup.sh scripts/scan.sh` |
 | my.telegram.org shows ERROR | [docs/getting-api-credentials.md](docs/getting-api-credentials.md) |
 | 0 messages collected | Check `output/*.errors.log` |
-| Session expired | Run `./tgcs login` again, or delete `~/.config/tgcli/session` and rerun |
+| Session expired | Open Signal Desk `Start` and reconnect Telegram; expert fallback: run `./tgcs login` again, or delete `~/.config/tgcli/session` and rerun |
 
 ## License
 
