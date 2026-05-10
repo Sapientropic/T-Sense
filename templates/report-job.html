@@ -16,8 +16,10 @@
   <header class="report-header">
     <div class="report-topline">
       <div class="brand-lockup">
-        <img class="header-icon" src="data:image/png;base64,{icon_b64}" alt="">
-        <span>TG Channel Scanner</span>
+        <a href="https://github.com/Sapientropic/tg-channel-scanner" target="_blank" rel="noreferrer" aria-label="Open TGCS Git repository">
+          <img class="header-icon" src="data:image/png;base64,{icon_b64}" alt="">
+          <span>TG Channel Scanner</span>
+        </a>
       </div>
       <button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch theme" aria-pressed="false">
         <span class="theme-icon" aria-hidden="true"></span>
@@ -47,16 +49,16 @@
     <div class="stat stat-deduped"><span class="stat-icon dedupe" aria-hidden="true"></span><div class="stat-copy"><div class="stat-value total">{stat_deduped}</div><div class="stat-label">Deduped</div></div><div class="stat-meter" aria-hidden="true"></div></div>
   </section>
 
+{diagnostics_panel}
+
+{sections}
+
   <section class="profile-section">
     <div class="profile-title">Candidate Profile</div>
     <div class="profile-grid">
 {profile_items}
     </div>
   </section>
-
-{diagnostics_panel}
-
-{sections}
 
 {feedback_panel}
 

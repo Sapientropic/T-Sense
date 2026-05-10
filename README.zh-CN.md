@@ -146,7 +146,7 @@ manifest 或文档。
 内置 `jobs-fast` monitor 把开发者机会快讯和 24 小时审计日报拆开：默认扫描 2 小时
 容错窗口，但只对最近 60 分钟内的高优先级 new / changed 职位、合同、接活或 Mini Apps/TON 项目打断提醒。高频路径
 会先做本地关键词预过滤；没有机会信号关键词时直接跳过 report/LLM 阶段。Dashboard
-可以把每个 profile 切到白天提醒、全天提醒或静音，并在 Source Yield 和 Source
+可以把每个 profile 切到白天提醒、全天提醒或静音，并在 Yield History 和 Source
 Actions 面板里复盘哪些招聘频道有新鲜消息、真正产出高价值线索、需要继续观察，或可考虑清理。
 真实机会频道建议用 `./tgcs sources import <channel-list> --topic jobs` 导入；
 导入时也会给已存在的同名来源补上 topic，避免 `jobs-fast` 的 topic 过滤继续落到
@@ -158,10 +158,17 @@ Actions 面板里复盘哪些招聘频道有新鲜消息、真正产出高价值
 Dashboard 里的 keep / skip / false-positive 决策可以在 Settings 里导出，也可以通过
 `./tgcs feedback export` 导出为不含私密 note 的 `tgcs-feedback-v1` JSONL，再通过
 `--feedback-jsonl output/dashboard-feedback.jsonl` 复用到本地决策记忆链路。
-首屏还会显示 First Useful Report 检查流和最新运行信号摘要：Top 3 脱敏机会卡片、
-All Clear 状态，或运行失败时的首要来源/报告诊断。
-Runs 页也可以通过本地 artifact 路由打开生成报告；服务端只允许读取
-workspace 内 `runs/` 目录下的 `report.html` 或 `report.md`。
+最新运行已有待处理卡片时，首屏直接进入队列和 triage 控件；没有最新行动卡片时，
+board 才显示紧凑运行摘要：一个人工可读的 profile 任务名、一个 action / all-clear /
+source-fix 判断，以及 scanned -> matched -> cards -> action 漏斗，不再在 Inbox
+上方重复完整报告或 Top 3 卡片文案。Runs 页也可以通过本地 artifact 路由打开生成报告；
+服务端只允许读取 workspace 内 `runs/` 目录下的报告 HTML / Markdown 文件。
+Dashboard 状态会把 runs 投影成计数、健康状态、任务标签和一个报告 artifact，也会把
+profiles 投影成展示标签与告警/来源限制；raw scan artifact、完整 profile config、
+registry 路径、hash 和 error 文件仍留在本地 manifest 里调试。Dashboard 的默认信息架构
+也按 ADHD 复用场景收紧：顶部指标是紧凑 readout，Repository 操作只在 Settings，
+Inbox 用 triage 分布条，Runs 用固定七日健康图和有限 evidence ledger，而不是无限增长的
+run cell 或重复报告标题。
 
 高频打断链路默认把语义抽取限制在 20 条命中消息和 2000 输出 tokens 内；更大的
 时间窗口和穷尽式复盘继续交给 24 小时审计 / backfill 链路。

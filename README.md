@@ -151,7 +151,7 @@ new or changed roles, contracts, freelance gigs, or Mini Apps/TON projects whose
 high-frequency path first applies a local keyword prefilter, so runs with no
 opportunity-signal keywords skip the report/LLM stage entirely. The dashboard can switch
 each profile between work-hours alerts, all-day alerts, and muted delivery, and
-its Source Yield and Source Actions panels help review which job channels
+its Yield History and Source Actions panels help review which job channels
 produce fresh messages, which sources produce high-value leads, which sources
 need more observation, and which noisy sources may be prune candidates.
 Import real opportunity sources with `./tgcs sources import <channel-list> --topic jobs`;
@@ -165,13 +165,28 @@ launch when Node/npm is available.
 
 Dashboard keep/skip/false-positive decisions can be exported from Settings or
 as note-free `tgcs-feedback-v1` JSONL with `./tgcs feedback export`, then reused
-by the decision-memory path through `--feedback-jsonl output/dashboard-feedback.jsonl`.
-The first screen also shows a First Useful Report checklist and latest-run
-signal brief: Top 3 sanitized opportunity cards, All Clear state, or the top
-source/report diagnostic when the run failed.
+by the decision-memory path through `--feedback-jsonl output/feedback/review-feedback.jsonl`.
+When the latest run has actionable review cards, the first screen opens directly
+on the queue and triage controls. Otherwise the board keeps the latest-run
+summary compact: one human task label, one action/all-clear/source-fix headline,
+and a scanned -> matched -> cards -> action funnel instead of repeating the full
+report in prose.
 The Runs tab also opens generated reports through a local-only artifact route
-restricted to `report.html` or `report.md` under workspace-local `runs/`
-directories.
+restricted to report Markdown/HTML files under workspace-local `runs/`
+directories. Monitor reports use human-readable names such as
+`developer-opportunity-signal-report-2026-05-09-1225.html`, while the dashboard
+displays the profile report title/category instead of raw absolute paths or the
+high-frequency lane id. When a run has both Markdown and HTML reports, the
+dashboard opens HTML by default for phone-friendly reading; Markdown-only
+reports are rendered through the same local route instead of shown as raw text.
+Dashboard state projects runs down to counts, health, a human task label, and
+one report artifact, and projects profiles down to display labels plus
+alert/source limits; raw scan artifacts, full profile config, registry paths,
+hashes, and error files stay in local manifests for debugging. The Dashboard is
+kept ADHD-friendly: top metrics are compact readouts, repository operations stay
+in Settings instead of every board, Inbox uses a triage distribution bar, and
+Runs use a fixed seven-day health chart plus a capped evidence ledger instead of
+an ever-growing row of run cells or repeated report titles.
 
 For the interrupt lane, `jobs-fast` caps semantic extraction at 20 matched
 messages and 2000 output tokens. Keep the daily audit/backfill lane for
@@ -240,7 +255,7 @@ python scripts/monitor.py run --profile-id market-news \
   --delivery-mode dry-run --format json
 
 python scripts/monitor.py feedback-export \
-  --db .tgcs/tgcs.db --output output/dashboard-feedback.jsonl --format json
+  --db .tgcs/tgcs.db --output output/feedback/review-feedback.jsonl --format json
 ```
 
 If no LLM provider key exists, `report.py --extractor auto` returns

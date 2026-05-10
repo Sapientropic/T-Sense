@@ -138,6 +138,7 @@ def render_markdown(diagnostics: list[dict]) -> str:
 def render_html(diagnostics: list[dict]) -> str:
     if not diagnostics:
         return ""
+    has_blocker = any(str(item.get("severity", "info")) in {"failure", "warning"} for item in diagnostics)
     rows = []
     for item in diagnostics:
         severity = html.escape(str(item.get("severity", "info")), quote=True)
@@ -151,10 +152,18 @@ def render_html(diagnostics: list[dict]) -> str:
             f'<span class="diagnostic-next">Next: {next_step}</span>'
             "</li>"
         )
+    body = '<ul class="diagnostic-list">' + "".join(rows) + "</ul>"
+    if has_blocker:
+        return (
+            '<section class="diagnostics-panel" aria-label="Report diagnostics">'
+            '<h2 class="diagnostics-title">Diagnostics</h2>'
+            + body
+            + "</section>"
+        )
     return (
-        '<section class="diagnostics-panel" aria-label="Report diagnostics">'
-        '<h2 class="diagnostics-title">Diagnostics</h2>'
-        '<ul class="diagnostic-list">'
-        + "".join(rows)
-        + "</ul></section>"
+        '<details class="diagnostics-panel compact" aria-label="Report diagnostics">'
+        '<summary><span class="diagnostics-title">Diagnostics</span>'
+        f'<span class="diagnostics-count">Info {len(diagnostics)}</span></summary>'
+        + body
+        + "</details>"
     )

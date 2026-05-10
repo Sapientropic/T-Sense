@@ -112,6 +112,54 @@ def load_meta(input_path: Path, explicit_meta: str | None = None) -> dict | None
         return json.load(handle)
 
 
+def extraction_prompt_meta(meta: dict | None) -> dict:
+    if not isinstance(meta, dict):
+        return {}
+    # The full scan sidecar contains per-source health rows, timestamps, and
+    # local output paths for diagnostics. Putting that blob before Telegram
+    # messages makes DeepSeek prompt caching brittle and wastes tokens; the LLM
+    # extraction step only needs a small run summary.
+    stable_keys = (
+        "scan_date",
+        "scan_window",
+        "channel_count",
+        "total_messages_collected",
+        "failure_count",
+        "incomplete_count",
+        "ocr_enabled",
+        "ocr_count",
+    )
+    summary: dict[str, Any] = {}
+    for key in stable_keys:
+        value = meta.get(key)
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            summary[key] = value
+    return summary
+
+
+def extraction_prompt_messages(messages: Iterable[dict]) -> list[dict]:
+    prompt_keys = (
+        "channel",
+        "id",
+        "date",
+        "text",
+        "origin_channel",
+        "origin_url",
+        "origin_message_ref",
+    )
+    prompt_messages: list[dict] = []
+    for message in messages:
+        if not isinstance(message, dict):
+            continue
+        item: dict[str, Any] = {}
+        for key in prompt_keys:
+            value = message.get(key)
+            if value not in (None, "", [], {}):
+                item[key] = value
+        prompt_messages.append(item)
+    return prompt_messages
+
+
 def normalize_key(value: object) -> str:
     text = str(value or "").casefold()
     text = re.sub(r"[^\w]+", " ", text, flags=re.UNICODE)
@@ -1111,6 +1159,7 @@ def build_extraction_prompts(
     profile_config: ProfileConfig | None = None,
 ) -> tuple[str, str]:
     selected = sort_messages_newest_first(messages)[:max_messages]
+    prompt_messages = extraction_prompt_messages(selected)
 
     # Build system prompt: custom or default job-mode
     if profile_config and profile_config.prompts.system_prompt:
@@ -1187,13 +1236,13 @@ Contact extraction rules (CRITICAL):
 === CANDIDATE PROFILE ===
 {profile.strip()}
 """
-    meta_text = json.dumps(meta or {}, ensure_ascii=False)
+    meta_text = json.dumps(extraction_prompt_meta(meta), ensure_ascii=False)
     user_prompt = f"""=== SCAN METADATA ===
 {meta_text}
 
 === UNTRUSTED TELEGRAM MESSAGES ({len(selected)} of {len(messages)}) ===
 ```json
-{json.dumps(selected, ensure_ascii=False)}
+{json.dumps(prompt_messages, ensure_ascii=False)}
 ```
 """
     return system_prompt, user_prompt
@@ -1386,7 +1435,7 @@ def build_agent_extraction_request(
         max_messages,
         profile_config,
     )
-    selected = sort_messages_newest_first(messages)[:max_messages]
+    selected = extraction_prompt_messages(sort_messages_newest_first(messages)[:max_messages])
     return {
         "schema_version": AGENT_EXTRACTION_REQUEST_SCHEMA_VERSION,
         "created_at": datetime.now(UTC).isoformat(),

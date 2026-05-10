@@ -11,6 +11,7 @@ from __future__ import annotations
 import difflib
 import hashlib
 import json
+import re
 import sqlite3
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -18,6 +19,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from scripts.item_display import display_item_title, is_placeholder_value
+from scripts.profile_schema import parse_profile_config
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -288,10 +290,52 @@ def _profile_from_row(row: sqlite3.Row) -> dict[str, Any]:
     return {
         "profile_id": row["profile_id"],
         "path": row["path"],
+        "display_path": display_profile_path(str(row["path"] or "")),
         "enabled": bool(row["enabled"]),
         "config": parse_json(row["config_json"], {}),
         "updated_at": row["updated_at"],
     }
+
+
+def dashboard_profile_projection(profile: dict[str, Any], *, report_title: str = "") -> dict[str, Any]:
+    config = profile.get("config") if isinstance(profile.get("config"), dict) else {}
+    profile_path = str(profile.get("path") or "")
+    source_topics = config.get("source_topics")
+    if not isinstance(source_topics, list):
+        source_topics = []
+    delivery_targets = config.get("delivery_targets")
+    if not isinstance(delivery_targets, list):
+        delivery_targets = []
+    alert_schedule_mode = config.get("alert_schedule_mode")
+    return {
+        "schema_version": "dashboard_profile_v1",
+        "profile_id": profile["profile_id"],
+        "display_name": profile_display_label(str(profile["profile_id"]), profile_path=profile_path, report_title=report_title),
+        "report_display_name": report_title or f"{profile_display_label(str(profile['profile_id']), profile_path=profile_path)} Report",
+        "display_path": profile.get("display_path") or display_profile_path(profile_path),
+        "enabled": bool(profile.get("enabled")),
+        "alert_schedule_mode": alert_schedule_mode if isinstance(alert_schedule_mode, str) else "work_hours",
+        "source_topics": [str(topic) for topic in source_topics if str(topic).strip()],
+        "scan_window_hours": non_negative_int(config.get("scan_window_hours")),
+        "semantic_max_messages": non_negative_int(config.get("semantic_max_messages")),
+        "delivery_target_count": len(delivery_targets),
+        "updated_at": profile.get("updated_at"),
+    }
+
+
+def display_profile_path(profile_path: str) -> str:
+    """Return a stable UI label without exposing machine-specific absolute paths."""
+    parts = [part for part in re.split(r"[\\/]+", profile_path) if part]
+    lowered = [part.lower() for part in parts]
+    if "profiles" in lowered:
+        index = len(lowered) - 1 - lowered[::-1].index("profiles")
+        tail = parts[index + 1 :]
+        if tail and tail[0].lower() == "templates":
+            tail = tail[1:]
+        if tail:
+            return "Profiles/" + "/".join(tail)
+    name = Path(profile_path).name if profile_path else ""
+    return f"Profiles/{name}" if name else "Profile path unavailable"
 
 
 def update_profile_alert_mode(conn: sqlite3.Connection, *, profile_id: str, mode: str) -> dict[str, Any]:
@@ -504,12 +548,25 @@ def _card_from_row(row: sqlite3.Row) -> dict[str, Any]:
         "status": row["status"],
         "first_run_id": row["first_run_id"],
         "last_run_id": row["last_run_id"],
-        "report_path": row["report_path"],
+        "report_path": preferred_report_path(str(row["report_path"] or "")),
         "dashboard_url": row["dashboard_url"],
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
         "handled_at": row["handled_at"],
     }
+
+
+def preferred_report_path(report_path: str) -> str:
+    if not report_path:
+        return ""
+    path = Path(report_path)
+    if path.suffix.lower() != ".md":
+        return report_path
+    html_path = path.with_suffix(".html")
+    html_path_for_exists = html_path if html_path.is_absolute() else PROJECT_ROOT / html_path
+    if not html_path_for_exists.exists():
+        return report_path
+    return str(html_path).replace("\\", "/")
 
 
 def _within_freshness_window(item: dict[str, Any], max_age_minutes: int | None, now: datetime) -> bool:
@@ -713,6 +770,111 @@ def export_feedback_entries(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     return entries
 
 
+def feedback_next_action(exportable_count: int, follow_up_count: int, patch_counts: dict[str, int]) -> dict[str, str]:
+    pending_diffs = patch_counts.get("pending", 0)
+    applied_diffs = patch_counts.get("applied", 0)
+    if pending_diffs:
+        return {
+            "label": "Review profile diffs",
+            "detail": "Pending follow-up diffs are waiting in Profiles before the next tuning pass.",
+            "target": "profiles",
+        }
+    if exportable_count:
+        return {
+            "label": "Export feedback file",
+            "detail": "Export these choices so future reports learn.",
+            "command": "tgcs feedback export",
+        }
+    if follow_up_count and applied_diffs:
+        return {
+            "label": "Run with tuned profile",
+            "detail": "Applied profile diffs are in place; run the profile again and watch false positives.",
+            "command": "tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run",
+        }
+    return {
+        "label": "Collect feedback",
+        "detail": "Mark keep, skip, false positive, or draft a profile diff after reviewing cards.",
+        "target": "inbox",
+    }
+
+
+def recent_feedback_impacts(conn: sqlite3.Connection, *, limit: int = 6) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        """
+        SELECT
+            f.event_id,
+            f.created_at,
+            f.profile_id,
+            f.action,
+            c.title,
+            c.rating,
+            c.decision_status,
+            c.item_json,
+            p.patch_id,
+            p.status AS patch_status
+        FROM feedback_events f
+        LEFT JOIN review_cards c ON c.card_id = f.card_id
+        LEFT JOIN profile_patch_suggestions p ON p.card_id = f.card_id AND f.action = 'follow_up'
+        ORDER BY f.created_at DESC, f.event_id DESC
+        LIMIT ?
+        """,
+        (limit,),
+    ).fetchall()
+    impacts: list[dict[str, Any]] = []
+    for row in rows:
+        item = parse_json(row["item_json"], {})
+        title = display_item_title(item if isinstance(item, dict) else {}, fallback=row["title"] or "", max_len=120)
+        decision_state = item.get("decision_state") if isinstance(item, dict) and isinstance(item.get("decision_state"), dict) else {}
+        action = str(row["action"] or "unknown")
+        impact = {
+            "created_at": row["created_at"],
+            "profile_id": row["profile_id"],
+            "action": action,
+            "item_title": title,
+            "rating": row["rating"] or (item.get("rating") if isinstance(item, dict) else "") or "unknown",
+            "decision_status": row["decision_status"] or decision_state.get("status") or "unknown",
+        }
+        if action in {"keep", "skip", "false_positive"}:
+            impact.update(
+                {
+                    "impact_type": "decision_memory_export",
+                    "impact_status": "ready",
+                    "impact_label": "Ready for export",
+                    "impact_detail": "After export, future reports learn from this choice.",
+                }
+            )
+        elif action == "follow_up":
+            patch_status = str(row["patch_status"] or "missing")
+            impact.update(
+                {
+                    "impact_type": "profile_diff",
+                    "impact_status": patch_status,
+                    "impact_label": {
+                        "pending": "Profile diff pending",
+                        "applied": "Profile diff applied",
+                        "reverted": "Profile diff reverted",
+                    }.get(patch_status, "Profile diff missing"),
+                    "impact_detail": {
+                        "pending": "Review and apply or leave the generated profile diff in Profiles.",
+                        "applied": "This feedback has already changed the local profile.",
+                        "reverted": "This feedback changed the profile and was later reverted.",
+                    }.get(patch_status, "Regenerate the follow-up diff if this feedback still matters."),
+                    "patch_id": row["patch_id"] or "",
+                }
+            )
+        else:
+            impact.update(
+                {
+                    "impact_type": "unknown",
+                    "impact_status": "unknown",
+                    "impact_label": "Unknown feedback",
+                    "impact_detail": "This feedback action is not part of the current dashboard learning loop.",
+                }
+            )
+        impacts.append(impact)
+    return impacts
+
+
 def feedback_summary(conn: sqlite3.Connection) -> dict[str, Any]:
     rows = conn.execute(
         """
@@ -722,6 +884,20 @@ def feedback_summary(conn: sqlite3.Connection) -> dict[str, Any]:
         WHERE f.action IN ('keep', 'skip', 'false_positive')
         """
     ).fetchall()
+    follow_up_count = int(
+        conn.execute(
+            "SELECT COUNT(*) FROM feedback_events WHERE action = 'follow_up'",
+        ).fetchone()[0]
+        or 0
+    )
+    patch_rows = conn.execute(
+        """
+        SELECT status, COUNT(*) AS count
+        FROM profile_patch_suggestions
+        GROUP BY status
+        """
+    ).fetchall()
+    patch_counts = {str(row["status"] or "unknown"): int(row["count"] or 0) for row in patch_rows}
     by_action: dict[str, int] = {}
     by_rating: dict[str, int] = {}
     by_decision_status: dict[str, int] = {}
@@ -732,9 +908,21 @@ def feedback_summary(conn: sqlite3.Connection) -> dict[str, Any]:
         by_action[action] = by_action.get(action, 0) + 1
         by_rating[rating] = by_rating.get(rating, 0) + 1
         by_decision_status[decision_status] = by_decision_status.get(decision_status, 0) + 1
+    exportable_count = sum(by_action.values())
     return {
         "schema_version": "dashboard_feedback_summary_v1",
-        "exportable_count": sum(by_action.values()),
+        "exportable_count": exportable_count,
+        "non_exportable_follow_up_count": follow_up_count,
+        "profile_diff_count": sum(patch_counts.values()),
+        "pending_profile_diff_count": patch_counts.get("pending", 0),
+        "applied_profile_diff_count": patch_counts.get("applied", 0),
+        "reverted_profile_diff_count": patch_counts.get("reverted", 0),
+        "next_action": feedback_next_action(exportable_count, follow_up_count, patch_counts),
+        "recent_impacts": recent_feedback_impacts(conn),
+        "export_scope_note": (
+            "keep/skip/false_positive export to decision memory; "
+            "follow_up becomes profile diffs for review."
+        ),
         "by_action": by_action,
         "by_rating": by_rating,
         "by_decision_status": by_decision_status,
@@ -747,6 +935,8 @@ def validation_summary(
     days: int = 14,
     now: datetime | None = None,
 ) -> dict[str, Any]:
+    default_profile_id = "jobs-fast"
+    default_profile_label = title_case_label(default_profile_id)
     current = now or datetime.now(UTC)
     if current.tzinfo is None:
         current = current.replace(tzinfo=UTC)
@@ -774,8 +964,8 @@ def validation_summary(
     if runs_count == 0:
         next_action = {
             "label": "Start validation",
-            "detail": "Run jobs-fast once in dry-run mode to begin the local validation window.",
-            "command": "tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run",
+            "detail": f"Run {default_profile_label} once in dry-run mode to begin the local validation window.",
+            "command": f"tgcs monitor run --profile-id {default_profile_id} --delivery-mode dry-run",
         }
     elif action_count == 0:
         next_action = {
@@ -798,8 +988,8 @@ def validation_summary(
     else:
         next_action = {
             "label": "Keep validation cadence",
-            "detail": "Keep running jobs-fast and record concrete outcomes for kept opportunities.",
-            "command": "tgcs schedule print --profile-id jobs-fast --interval-minutes 15",
+            "detail": f"Keep running {default_profile_label} and record concrete outcomes for kept opportunities.",
+            "command": f"tgcs schedule print --profile-id {default_profile_id} --interval-minutes 15",
         }
     return {
         "schema_version": "dashboard_validation_summary_v1",
@@ -811,6 +1001,7 @@ def validation_summary(
         "pending_count": pending_count,
         "action_count": action_count,
         "by_action": by_action,
+        "triage_rate": (action_count / len(recent_cards)) if recent_cards else 0,
         "keep_rate": (by_action.get("keep", 0) / action_count) if action_count else 0,
         "false_positive_rate": (by_action.get("false_positive", 0) / action_count) if action_count else 0,
         "next_action": next_action,
@@ -1002,9 +1193,20 @@ def revert_profile_patch(conn: sqlite3.Connection, *, patch_id: str, profile_pat
 
 
 def dashboard_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
-    profiles = [
+    internal_profiles = [
         _profile_from_row(row)
         for row in conn.execute("SELECT * FROM profiles ORDER BY profile_id").fetchall()
+    ]
+    profile_report_titles = {
+        str(profile.get("profile_id") or ""): report_title_from_profile_path(str(profile.get("path") or ""))
+        for profile in internal_profiles
+    }
+    profiles = [
+        dashboard_profile_projection(
+            profile,
+            report_title=profile_report_titles.get(str(profile.get("profile_id") or ""), ""),
+        )
+        for profile in internal_profiles
     ]
     inbox = [
         _card_from_row(row)
@@ -1013,19 +1215,13 @@ def dashboard_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
             (PENDING_STATUS,),
         ).fetchall()
     ]
-    runs = [
+    internal_runs = [
         run_from_row(row)
         for row in conn.execute("SELECT * FROM runs ORDER BY started_at DESC LIMIT 100").fetchall()
     ]
+    runs = [dashboard_run_projection(run, profile_report_titles=profile_report_titles) for run in internal_runs]
     delivery_targets = [
-        {
-            "schema_version": DELIVERY_TARGET_SCHEMA_VERSION,
-            "target_id": row["target_id"],
-            "type": row["target_type"],
-            "enabled": bool(row["enabled"]),
-            "config": parse_json(row["config_json"], {}),
-            "updated_at": row["updated_at"],
-        }
+        delivery_target_from_row(row)
         for row in conn.execute("SELECT * FROM delivery_targets ORDER BY target_id").fetchall()
     ]
     patches = [
@@ -1033,13 +1229,19 @@ def dashboard_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
             "schema_version": PROFILE_PATCH_SCHEMA_VERSION,
             "patch_id": row["patch_id"],
             "profile_id": row["profile_id"],
-            "profile_path": row["profile_path"] or "",
+            "profile_display_path": display_profile_path(str(row["profile_path"] or "")),
             "card_id": row["card_id"],
             "card_title": patch_card_title(row),
             "note": row["note"],
             "status": row["status"],
             "diff_text": row["diff_text"],
             "base_profile_hash": row["base_profile_hash"] or "",
+            "base_profile_short_hash": str(row["base_profile_hash"] or "")[:12],
+            "apply_readiness": profile_patch_apply_readiness(
+                status=str(row["status"] or ""),
+                profile_path=str(row["profile_path"] or ""),
+                base_profile_hash=str(row["base_profile_hash"] or ""),
+            ),
             "created_at": row["created_at"],
             "applied_at": row["applied_at"],
         }
@@ -1054,8 +1256,12 @@ def dashboard_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
             """
         ).fetchall()
     ]
-    source_stats = source_value_stats(conn, runs=runs)
-    setup_status = dashboard_setup_status(profiles=profiles, runs=runs, delivery_targets=delivery_targets)
+    source_stats = source_value_stats(conn, runs=internal_runs)
+    setup_status = dashboard_setup_status(
+        profiles=internal_profiles,
+        runs=internal_runs,
+        delivery_targets=delivery_targets,
+    )
     return {
         "schema_version": "dashboard_state_v1",
         "profiles": profiles,
@@ -1068,7 +1274,11 @@ def dashboard_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         "feedback_summary": feedback_summary(conn),
         "validation_summary": validation_summary(conn),
         "setup_status": setup_status,
-        "opportunity_summary": opportunity_summary(conn, runs),
+        "opportunity_summary": opportunity_summary(
+            conn,
+            internal_runs,
+            profile_report_titles=profile_report_titles,
+        ),
     }
 
 
@@ -1085,10 +1295,250 @@ def run_from_row(row: sqlite3.Row) -> dict[str, Any]:
     }
 
 
+def dashboard_run_projection(
+    run: dict[str, Any],
+    *,
+    profile_report_titles: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    manifest = run.get("manifest") if isinstance(run.get("manifest"), dict) else {}
+    profile_id = str(run.get("profile_id") or manifest.get("profile_id") or "")
+    return {
+        "run_id": run["run_id"],
+        "profile_id": run["profile_id"],
+        "display_name": profile_display_label(
+            profile_id,
+            report_title=(profile_report_titles or {}).get(profile_id, ""),
+        ),
+        "status": run["status"],
+        "started_at": run["started_at"],
+        "completed_at": run["completed_at"],
+        "review_card_count": non_negative_int(manifest.get("review_card_count")),
+        "alert_count": non_negative_int(manifest.get("alert_count")),
+        "report_artifact": dashboard_report_artifact(
+            manifest.get("artifacts"),
+            profile_id=profile_id,
+            profile_path=str(manifest.get("profile_path") or ""),
+            profile_report_title=(profile_report_titles or {}).get(profile_id, ""),
+        ),
+        "quality": run.get("quality") if isinstance(run.get("quality"), dict) else {},
+    }
+
+
+def dashboard_report_artifact(
+    artifacts: object,
+    *,
+    profile_id: str = "",
+    profile_path: str = "",
+    profile_report_title: str = "",
+) -> dict[str, str] | None:
+    if not isinstance(artifacts, list):
+        return None
+    report_candidates = [
+        item
+        for item in artifacts
+        if isinstance(item, dict) and item.get("path") and item.get("type") in {"report_html", "report_markdown"}
+    ]
+    report_candidates.sort(key=report_artifact_priority)
+    report = report_candidates[0] if report_candidates else None
+    if not report:
+        return None
+    path = str(report.get("path") or "")
+    artifact_type = str(report.get("type") or "")
+    profile_report_title = profile_report_title or report_title_from_profile_path(profile_path)
+    display_name = report_artifact_display_name(
+        report,
+        path=path,
+        profile_id=profile_id,
+        profile_report_title=profile_report_title,
+    )
+    return {
+        "type": artifact_type,
+        "path": path,
+        "category": str(report.get("category") or "reports"),
+        "format": str(report.get("format") or artifact_format_from_path(path)),
+        "display_name": display_name,
+        "display_path": report_artifact_display_path(report, path=path, display_name=display_name),
+    }
+
+
+def report_artifact_priority(report: dict[str, Any]) -> int:
+    # Dashboard links should favor the phone-friendly rendered report. Markdown
+    # remains available as a durable source artifact, but it should not be the
+    # default click target when an HTML sibling exists in the same run.
+    if report.get("type") == "report_html":
+        return 0
+    if report.get("type") == "report_markdown":
+        return 1
+    return 2
+
+
+def report_artifact_display_name(
+    report: dict[str, Any],
+    *,
+    path: str,
+    profile_id: str,
+    profile_report_title: str = "",
+) -> str:
+    explicit = str(report.get("display_name") or "").strip()
+    if explicit:
+        legacy_lane_title = f"{title_case_label(profile_id)} Signal Report" if profile_id else ""
+        if profile_report_title and explicit == legacy_lane_title:
+            return profile_report_title
+        return explicit
+    if profile_report_title:
+        return profile_report_title
+    stem = Path(path).stem.strip()
+    stem = re.sub(r"[-_ ]?20\d{2}[-_]\d{2}[-_]\d{2}[-_]\d{4,6}$", "", stem)
+    stem = re.sub(r"[-_ ]?\d{8}T\d{4,6}Z?$", "", stem)
+    if stem and stem.lower() != "report":
+        return title_case_label(stem)
+    profile_label = title_case_label(profile_id)
+    return f"{profile_label} Signal Report" if profile_label else "Signal Report"
+
+
+def report_artifact_display_path(report: dict[str, Any], *, path: str, display_name: str) -> str:
+    explicit = str(report.get("display_path") or "").strip()
+    if explicit:
+        return explicit
+    file_name = Path(path).name
+    if file_name.lower() in {"report.html", "report.md"} and display_name.strip():
+        suffix = Path(file_name).suffix or Path(path).suffix
+        human_name = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', " ", display_name).strip()
+        human_name = re.sub(r"\s+", " ", human_name)
+        if human_name:
+            return f"Reports/{human_name}{suffix}"
+    return f"Reports/{file_name}"
+
+
+def report_title_from_profile_path(profile_path: str) -> str:
+    if not profile_path:
+        return ""
+    path = Path(profile_path)
+    if not path.is_absolute():
+        path = PROJECT_ROOT / path
+    try:
+        profile_text = path.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    if not re.search(r"^##\s+Report Labels\b", profile_text, flags=re.MULTILINE):
+        return ""
+    title = parse_profile_config(profile_text).labels.report_title.strip()
+    return title
+
+
+def profile_display_label(profile_id: str, *, profile_path: str = "", report_title: str = "") -> str:
+    title = report_title or report_title_from_profile_path(profile_path)
+    if title:
+        return compact_report_title(title)
+    return title_case_label(profile_id)
+
+
+def compact_report_title(title: str) -> str:
+    text = re.sub(r"\s+", " ", title).strip()
+    for suffix in (
+        "Signal Report",
+        "Signal Brief",
+        "Scan Report",
+        "Report",
+        "Brief",
+    ):
+        if text.casefold().endswith(suffix.casefold()):
+            text = text[: -len(suffix)].strip()
+            break
+    return text or title.strip()
+
+
+def artifact_format_from_path(path: str) -> str:
+    suffix = Path(path).suffix.lower()
+    if suffix == ".html":
+        return "HTML"
+    if suffix == ".md":
+        return "Markdown"
+    return suffix.lstrip(".").upper() or "Artifact"
+
+
+def delivery_target_from_row(row: sqlite3.Row) -> dict[str, Any]:
+    target_type = str(row["target_type"] or "")
+    enabled = bool(row["enabled"])
+    config = parse_json(row["config_json"], {})
+    if not isinstance(config, dict):
+        config = {}
+    display_name = delivery_target_display_name(target_type, str(row["target_id"] or ""))
+    return {
+        "schema_version": DELIVERY_TARGET_SCHEMA_VERSION,
+        "target_id": row["target_id"],
+        "type": target_type,
+        "enabled": enabled,
+        "config": config,
+        "display_name": display_name,
+        "status_label": "Live" if enabled else "Muted",
+        "detail": delivery_target_detail(target_type=target_type, enabled=enabled, config=config),
+        "updated_at": row["updated_at"],
+    }
+
+
+def delivery_target_display_name(target_type: str, target_id: str) -> str:
+    normalized = target_type.lower().strip()
+    if normalized == "telegram_bot":
+        return "Telegram Bot"
+    return title_case_label(normalized or target_id)
+
+
+def delivery_target_detail(*, target_type: str, enabled: bool, config: dict[str, Any]) -> str:
+    normalized = target_type.lower().strip()
+    has_chat = bool(str(config.get("chat_id") or "").strip())
+    if normalized == "telegram_bot":
+        if has_chat and enabled:
+            return "Chat connected; live delivery is on."
+        if has_chat:
+            return "Chat connected; delivery is muted."
+        return "Live target not connected."
+    return "Delivery target is active." if enabled else "Delivery target is muted."
+
+
 def patch_card_title(row: sqlite3.Row) -> str:
     item = parse_json(row["card_item_json"], {}) if "card_item_json" in row.keys() else {}
     fallback = str(row["card_title"] or "Review card") if "card_title" in row.keys() else "Review card"
     return display_item_title(item if isinstance(item, dict) else {}, fallback=fallback)
+
+
+def profile_patch_apply_readiness(
+    *,
+    status: str,
+    profile_path: str,
+    base_profile_hash: str,
+) -> dict[str, str]:
+    if status != "pending":
+        return {
+            "status": status or "unknown",
+            "label": "Not pending",
+            "detail": "This diff is not waiting for apply.",
+        }
+    if not base_profile_hash:
+        return {
+            "status": "unknown",
+            "label": "Needs check",
+            "detail": "No base profile hash was recorded for this diff.",
+        }
+    path = Path(profile_path)
+    if not path.exists():
+        return {
+            "status": "blocked",
+            "label": "Profile missing",
+            "detail": "The profile file could not be found, so this diff cannot be applied safely.",
+        }
+    current_hash = sha256_text(path.read_text(encoding="utf-8"))
+    if current_hash != base_profile_hash:
+        return {
+            "status": "blocked",
+            "label": "Profile changed",
+            "detail": "The profile file changed since this diff was suggested; review the file before applying.",
+        }
+    return {
+        "status": "ready",
+        "label": "Safe to apply",
+        "detail": "The profile still matches the base hash captured when this diff was suggested.",
+    }
 
 
 def run_quality_summary(manifest: dict[str, Any]) -> dict[str, Any]:
@@ -1120,20 +1570,41 @@ def run_quality_summary(manifest: dict[str, Any]) -> dict[str, Any]:
         "diagnostic_failure_count": diagnostic_counts["failure"],
         "diagnostic_warning_count": diagnostic_counts["warning"],
         "diagnostic_info_count": diagnostic_counts["info"],
-        "top_diagnostic_code": next(
-            (str(item.get("code") or "") for item in diagnostics if isinstance(item, dict)),
-            "",
-        ),
+        "top_diagnostic_code": top_diagnostic_code(diagnostics),
     }
 
 
-def opportunity_summary(conn: sqlite3.Connection, runs: list[dict[str, Any]]) -> dict[str, Any]:
+def top_diagnostic_code(diagnostics: list[Any]) -> str:
+    # The dashboard uses this code to choose recovery flow; prefer severity
+    # over manifest order so source failures cannot be hidden by earlier warnings.
+    severity_rank = {"failure": 0, "warning": 1, "info": 2}
+    ranked: list[tuple[int, int, str]] = []
+    for index, item in enumerate(diagnostics):
+        if not isinstance(item, dict):
+            continue
+        code = str(item.get("code") or "")
+        if not code:
+            continue
+        severity = str(item.get("severity") or "info").lower()
+        ranked.append((severity_rank.get(severity, severity_rank["info"]), index, code))
+    if not ranked:
+        return ""
+    return min(ranked)[2]
+
+
+def opportunity_summary(
+    conn: sqlite3.Connection,
+    runs: list[dict[str, Any]],
+    *,
+    profile_report_titles: dict[str, str] | None = None,
+) -> dict[str, Any]:
     if not runs:
         return {
             "schema_version": "dashboard_opportunity_summary_v1",
             "status": "no_runs",
             "run_id": "",
             "profile_id": "",
+            "display_name": "",
             "scanned_count": 0,
             "matched_count": 0,
             "review_card_count": 0,
@@ -1150,6 +1621,7 @@ def opportunity_summary(conn: sqlite3.Connection, runs: list[dict[str, Any]]) ->
 
     latest = runs[0]
     manifest = latest.get("manifest") if isinstance(latest.get("manifest"), dict) else {}
+    profile_id = str(latest.get("profile_id") or manifest.get("profile_id") or "")
     prefilter = manifest.get("prefilter") if isinstance(manifest.get("prefilter"), dict) else {}
     quality = latest.get("quality") if isinstance(latest.get("quality"), dict) else {}
     rows = conn.execute(
@@ -1188,7 +1660,11 @@ def opportunity_summary(conn: sqlite3.Connection, runs: list[dict[str, Any]]) ->
         "schema_version": "dashboard_opportunity_summary_v1",
         "status": status,
         "run_id": latest.get("run_id") or "",
-        "profile_id": latest.get("profile_id") or "",
+        "profile_id": profile_id,
+        "display_name": profile_display_label(
+            profile_id,
+            report_title=(profile_report_titles or {}).get(profile_id, ""),
+        ),
         "scanned_count": scanned_count,
         "matched_count": matched_count,
         "review_card_count": int(manifest.get("review_card_count") or len(cards)),
@@ -1303,7 +1779,7 @@ def dashboard_setup_status(
         next_step = "Enable a profile in .tgcs/profiles.toml"
         stage = "needs_enabled_profile"
     elif not runs:
-        next_step = f"tgcs monitor run --profile-id {preferred['profile_id']}"
+        next_step = f"tgcs monitor run --profile-id {preferred['profile_id']} --delivery-mode dry-run"
         stage = "needs_first_run"
     elif latest_source_attention:
         profile = profile_for_run(active_profiles, runs[0])
@@ -1535,6 +2011,8 @@ def source_value_stats(conn: sqlite3.Connection, runs: list[dict[str, Any]] | No
     return sorted(
         stats.values(),
         key=lambda item: (
+            -int(bool(item.get("scan_failure"))),
+            -int(bool(item.get("scan_incomplete"))),
             -int(item["high_count"] or 0),
             -float(item["high_rate"] or 0),
             -int(item["card_count"] or 0),
@@ -1547,6 +2025,7 @@ def source_value_stats(conn: sqlite3.Connection, runs: list[dict[str, Any]] | No
 def empty_source_stat(channel: str) -> dict[str, Any]:
     return {
         "channel": channel,
+        "display_name": display_channel_name(channel),
         "card_count": 0,
         "high_count": 0,
         "medium_count": 0,
@@ -1646,8 +2125,78 @@ def non_negative_int(value: object) -> int:
     return max(parsed, 0)
 
 
+def display_channel_name(value: str) -> str:
+    cleaned = value.strip().lstrip("@")
+    if not cleaned:
+        return "Unknown Source"
+    return title_case_label(cleaned)
+
+
+def title_case_label(value: str) -> str:
+    token_overrides = {
+        "ai": "AI",
+        "api": "API",
+        "css": "CSS",
+        "eu": "EU",
+        "golang": "Go",
+        "html": "HTML",
+        "hr": "HR",
+        "it": "IT",
+        "js": "JS",
+        "javascript": "JavaScript",
+        "nodejs": "Node.js",
+        "pm": "PM",
+        "qa": "QA",
+        "react": "React",
+        "remoute": "Remote",
+        "rus": "RU",
+        "ts": "TS",
+        "typescript": "TypeScript",
+        "ui": "UI",
+        "us": "US",
+        "ux": "UX",
+        "webdevelopment": "Web Development",
+    }
+    spaced = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", value)
+    return " ".join(
+        token_overrides.get(part.lower(), part[:1].upper() + part[1:])
+        for part in spaced.replace("_", " ").replace("-", " ").split()
+        if part
+    )
+
+
 def source_value_insights(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     return source_value_insights_from_stats(source_value_stats(conn))
+
+
+def source_insight(
+    *,
+    kind: str,
+    channel: str,
+    label: str,
+    reason: str,
+    priority: int,
+    stats: dict[str, Any],
+    confidence: str,
+    next_action_label: str,
+    next_action_detail: str,
+    next_action_command: str = "",
+) -> dict[str, Any]:
+    return {
+        "kind": kind,
+        "channel": channel,
+        "display_name": display_channel_name(channel),
+        "label": label,
+        "reason": reason,
+        "priority": priority,
+        "confidence": confidence,
+        "next_action": {
+            "label": next_action_label,
+            "detail": next_action_detail,
+            "command": next_action_command,
+        },
+        "stats": stats,
+    }
 
 
 def source_value_insights_from_stats(stats: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1664,73 +2213,93 @@ def source_value_insights_from_stats(stats: list[dict[str, Any]]) -> list[dict[s
         latest_card_count = int(item.get("latest_card_count") or 0)
         if item.get("scan_failure"):
             insights.append(
-                {
-                    "kind": "watch",
-                    "channel": channel,
-                    "label": "Access",
-                    "reason": "Latest scan failed; check membership, handle, or Telegram session before judging value.",
-                    "priority": 80,
-                    "stats": item,
-                }
+                source_insight(
+                    kind="watch",
+                    channel=channel,
+                    label="Access",
+                    reason="Latest scan failed; check membership, handle, or Telegram session before judging value.",
+                    priority=80,
+                    stats=item,
+                    confidence="high",
+                    next_action_label="Fix access",
+                    next_action_detail="Verify the source handle, membership, and Telegram session before pruning it.",
+                    next_action_command="tgcs doctor --profile jobs",
+                )
             )
             continue
         if high_count >= 2:
             insights.append(
-                {
-                    "kind": "promote",
-                    "channel": channel,
-                    "label": "Promote",
-                    "reason": f"{high_count} high signals across {card_count} cards.",
-                    "priority": 90 + high_count + alert_count,
-                    "stats": item,
-                }
+                source_insight(
+                    kind="promote",
+                    channel=channel,
+                    label="Promote",
+                    reason=f"{high_count} high signals across {card_count} cards.",
+                    priority=90 + high_count + alert_count,
+                    stats=item,
+                    confidence="high" if high_count >= 3 else "medium",
+                    next_action_label="Keep source",
+                    next_action_detail="Keep this source in the active lane and look for similar channels before expanding cadence.",
+                )
             )
             continue
         if high_count == 1:
             insights.append(
-                {
-                    "kind": "observe",
-                    "channel": channel,
-                    "label": "Observe",
-                    "reason": "1 high signal so far; keep observing before promote.",
-                    "priority": 60 + alert_count,
-                    "stats": item,
-                }
+                source_insight(
+                    kind="observe",
+                    channel=channel,
+                    label="Observe",
+                    reason="1 high signal so far; keep observing before promote.",
+                    priority=60 + alert_count,
+                    stats=item,
+                    confidence="low",
+                    next_action_label="Collect more runs",
+                    next_action_detail="Keep the source for a few more runs; one high signal is not enough to promote cadence.",
+                )
             )
             continue
         if false_positive_count >= 2 and high_count == 0:
             insights.append(
-                {
-                    "kind": "prune",
-                    "channel": channel,
-                    "label": "Prune",
-                    "reason": f"{false_positive_count} false positives and no high signals.",
-                    "priority": 70 + false_positive_count,
-                    "stats": item,
-                }
+                source_insight(
+                    kind="prune",
+                    channel=channel,
+                    label="Prune",
+                    reason=f"{false_positive_count} false positives and no high signals.",
+                    priority=70 + false_positive_count,
+                    stats=item,
+                    confidence="medium",
+                    next_action_label="Review source",
+                    next_action_detail="Check whether this channel should be removed or whether the profile needs a narrower reject rule.",
+                    next_action_command="tgcs sources list --topic jobs",
+                )
             )
             continue
         if kept_count >= 5 and latest_card_count == 0 and high_count == 0:
             insights.append(
-                {
-                    "kind": "watch",
-                    "channel": channel,
-                    "label": "Watch",
-                    "reason": f"{kept_count} fresh messages in the latest scan, but no review cards.",
-                    "priority": 45 + min(kept_count, 20),
-                    "stats": item,
-                }
+                source_insight(
+                    kind="watch",
+                    channel=channel,
+                    label="Watch",
+                    reason=f"{kept_count} fresh messages in the latest scan, but no review cards.",
+                    priority=45 + min(kept_count, 20),
+                    stats=item,
+                    confidence="medium",
+                    next_action_label="Tune profile",
+                    next_action_detail="Inspect whether prefilter keywords or profile rules are excluding useful posts before pruning.",
+                )
             )
             continue
         if card_count >= 2 and high_rate < 0.5 and medium_count > 0:
             insights.append(
-                {
-                    "kind": "watch",
-                    "channel": channel,
-                    "label": "Watch",
-                    "reason": f"{medium_count} medium signals, but high-rate is {round(high_rate * 100)}%.",
-                    "priority": 50 + medium_count,
-                    "stats": item,
-                }
+                source_insight(
+                    kind="watch",
+                    channel=channel,
+                    label="Watch",
+                    reason=f"{medium_count} medium signals, but high-rate is {round(high_rate * 100)}%.",
+                    priority=50 + medium_count,
+                    stats=item,
+                    confidence="medium",
+                    next_action_label="Review fit",
+                    next_action_detail="Check a few medium cards before deciding whether this source deserves profile tuning.",
+                )
             )
     return sorted(insights, key=lambda item: (-int(item["priority"]), str(item["channel"])))[:12]

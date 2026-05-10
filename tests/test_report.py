@@ -186,6 +186,42 @@ class ReportTests(unittest.TestCase):
         self.assertIn("Correct original text", html)
         self.assertNotIn("Wrong same-id text", html)
 
+    def test_html_diagnostics_collapses_info_only_items(self):
+        report = load_report_module(self)
+
+        html = report.report_diagnostics.render_html(
+            [
+                {
+                    "code": "ocr_disabled_media_present",
+                    "severity": "info",
+                    "message": "Media text skipped.",
+                    "next_step": "Enable OCR only if media matters.",
+                }
+            ]
+        )
+
+        self.assertIn("<details", html)
+        self.assertIn("diagnostics-panel compact", html)
+        self.assertIn("Info 1", html)
+
+    def test_html_diagnostics_keeps_warning_items_expanded(self):
+        report = load_report_module(self)
+
+        html = report.report_diagnostics.render_html(
+            [
+                {
+                    "code": "scan_incomplete",
+                    "severity": "warning",
+                    "message": "A source may be incomplete.",
+                    "next_step": "Rerun with a narrower window.",
+                }
+            ]
+        )
+
+        self.assertIn("<section", html)
+        self.assertIn("diagnostic-item warning", html)
+        self.assertNotIn("<details", html)
+
     def test_custom_schema_prompt_keeps_source_refs_contract(self):
         report = load_report_module(self)
         profile = """# Custom watchlist
@@ -733,6 +769,68 @@ fields:
         self.assertIn("Remote TypeScript roles only.", system_prompt)
         self.assertNotIn("=== CANDIDATE PROFILE ===", user_prompt)
         self.assertLess(user_prompt.index("=== SCAN METADATA ==="), user_prompt.index("=== UNTRUSTED TELEGRAM MESSAGES"))
+
+    def test_extraction_prompt_uses_cache_friendly_scan_metadata(self):
+        report = load_report_module(self)
+
+        _, user_prompt = report.build_extraction_prompts(
+            [
+                {
+                    "channel": "jobs_a",
+                    "id": 10,
+                    "date": "2026-05-09T12:00:00Z",
+                    "text": "Senior React remote role. Contact @hr.",
+                    "origin_url": "https://t.me/original_jobs/10",
+                    "origin_channel": "original_jobs",
+                    "message_ref": {"channel": "jobs_a", "id": 10},
+                    "sender_id": -100123,
+                    "media_type": "MessageMediaPhoto",
+                    "has_photo": True,
+                    "monitor_prefilter": {"matched_keywords": ["react"]},
+                }
+            ],
+            "# Job Profile\nRemote TypeScript roles only.",
+            meta={
+                "scan_date": "2026-05-09",
+                "scan_started_at": "2026-05-09T12:25:31Z",
+                "scan_completed_at": "2026-05-09T12:27:31Z",
+                "scan_window": "Last 2 hours",
+                "cutoff": "2026-05-09T10:25:31Z",
+                "channel_count": 68,
+                "total_messages_collected": 23,
+                "failure_count": 0,
+                "incomplete_count": 0,
+                "ocr_enabled": False,
+                "ocr_count": 0,
+                "output_path": r"E:\workspace\output\runs\run-1\scan.jsonl",
+                "errors_path": r"E:\workspace\output\runs\run-1\scan.errors.log",
+                "source_registry_path": r"E:\workspace\output\runs\run-1\source-registry.filtered.json",
+                "source_health": [
+                    {
+                        "channel": "jobs_a",
+                        "raw_count": 9,
+                        "kept_count": 7,
+                        "oldest_message_at": "2026-05-09T11:00:00Z",
+                    }
+                ],
+            },
+            max_messages=10,
+        )
+
+        self.assertIn('"channel_count": 68', user_prompt)
+        self.assertIn('"total_messages_collected": 23', user_prompt)
+        self.assertIn('"scan_window": "Last 2 hours"', user_prompt)
+        self.assertNotIn("source_health", user_prompt)
+        self.assertNotIn("scan_started_at", user_prompt)
+        self.assertNotIn("scan_completed_at", user_prompt)
+        self.assertNotIn("cutoff", user_prompt)
+        self.assertNotIn("output_path", user_prompt)
+        self.assertNotIn("E:\\workspace", user_prompt)
+        self.assertIn('"origin_url": "https://t.me/original_jobs/10"', user_prompt)
+        self.assertNotIn("sender_id", user_prompt)
+        self.assertNotIn("media_type", user_prompt)
+        self.assertNotIn("monitor_prefilter", user_prompt)
+        self.assertNotIn("message_ref", user_prompt)
 
     def test_deepseek_v4_extraction_disables_thinking_and_reports_cache_usage(self):
         report = load_report_module(self)

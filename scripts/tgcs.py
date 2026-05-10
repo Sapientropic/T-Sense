@@ -24,6 +24,7 @@ LOCAL_DIR = ".tgcs"
 CONFIG_NAME = "config.toml"
 PROFILES_CONFIG_NAME = "profiles.toml"
 DEFAULT_PROFILE = "market-news"
+DEFAULT_FEEDBACK_EXPORT_PATH = "output/feedback/review-feedback.jsonl"
 DEFAULT_TGCLI_CONFIG_PATH = Path.home() / ".config" / "tgcli" / "config.toml"
 DEFAULT_SESSION_PATH = Path.home() / ".config" / "tgcli" / "session"
 PROFILE_ALIASES = {
@@ -668,7 +669,7 @@ def run_feedback(args: argparse.Namespace) -> int:
         "--db",
         _root_path(args.db or f"{LOCAL_DIR}/tgcs.db"),
         "--output",
-        _root_path(args.output or "output/dashboard-feedback.jsonl"),
+        _root_path(args.output or DEFAULT_FEEDBACK_EXPORT_PATH),
     ]
     if args.format == "json":
         cmd.extend(["--format", "json"])
@@ -692,13 +693,44 @@ def _cron_prefix(interval_minutes: int) -> str:
     raise SystemExit("cron intervals above 59 minutes must be whole hours")
 
 
+def _load_monitor_profile(profile_id: str) -> dict[str, Any]:
+    try:
+        from scripts import monitor
+    except ModuleNotFoundError:
+        if str(PROJECT_ROOT) not in sys.path:
+            sys.path.insert(0, str(PROJECT_ROOT))
+        from scripts import monitor
+
+    config_path = _local_path(PROFILES_CONFIG_NAME)
+    try:
+        config = monitor.load_config(config_path, root=PROJECT_ROOT)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    profile = config.profiles.get(profile_id)
+    if not profile:
+        raise SystemExit(f"Profile id not found: {profile_id}")
+    return profile
+
+
+def _schedule_interval_minutes(args: argparse.Namespace, profile: dict[str, Any]) -> int:
+    if args.interval_minutes is not None:
+        return args.interval_minutes
+    raw = profile.get("work_interval_minutes")
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return 15
+
+
 def run_schedule(args: argparse.Namespace) -> int:
     if args.schedule_command != "print":
         raise AssertionError(f"Unsupported schedule command: {args.schedule_command}")
-    if args.interval_minutes < 1:
+    profile_id = args.profile_id
+    profile = _load_monitor_profile(profile_id)
+    interval_minutes = _schedule_interval_minutes(args, profile)
+    if interval_minutes < 1:
         raise SystemExit("--interval-minutes must be at least 1")
 
-    profile_id = args.profile_id
     delivery_mode = args.delivery_mode
     platform = args.platform or ("windows" if sys.platform.startswith("win") else "cron")
 
@@ -715,14 +747,14 @@ def run_schedule(args: argparse.Namespace) -> int:
         )
         print("Task Scheduler command:")
         print(
-            f'schtasks /Create /TN "{task_name}" /SC MINUTE /MO {args.interval_minutes} '
+            f'schtasks /Create /TN "{task_name}" /SC MINUTE /MO {interval_minutes} '
             f'/TR "{task_command}" /F'
         )
         print("Preview command:")
         print(preview_command)
         return 0
 
-    cron_prefix = _cron_prefix(args.interval_minutes)
+    cron_prefix = _cron_prefix(interval_minutes)
     log_path = f"output/tgcs-{profile_id}.log"
     print("Crontab line:")
     print(
@@ -870,7 +902,7 @@ def build_parser() -> argparse.ArgumentParser:
     schedule_print = schedule_subparsers.add_parser("print", help="Print a Task Scheduler or cron command.")
     schedule_print.add_argument("--platform", choices=("windows", "cron"))
     schedule_print.add_argument("--profile-id", default=DEFAULT_PROFILE)
-    schedule_print.add_argument("--interval-minutes", type=int, default=15)
+    schedule_print.add_argument("--interval-minutes", type=int)
     schedule_print.add_argument("--delivery-mode", choices=("off", "dry-run", "live"), default="dry-run")
     schedule_print.add_argument("--task-name")
     schedule_print.set_defaults(func=run_schedule)

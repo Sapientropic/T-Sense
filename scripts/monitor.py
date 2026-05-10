@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 import tomllib
@@ -21,11 +22,13 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 try:
     from scripts import agent_cli, delivery, monitor_state
+    from scripts.profile_schema import parse_profile_config
 except ModuleNotFoundError:
     _PROJECT_ROOT = str(Path(__file__).resolve().parent.parent)
     if _PROJECT_ROOT not in sys.path:
         sys.path.insert(0, _PROJECT_ROOT)
     from scripts import agent_cli, delivery, monitor_state
+    from scripts.profile_schema import parse_profile_config
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -33,6 +36,7 @@ PROFILE_RUN_CONFIG_SCHEMA_VERSION = "profile_run_config_v1"
 RUN_MANIFEST_SCHEMA_VERSION = "run_manifest_v1"
 DEFAULT_PROFILE_ID = "market-news"
 DEFAULT_DASHBOARD_URL = "http://127.0.0.1:8765"
+DEFAULT_FEEDBACK_EXPORT_PATH = "output/feedback/review-feedback.jsonl"
 DEFAULT_FAST_JOBS_PROFILE_ID = "jobs-fast"
 DEFAULT_FAST_JOBS_SCAN_WINDOW_HOURS = 2
 DEFAULT_FAST_JOBS_INTERVAL_MINUTES = 15
@@ -123,12 +127,106 @@ def file_hash(path: Path | None) -> str | None:
     return monitor_state.sha256_text(path.read_text(encoding="utf-8"))
 
 
-def artifact(path: Path, artifact_type: str) -> dict[str, Any]:
+def safe_slug(value: str, fallback: str = "artifact") -> str:
+    cleaned = re.sub(r"[^a-z0-9]+", "-", value.strip().lower())
+    cleaned = re.sub(r"-+", "-", cleaned).strip("-")
+    return cleaned or fallback
+
+
+def profile_display_name(profile_id: str | None) -> str:
+    slug = safe_slug(profile_id or "profile", fallback="profile")
+    return " ".join(part.capitalize() for part in slug.split("-"))
+
+
+def report_stamp_from_run_id(run_id_value: str) -> str:
+    match = re.match(r"^run_(\d{8})T(\d{6})Z", run_id_value)
+    if not match:
+        return safe_slug(run_id_value, fallback="latest")
+    stamp = f"{match.group(1)}T{match.group(2)}Z"
+    try:
+        parsed = datetime.strptime(stamp, "%Y%m%dT%H%M%SZ")
+    except ValueError:
+        return safe_slug(run_id_value, fallback="latest")
+    return parsed.strftime("%Y-%m-%d-%H%M")
+
+
+def report_title_for_profile(profile_file: Path, profile_id: str) -> str:
+    try:
+        profile_config = parse_profile_config(profile_file.read_text(encoding="utf-8"))
+    except OSError:
+        return f"{profile_display_name(profile_id)} Report"
+    title = profile_config.labels.report_title.strip()
+    return title or f"{profile_display_name(profile_id)} Report"
+
+
+def report_file_stem(profile_id: str, run_id_value: str, *, report_title: str | None = None) -> str:
+    label = report_title or f"{profile_display_name(profile_id)} Report"
+    return f"{safe_slug(label, fallback='report')}-{report_stamp_from_run_id(run_id_value)}"
+
+
+def report_output_paths(
+    run_dir: Path,
+    *,
+    profile_id: str,
+    run_id_value: str,
+    report_title: str | None = None,
+) -> tuple[Path, Path]:
+    stem = report_file_stem(profile_id, run_id_value, report_title=report_title)
+    return run_dir / f"{stem}.md", run_dir / f"{stem}.html"
+
+
+def artifact_display_metadata(
+    artifact_type: str,
+    path: Path,
+    *,
+    profile_id: str | None = None,
+    report_title: str | None = None,
+) -> dict[str, str]:
+    if artifact_type == "report_html":
+        return {
+            "category": "reports",
+            "format": "HTML",
+            "display_name": report_title or f"{profile_display_name(profile_id)} Report",
+            "display_path": f"Reports/{path.name}",
+        }
+    if artifact_type == "report_markdown":
+        return {
+            "category": "reports",
+            "format": "Markdown",
+            "display_name": report_title or f"{profile_display_name(profile_id)} Report",
+            "display_path": f"Reports/{path.name}",
+        }
+    if artifact_type in {"scan", "raw_scan", "scan_meta", "scan_errors"}:
+        return {
+            "category": "internal",
+            "format": path.suffix.lstrip(".").upper() or "DATA",
+            "display_name": artifact_type.replace("_", " ").title(),
+            "display_path": f"Internal/{path.name}",
+        }
+    return {
+        "category": "artifacts",
+        "format": path.suffix.lstrip(".").upper() or "DATA",
+        "display_name": artifact_type.replace("_", " ").title(),
+        "display_path": f"Artifacts/{path.name}",
+    }
+
+
+def artifact(
+    path: Path,
+    artifact_type: str,
+    *,
+    profile_id: str | None = None,
+    run_id: str | None = None,
+    report_title: str | None = None,
+) -> dict[str, Any]:
+    metadata = artifact_display_metadata(artifact_type, path, profile_id=profile_id, report_title=report_title)
     return {
         "artifact_id": f"{artifact_type}:{path.name}",
         "type": artifact_type,
         "path": relative_to_root(path),
         "sha256": file_hash(path),
+        "run_id": run_id or "",
+        **metadata,
     }
 
 
@@ -498,11 +596,18 @@ def report_command_for_scan_input(
     state_dir: Path,
     source_registry: Path | None,
     items_json: str | None,
+    profile_id: str,
+    run_id: str,
     max_messages: int | None = None,
     max_tokens: int | None = None,
 ) -> list[str | Path]:
-    report_output = run_dir / "report.md"
-    html_output = run_dir / "report.html"
+    report_title = report_title_for_profile(profile_file, profile_id)
+    report_output, html_output = report_output_paths(
+        run_dir,
+        profile_id=profile_id,
+        run_id_value=run_id,
+        report_title=report_title,
+    )
     cmd: list[str | Path] = [
         sys.executable,
         PROJECT_ROOT / "scripts" / "report.py",
@@ -566,9 +671,17 @@ def daily_report_command(
     hours: int,
     items_json: str | None,
     allow_incomplete: bool,
+    profile_id: str,
+    run_id: str,
     max_messages: int | None = None,
 ) -> list[str | Path]:
-    report_output = run_dir / "report.md"
+    report_title = report_title_for_profile(profile_file, profile_id)
+    report_output, _ = report_output_paths(
+        run_dir,
+        profile_id=profile_id,
+        run_id_value=run_id,
+        report_title=report_title,
+    )
     cmd: list[str | Path] = [
         sys.executable,
         PROJECT_ROOT / "scripts" / "daily_report.py",
@@ -922,6 +1035,8 @@ def run_profile(args: argparse.Namespace) -> int:
             state_dir=state_dir,
             source_registry=source_registry,
             items_json=args.items_json,
+            profile_id=args.profile_id,
+            run_id=current_run_id,
             max_messages=semantic_limit,
             max_tokens=token_limit,
         )
@@ -988,6 +1103,8 @@ def run_profile(args: argparse.Namespace) -> int:
                         state_dir=state_dir,
                         source_registry=effective_registry,
                         items_json=args.items_json,
+                        profile_id=args.profile_id,
+                        run_id=current_run_id,
                         max_messages=semantic_limit,
                         max_tokens=token_limit,
                     )
@@ -1008,6 +1125,8 @@ def run_profile(args: argparse.Namespace) -> int:
                 hours=scan_window_hours,
                 items_json=args.items_json,
                 allow_incomplete=args.allow_incomplete,
+                profile_id=args.profile_id,
+                run_id=current_run_id,
                 max_messages=semantic_limit,
             )
             commands_executed.append(cmd)
@@ -1053,13 +1172,14 @@ def run_profile(args: argparse.Namespace) -> int:
     cards: list[dict[str, Any]] = []
     alert_count = 0
     alert_events: list[dict[str, Any]] = []
+    dashboard_report_path = html_path or report_path
     if exit_code == 0 and status != "agent_extraction_required":
         cards = monitor_state.upsert_review_cards(
             conn,
             profile_id=args.profile_id,
             run_id=current_run_id,
             items=items,
-            report_path=relative_to_root(report_path) if report_path else None,
+            report_path=relative_to_root(dashboard_report_path) if dashboard_report_path else None,
             dashboard_url=dashboard_url,
         )
         delivery_enabled, delivery_suppressed_reason = delivery_enabled_for_profile(profile)
@@ -1072,7 +1192,7 @@ def run_profile(args: argparse.Namespace) -> int:
             mode=args.delivery_mode,
             alert_rule=alert_rule_for_profile(profile),
             delivery_enabled=delivery_enabled,
-            report_path=relative_to_root(report_path) if report_path else None,
+            report_path=relative_to_root(dashboard_report_path) if dashboard_report_path else None,
             dashboard_url=dashboard_url,
         )
     else:
@@ -1083,16 +1203,25 @@ def run_profile(args: argparse.Namespace) -> int:
     if not manifest_diagnostics:
         manifest_diagnostics = diagnostics_from_scan_meta(load_scan_meta(raw_scan_path or scan_path, run_dir))
     artifacts = []
+    report_title = report_title_for_profile(profile_file, args.profile_id)
     if raw_scan_path and raw_scan_path.exists() and raw_scan_path != scan_path:
-        artifacts.append(artifact(raw_scan_path, "raw_scan"))
+        artifacts.append(artifact(raw_scan_path, "raw_scan", profile_id=args.profile_id, run_id=current_run_id))
     for path, kind in ((scan_path, "scan"), (report_path, "report_markdown"), (html_path, "report_html")):
         if path and path.exists():
-            artifacts.append(artifact(path, kind))
+            artifacts.append(
+                artifact(
+                    path,
+                    kind,
+                    profile_id=args.profile_id,
+                    run_id=current_run_id,
+                    report_title=report_title,
+                )
+            )
     meta_path, errors_path = scan_sidecar_paths(raw_scan_path or scan_path, run_dir)
     if meta_path.exists():
-        artifacts.append(artifact(meta_path, "scan_meta"))
+        artifacts.append(artifact(meta_path, "scan_meta", profile_id=args.profile_id, run_id=current_run_id))
     if errors_path.exists():
-        artifacts.append(artifact(errors_path, "scan_errors"))
+        artifacts.append(artifact(errors_path, "scan_errors", profile_id=args.profile_id, run_id=current_run_id))
     manifest = {
         "schema_version": RUN_MANIFEST_SCHEMA_VERSION,
         "run_id": current_run_id,
@@ -1360,7 +1489,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Export dashboard feedback as reusable report feedback JSONL.",
     )
     feedback_export.add_argument("--db", default=".tgcs/tgcs.db")
-    feedback_export.add_argument("--output", default="output/dashboard-feedback.jsonl")
+    feedback_export.add_argument("--output", default=DEFAULT_FEEDBACK_EXPORT_PATH)
     agent_cli.add_format_argument(feedback_export)
     feedback_export.set_defaults(func=export_feedback)
 

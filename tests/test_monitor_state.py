@@ -75,6 +75,34 @@ class MonitorStateTests(unittest.TestCase):
 
         self.assertEqual(cards[0]["title"], "AI Engineer")
 
+    def test_review_card_report_path_prefers_html_sibling(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            report_md = root / "output" / "runs" / "run-1" / "report.md"
+            report_html = report_md.with_suffix(".html")
+            report_html.parent.mkdir(parents=True)
+            report_md.write_text("# Report\n", encoding="utf-8")
+            report_html.write_text("<html>Report</html>", encoding="utf-8")
+            conn = sqlite3.connect(":memory:")
+            conn.row_factory = sqlite3.Row
+            monitor_state.init_db(conn)
+
+            cards = monitor_state.upsert_review_cards(
+                conn,
+                profile_id="market-news",
+                run_id="run-1",
+                items=[
+                    {
+                        "topic": "Market event",
+                        "rating": "high",
+                        "source_message_refs": [{"channel": "news", "id": 1}],
+                    }
+                ],
+                report_path=str(report_md),
+            )
+
+        self.assertEqual(cards[0]["report_path"], str(report_html).replace("\\", "/"))
+
     def test_legacy_unknown_review_card_title_is_recovered_from_item_json(self):
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row
@@ -433,6 +461,7 @@ class MonitorStateTests(unittest.TestCase):
                         "source_health": [
                             {"channel": "jobs_a", "raw_count": 6, "kept_count": 3},
                             {"channel": "jobs_empty", "raw_count": 5, "kept_count": 0},
+                            {"channel": "jobs_failed", "raw_count": 0, "kept_count": 0, "failure": "private"},
                         ]
                     }
                 ),
@@ -475,6 +504,8 @@ class MonitorStateTests(unittest.TestCase):
             snapshot = monitor_state.dashboard_snapshot(conn)
 
         sources = {item["channel"]: item for item in snapshot["source_stats"]}
+        self.assertEqual(snapshot["source_stats"][0]["channel"], "jobs_failed")
+        self.assertTrue(sources["jobs_failed"]["scan_failure"])
         self.assertEqual(sources["jobs_a"]["raw_count"], 6)
         self.assertEqual(sources["jobs_a"]["kept_count"], 3)
         self.assertEqual(sources["jobs_a"]["latest_card_count"], 1)
@@ -580,6 +611,8 @@ class MonitorStateTests(unittest.TestCase):
         self.assertEqual(insights[0]["channel"], "jobs_good")
         self.assertEqual(insights[0]["kind"], "promote")
         self.assertIs(insights[0]["stats"], stats[0])
+        self.assertEqual(insights[0]["confidence"], "medium")
+        self.assertEqual(insights[0]["next_action"]["label"], "Keep source")
 
     def test_source_value_insights_marks_single_high_source_as_observe(self):
         stats = [
@@ -602,6 +635,8 @@ class MonitorStateTests(unittest.TestCase):
         self.assertEqual(insights[0]["channel"], "jobs_new")
         self.assertEqual(insights[0]["kind"], "observe")
         self.assertEqual(insights[0]["label"], "Observe")
+        self.assertEqual(insights[0]["confidence"], "low")
+        self.assertEqual(insights[0]["next_action"]["label"], "Collect more runs")
         self.assertIn("1 high signal", insights[0]["reason"])
         self.assertLess(insights[0]["priority"], 90)
 
@@ -631,6 +666,7 @@ class MonitorStateTests(unittest.TestCase):
 
         self.assertEqual(insights[0]["channel"], "jobs_busy_noise")
         self.assertEqual(insights[0]["kind"], "watch")
+        self.assertEqual(insights[0]["next_action"]["label"], "Tune profile")
         self.assertIn("7 fresh messages", insights[0]["reason"])
         self.assertIn("no review cards", insights[0]["reason"])
 
@@ -662,6 +698,8 @@ class MonitorStateTests(unittest.TestCase):
         self.assertEqual(insights[0]["channel"], "jobs_private")
         self.assertEqual(insights[0]["kind"], "watch")
         self.assertEqual(insights[0]["label"], "Access")
+        self.assertEqual(insights[0]["confidence"], "high")
+        self.assertEqual(insights[0]["next_action"]["label"], "Fix access")
         self.assertIn("Latest scan failed", insights[0]["reason"])
 
     def test_dashboard_snapshot_includes_first_run_setup_status(self):
@@ -688,13 +726,19 @@ class MonitorStateTests(unittest.TestCase):
         )
         profile_snapshot = monitor_state.dashboard_snapshot(conn)
 
-        self.assertEqual(profile_snapshot["setup_status"]["next_step"], "tgcs monitor run --profile-id jobs-fast")
+        self.assertEqual(
+            profile_snapshot["setup_status"]["next_step"],
+            "tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run",
+        )
         self.assertTrue(profile_snapshot["setup_status"]["has_profiles"])
         self.assertFalse(profile_snapshot["setup_status"]["has_runs"])
         checks = {item["check_id"]: item for item in profile_snapshot["setup_status"]["checks"]}
         self.assertEqual(checks["profiles"]["status"], "done")
         self.assertEqual(checks["first_run"]["status"], "active")
-        self.assertIn("tgcs monitor run --profile-id jobs-fast", checks["first_run"]["command"])
+        self.assertEqual(
+            checks["first_run"]["command"],
+            "tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run",
+        )
 
     def test_dashboard_setup_status_handles_all_profiles_disabled(self):
         conn = sqlite3.connect(":memory:")
@@ -828,10 +872,274 @@ class MonitorStateTests(unittest.TestCase):
         self.assertEqual(quality["diagnostic_failure_count"], 0)
         self.assertEqual(quality["top_diagnostic_code"], "scan_incomplete")
 
+    def test_dashboard_runs_project_report_artifact_without_full_manifest(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        monitor_state.init_db(conn)
+        monitor_state.record_run(
+            conn,
+            {
+                "schema_version": "run_manifest_v1",
+                "run_id": "run-1",
+                "profile_id": "jobs-fast",
+                "status": "complete",
+                "started_at": "2026-05-09T03:00:00Z",
+                "completed_at": "2026-05-09T03:01:00Z",
+                "source_registry_path": ".tgcs/sources.json",
+                "profile_path": "profiles/templates/jobs.md",
+                "alert_count": 2,
+                "review_card_count": 4,
+                "artifacts": [
+                    {
+                        "type": "raw_scan",
+                        "path": "output/runs/run-1/prefiltered-scan.jsonl",
+                        "sha256": "raw-hash",
+                    },
+                    {
+                        "type": "scan_meta",
+                        "path": "output/runs/run-1/scan.meta.json",
+                        "sha256": "meta-hash",
+                    },
+                    {
+                        "type": "report_html",
+                        "path": "output/runs/run-1/jobs-fast-signal-report-2026-05-09-0300.html",
+                        "sha256": "report-hash",
+                        "category": "reports",
+                        "format": "HTML",
+                        "display_name": "Jobs Fast Signal Report",
+                        "display_path": "Reports/jobs-fast-signal-report-2026-05-09-0300.html",
+                    },
+                ],
+            },
+        )
+
+        snapshot = monitor_state.dashboard_snapshot(conn)
+
+        run = snapshot["runs"][0]
+        report = run["report_artifact"]
+        snapshot_text = json.dumps(snapshot, ensure_ascii=False)
+        self.assertNotIn("manifest", run)
+        self.assertEqual(run["review_card_count"], 4)
+        self.assertEqual(run["alert_count"], 2)
+        self.assertEqual(report["display_name"], "Developer Opportunity Signal Report")
+        self.assertEqual(report["display_path"], "Reports/jobs-fast-signal-report-2026-05-09-0300.html")
+        self.assertEqual(report["format"], "HTML")
+        self.assertNotIn("sha256", report)
+        self.assertNotIn("prefiltered-scan.jsonl", snapshot_text)
+        self.assertNotIn("scan.meta.json", snapshot_text)
+        self.assertNotIn(".tgcs/sources.json", snapshot_text)
+
+    def test_dashboard_runs_prefer_html_report_artifact_for_click_target(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        monitor_state.init_db(conn)
+        monitor_state.record_run(
+            conn,
+            {
+                "schema_version": "run_manifest_v1",
+                "run_id": "run-1",
+                "profile_id": "market-news",
+                "status": "complete",
+                "started_at": "2026-05-09T03:00:00Z",
+                "completed_at": "2026-05-09T03:01:00Z",
+                "artifacts": [
+                    {
+                        "type": "report_markdown",
+                        "path": "output/runs/run-1/market-news-signal-brief-2026-05-09-0300.md",
+                        "display_name": "Market News Signal Brief",
+                    },
+                    {
+                        "type": "report_html",
+                        "path": "output/runs/run-1/market-news-signal-brief-2026-05-09-0300.html",
+                        "display_name": "Market News Signal Brief",
+                    },
+                ],
+            },
+        )
+
+        snapshot = monitor_state.dashboard_snapshot(conn)
+
+        report = snapshot["runs"][0]["report_artifact"]
+        self.assertEqual(report["type"], "report_html")
+        self.assertEqual(report["format"], "HTML")
+        self.assertEqual(report["path"], "output/runs/run-1/market-news-signal-brief-2026-05-09-0300.html")
+
+    def test_dashboard_runs_include_human_profile_display_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            profile_path = Path(tmp) / "profiles" / "market-news.md"
+            profile_path.parent.mkdir(parents=True)
+            profile_path.write_text(
+                '## Report Labels\nreport_title: "Market News Signal Brief"\n',
+                encoding="utf-8",
+            )
+            conn = sqlite3.connect(":memory:")
+            conn.row_factory = sqlite3.Row
+            monitor_state.init_db(conn)
+            monitor_state.upsert_profile(
+                conn,
+                {
+                    "id": "market-news",
+                    "path": str(profile_path),
+                    "enabled": True,
+                },
+            )
+            monitor_state.record_run(
+                conn,
+                {
+                    "schema_version": "run_manifest_v1",
+                    "run_id": "run-1",
+                    "profile_id": "market-news",
+                    "profile_path": str(profile_path),
+                    "status": "complete",
+                    "started_at": "2026-05-09T03:00:00Z",
+                    "completed_at": "2026-05-09T03:01:00Z",
+                    "artifacts": [],
+                },
+            )
+
+            snapshot = monitor_state.dashboard_snapshot(conn)
+
+        self.assertEqual(snapshot["runs"][0]["display_name"], "Market News")
+        self.assertEqual(snapshot["profiles"][0]["display_name"], "Market News")
+        self.assertEqual(snapshot["profiles"][0]["report_display_name"], "Market News Signal Brief")
+
+    def test_dashboard_run_report_artifact_humanizes_legacy_report_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            profile_path = Path(tmp) / "profiles" / "jobs.md"
+            profile_path.parent.mkdir(parents=True)
+            profile_path.write_text(
+                '## Report Labels\nreport_title: "Developer Opportunity Signal Report"\n',
+                encoding="utf-8",
+            )
+            conn = sqlite3.connect(":memory:")
+            conn.row_factory = sqlite3.Row
+            monitor_state.init_db(conn)
+            monitor_state.record_run(
+                conn,
+                {
+                    "schema_version": "run_manifest_v1",
+                    "run_id": "run-legacy",
+                    "profile_id": "jobs-fast",
+                    "profile_path": str(profile_path),
+                    "status": "complete",
+                    "started_at": "2026-05-09T03:00:00Z",
+                    "completed_at": "2026-05-09T03:01:00Z",
+                    "artifacts": [
+                        {
+                            "type": "report_markdown",
+                            "path": "output/runs/run-legacy/report.md",
+                        },
+                    ],
+                },
+            )
+
+            snapshot = monitor_state.dashboard_snapshot(conn)
+
+            report = snapshot["runs"][0]["report_artifact"]
+            self.assertEqual(report["display_name"], "Developer Opportunity Signal Report")
+            self.assertEqual(report["display_path"], "Reports/Developer Opportunity Signal Report.md")
+            self.assertEqual(report["format"], "Markdown")
+
+    def test_dashboard_run_report_artifact_preserves_manual_report_title(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            profile_path = Path(tmp) / "profiles" / "market-news.md"
+            profile_path.parent.mkdir(parents=True)
+            profile_path.write_text(
+                '## Report Labels\nreport_title: "Market News Signal Brief"\n',
+                encoding="utf-8",
+            )
+            conn = sqlite3.connect(":memory:")
+            conn.row_factory = sqlite3.Row
+            monitor_state.init_db(conn)
+            monitor_state.record_run(
+                conn,
+                {
+                    "schema_version": "run_manifest_v1",
+                    "run_id": "run-manual",
+                    "profile_id": "market-news",
+                    "profile_path": str(profile_path),
+                    "status": "complete",
+                    "started_at": "2026-05-09T03:00:00Z",
+                    "completed_at": "2026-05-09T03:01:00Z",
+                    "artifacts": [
+                        {
+                            "type": "report_html",
+                            "path": "output/runs/run-manual/report.html",
+                        },
+                    ],
+                },
+            )
+
+            snapshot = monitor_state.dashboard_snapshot(conn)
+
+            report = snapshot["runs"][0]["report_artifact"]
+            self.assertEqual(report["display_name"], "Market News Signal Brief")
+            self.assertEqual(report["display_path"], "Reports/Market News Signal Brief.html")
+            self.assertEqual(report["format"], "HTML")
+
+    def test_dashboard_run_quality_prefers_failure_diagnostic_for_top_code(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        monitor_state.init_db(conn)
+        monitor_state.upsert_profile(
+            conn,
+            {
+                "id": "jobs-fast",
+                "path": "profiles/templates/jobs.md",
+                "enabled": True,
+                "source_topics": ["jobs"],
+            },
+        )
+        monitor_state.record_run(
+            conn,
+            {
+                "schema_version": "run_manifest_v1",
+                "run_id": "run-failed-source",
+                "profile_id": "jobs-fast",
+                "status": "failed",
+                "started_at": "2026-05-09T03:00:00Z",
+                "completed_at": "2026-05-09T03:01:00Z",
+                "diagnostics": [
+                    {
+                        "code": "scan_incomplete",
+                        "severity": "warning",
+                        "message": "One channel may be incomplete.",
+                    },
+                    {
+                        "code": "channel_failures",
+                        "severity": "failure",
+                        "message": "No accessible source produced messages.",
+                    },
+                ],
+            },
+        )
+
+        snapshot = monitor_state.dashboard_snapshot(conn)
+
+        quality = snapshot["runs"][0]["quality"]
+        self.assertEqual(quality["top_diagnostic_code"], "channel_failures")
+        self.assertEqual(snapshot["setup_status"]["stage"], "needs_source_access")
+        self.assertIn("tgcs sources import channel_lists/jobs.txt --topic jobs", snapshot["setup_status"]["next_step"])
+
     def test_dashboard_snapshot_includes_opportunity_summary_top_items(self):
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row
         monitor_state.init_db(conn)
+        tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tmpdir.cleanup)
+        profile_path = Path(tmpdir.name) / "jobs.md"
+        profile_path.write_text(
+            '# Profile\n\n## Report Labels\nreport_title: "Developer Opportunity Signal Report"\n',
+            encoding="utf-8",
+        )
+        monitor_state.upsert_profile(
+            conn,
+            {
+                "id": "jobs-fast",
+                "path": str(profile_path),
+                "enabled": True,
+            },
+        )
         monitor_state.record_run(
             conn,
             {
@@ -887,6 +1195,7 @@ class MonitorStateTests(unittest.TestCase):
 
         self.assertEqual(summary["run_id"], "run-opportunities")
         self.assertEqual(summary["profile_id"], "jobs-fast")
+        self.assertEqual(summary["display_name"], "Developer Opportunity")
         self.assertEqual(summary["scanned_count"], 120)
         self.assertEqual(summary["matched_count"], 9)
         self.assertEqual(summary["high_actionable_count"], 2)
@@ -1183,9 +1492,38 @@ class MonitorStateTests(unittest.TestCase):
         self.assertEqual(summary["high_card_count"], 2)
         self.assertEqual(summary["action_count"], 3)
         self.assertEqual(summary["by_action"], {"false_positive": 1, "follow_up": 1, "keep": 1})
+        self.assertEqual(summary["triage_rate"], 1.0)
         self.assertEqual(summary["next_action"]["label"], "Review profile diffs")
         self.assertNotIn("private note", summary_text)
         self.assertNotIn("private follow-up note", summary_text)
+
+    def test_validation_summary_uses_display_name_in_user_facing_copy(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        monitor_state.init_db(conn)
+        monitor_state.record_run(
+            conn,
+            {
+                "schema_version": "run_manifest_v1",
+                "run_id": "run-recent",
+                "profile_id": "jobs-fast",
+                "status": "complete",
+                "started_at": "2026-05-09T03:00:00Z",
+                "completed_at": "2026-05-09T03:01:00Z",
+            },
+        )
+        cards = monitor_state.upsert_review_cards(
+            conn,
+            profile_id="jobs-fast",
+            run_id="run-recent",
+            items=[{"topic": "Apply A", "rating": "high", "source_message_refs": [{"channel": "jobs", "id": 1}]}],
+        )
+        monitor_state.set_card_action(conn, card_id=cards[0]["card_id"], action="keep", note="")
+
+        summary = monitor_state.validation_summary(conn, now=datetime(2026, 5, 9, tzinfo=UTC))
+
+        self.assertIn("Jobs Fast", summary["next_action"]["detail"])
+        self.assertNotIn("jobs-fast", summary["next_action"]["detail"])
 
     def test_export_feedback_jsonl_entries_reuse_report_feedback_schema_without_notes(self):
         conn = sqlite3.connect(":memory:")
@@ -1291,9 +1629,151 @@ class MonitorStateTests(unittest.TestCase):
         snapshot = monitor_state.dashboard_snapshot(conn)
 
         self.assertEqual(snapshot["feedback_summary"]["exportable_count"], 3)
+        self.assertEqual(snapshot["feedback_summary"]["non_exportable_follow_up_count"], 1)
+        self.assertEqual(snapshot["feedback_summary"]["profile_diff_count"], 1)
+        self.assertEqual(snapshot["feedback_summary"]["pending_profile_diff_count"], 1)
+        self.assertEqual(snapshot["feedback_summary"]["applied_profile_diff_count"], 0)
+        self.assertEqual(snapshot["feedback_summary"]["reverted_profile_diff_count"], 0)
+        self.assertIn("follow_up becomes profile diffs", snapshot["feedback_summary"]["export_scope_note"])
         self.assertEqual(snapshot["feedback_summary"]["by_action"], {"false_positive": 1, "keep": 1, "skip": 1})
         self.assertEqual(snapshot["feedback_summary"]["by_rating"], {"high": 1, "low": 1, "medium": 1})
         self.assertEqual(snapshot["feedback_summary"]["by_decision_status"], {"unknown": 3})
+        self.assertEqual(snapshot["feedback_summary"]["next_action"]["label"], "Review profile diffs")
+        impacts = {item["item_title"]: item for item in snapshot["feedback_summary"]["recent_impacts"]}
+        self.assertEqual(impacts["Kept role"]["impact_type"], "decision_memory_export")
+        self.assertEqual(impacts["Kept role"]["impact_status"], "ready")
+        self.assertEqual(impacts["Kept role"]["impact_label"], "Ready for export")
+        self.assertEqual(impacts["Follow up role"]["impact_type"], "profile_diff")
+        self.assertEqual(impacts["Follow up role"]["impact_status"], "pending")
+        self.assertEqual(impacts["Follow up role"]["impact_label"], "Profile diff pending")
+        self.assertNotIn("profile tweak", json.dumps(snapshot["feedback_summary"], ensure_ascii=False))
+
+    def test_dashboard_feedback_export_copy_is_user_facing(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        monitor_state.init_db(conn)
+        monitor_state.upsert_profile(
+            conn,
+            {
+                "id": "jobs-fast",
+                "path": "profiles/templates/jobs.md",
+                "enabled": True,
+            },
+        )
+        cards = monitor_state.upsert_review_cards(
+            conn,
+            profile_id="jobs-fast",
+            run_id="run-1",
+            items=[
+                {
+                    "topic": "Useful role",
+                    "rating": "high",
+                    "decision_state": {"status": "new"},
+                    "source_message_refs": [{"channel": "jobs", "id": 1}],
+                }
+            ],
+        )
+        monitor_state.set_card_action(conn, card_id=cards[0]["card_id"], action="keep", note="")
+
+        snapshot = monitor_state.dashboard_snapshot(conn)
+
+        feedback_json = json.dumps(snapshot["feedback_summary"], ensure_ascii=False)
+        self.assertEqual(snapshot["feedback_summary"]["next_action"]["label"], "Export feedback file")
+        self.assertNotIn("decision-memory import", feedback_json)
+        self.assertNotIn("note-free", feedback_json)
+        self.assertIn("future reports learn", snapshot["feedback_summary"]["next_action"]["detail"])
+        self.assertEqual(snapshot["feedback_summary"]["recent_impacts"][0]["impact_label"], "Ready for export")
+        self.assertIn("future reports learn", snapshot["feedback_summary"]["recent_impacts"][0]["impact_detail"])
+
+    def test_dashboard_delivery_targets_include_user_facing_labels(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        monitor_state.init_db(conn)
+        monitor_state.upsert_delivery_target(
+            conn,
+            {
+                "id": "telegram-bot-default",
+                "type": "telegram_bot",
+                "enabled": False,
+                "chat_id": "123456",
+                "bot_token": "secret-token",
+            },
+        )
+
+        snapshot = monitor_state.dashboard_snapshot(conn)
+
+        target = snapshot["delivery_targets"][0]
+        self.assertEqual(target["display_name"], "Telegram Bot")
+        self.assertEqual(target["status_label"], "Muted")
+        self.assertEqual(target["detail"], "Chat connected; delivery is muted.")
+        self.assertNotIn("secret-token", json.dumps(target, ensure_ascii=False))
+
+    def test_dashboard_source_stats_include_user_facing_channel_names(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        monitor_state.init_db(conn)
+        monitor_state.upsert_review_cards(
+            conn,
+            profile_id="jobs-fast",
+            run_id="run-1",
+            items=[
+                {
+                    "topic": "Remote TypeScript role",
+                    "rating": "high",
+                    "source_message_refs": [{"channel": "jobs_in_it_remoute", "id": 7}],
+                }
+            ],
+        )
+
+        snapshot = monitor_state.dashboard_snapshot(conn)
+
+        self.assertEqual(snapshot["source_stats"][0]["channel"], "jobs_in_it_remoute")
+        self.assertEqual(snapshot["source_stats"][0]["display_name"], "Jobs In IT Remote")
+        self.assertEqual(snapshot["source_insights"][0]["display_name"], "Jobs In IT Remote")
+        self.assertEqual(monitor_state.display_channel_name("runello_rus_webdevelopment"), "Runello RU Web Development")
+
+    def test_dashboard_profiles_include_user_facing_display_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            conn = sqlite3.connect(":memory:")
+            conn.row_factory = sqlite3.Row
+            monitor_state.init_db(conn)
+            profile_path = Path(tmp) / "profiles" / "templates" / "jobs.md"
+            profile_path.parent.mkdir(parents=True)
+            profile_path.write_text(
+                '# Profile\n\n## Report Labels\nreport_title: "Developer Opportunity Signal Report"\n',
+                encoding="utf-8",
+            )
+            monitor_state.upsert_profile(
+                conn,
+                {
+                    "id": "jobs-fast",
+                    "path": str(profile_path),
+                    "enabled": True,
+                },
+            )
+            cards = monitor_state.upsert_review_cards(
+                conn,
+                profile_id="jobs-fast",
+                run_id="run-1",
+                items=[
+                    {
+                        "topic": "Useful role",
+                        "rating": "high",
+                        "source_message_refs": [{"channel": "jobs", "id": 1}],
+                    }
+                ],
+            )
+            monitor_state.set_card_action(conn, card_id=cards[0]["card_id"], action="follow_up", note="Prefer remote roles.")
+
+            snapshot = monitor_state.dashboard_snapshot(conn)
+
+        self.assertEqual(snapshot["profiles"][0]["display_path"], "Profiles/jobs.md")
+        self.assertEqual(snapshot["profiles"][0]["display_name"], "Developer Opportunity")
+        self.assertEqual(snapshot["profiles"][0]["report_display_name"], "Developer Opportunity Signal Report")
+        self.assertEqual(snapshot["profile_patch_suggestions"][0]["profile_display_path"], "Profiles/jobs.md")
+        self.assertNotIn("path", snapshot["profiles"][0])
+        self.assertNotIn("config", snapshot["profiles"][0])
+        self.assertNotIn("profile_path", snapshot["profile_patch_suggestions"][0])
 
     def test_profile_alert_mode_update_persists_dashboard_override(self):
         conn = sqlite3.connect(":memory:")
@@ -1313,7 +1793,8 @@ class MonitorStateTests(unittest.TestCase):
         snapshot = monitor_state.dashboard_snapshot(conn)
 
         self.assertEqual(profile["config"]["alert_schedule_mode"], "muted")
-        self.assertEqual(snapshot["profiles"][0]["config"]["alert_schedule_mode"], "muted")
+        self.assertEqual(snapshot["profiles"][0]["alert_schedule_mode"], "muted")
+        self.assertNotIn("config", snapshot["profiles"][0])
 
     def test_follow_up_patch_can_apply_to_profile_file(self):
         conn = sqlite3.connect(":memory:")
@@ -1537,11 +2018,21 @@ class MonitorStateTests(unittest.TestCase):
             )
 
             snapshot = monitor_state.dashboard_snapshot(conn)
+            profile_path.write_text("# Profile\n\nManual edit after suggestion.\n", encoding="utf-8")
+            changed_snapshot = monitor_state.dashboard_snapshot(conn)
 
         patch = snapshot["profile_patch_suggestions"][0]
-        self.assertEqual(patch["profile_path"], str(profile_path))
+        self.assertEqual(patch["profile_display_path"], "Profiles/profile.md")
+        self.assertNotIn("profile_path", patch)
         self.assertEqual(patch["card_title"], "AI Engineer")
         self.assertEqual(patch["card_id"], cards[0]["card_id"])
+        self.assertEqual(patch["apply_readiness"]["status"], "ready")
+        self.assertEqual(patch["apply_readiness"]["label"], "Safe to apply")
+        self.assertEqual(len(patch["base_profile_short_hash"]), 12)
+
+        changed_patch = changed_snapshot["profile_patch_suggestions"][0]
+        self.assertEqual(changed_patch["apply_readiness"]["status"], "blocked")
+        self.assertIn("changed since this diff was suggested", changed_patch["apply_readiness"]["detail"])
 
     def test_follow_up_requires_a_non_empty_note(self):
         conn = sqlite3.connect(":memory:")

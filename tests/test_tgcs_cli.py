@@ -439,7 +439,7 @@ class TgcsCliTests(unittest.TestCase):
         self.assertIn("--db", cmd)
         self.assertIn(str(root / ".tgcs" / "tgcs.db"), cmd)
         self.assertIn("--output", cmd)
-        self.assertIn(str(root / "output" / "dashboard-feedback.jsonl"), cmd)
+        self.assertIn(str(root / "output" / "feedback" / "review-feedback.jsonl"), cmd)
         self.assertIn("--format", cmd)
         self.assertIn("json", cmd)
 
@@ -525,6 +525,94 @@ class TgcsCliTests(unittest.TestCase):
         self.assertIn("tgcs.bat", output)
         self.assertIn("jobs-fast", output)
         self.assertIn("--delivery-mode live", output)
+
+    def test_schedule_print_uses_profile_work_interval_when_not_overridden(self):
+        tgcs = load_tgcs_module(self)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".tgcs").mkdir()
+            (root / ".tgcs" / "profiles.toml").write_text(
+                "\n".join(
+                    [
+                        'schema_version = "profile_run_config_v1"',
+                        "",
+                        "[[profiles]]",
+                        'id = "jobs-fast"',
+                        'path = "profiles/templates/jobs.md"',
+                        "work_interval_minutes = 17",
+                        "",
+                        "[[profiles]]",
+                        'id = "market-news"',
+                        'path = "profiles/templates/market-news.md"',
+                        "work_interval_minutes = 120",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            stdout = io.StringIO()
+            with patch.object(tgcs, "PROJECT_ROOT", root):
+                with patch.object(tgcs.subprocess, "run") as run_mock:
+                    with patch("sys.stdout", stdout):
+                        exit_code = tgcs.main(["schedule", "print", "--platform", "windows", "--profile-id", "jobs-fast"])
+
+        self.assertEqual(exit_code, 0)
+        run_mock.assert_not_called()
+        self.assertIn("/MO 17", stdout.getvalue())
+
+    def test_schedule_print_explicit_interval_overrides_profile_interval(self):
+        tgcs = load_tgcs_module(self)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".tgcs").mkdir()
+            (root / ".tgcs" / "profiles.toml").write_text(
+                "\n".join(
+                    [
+                        'schema_version = "profile_run_config_v1"',
+                        "",
+                        "[[profiles]]",
+                        'id = "jobs-fast"',
+                        'path = "profiles/templates/jobs.md"',
+                        "work_interval_minutes = 17",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            stdout = io.StringIO()
+            with patch.object(tgcs, "PROJECT_ROOT", root):
+                with patch("sys.stdout", stdout):
+                    exit_code = tgcs.main(
+                        [
+                            "schedule",
+                            "print",
+                            "--platform",
+                            "cron",
+                            "--profile-id",
+                            "jobs-fast",
+                            "--interval-minutes",
+                            "30",
+                        ]
+                    )
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("*/30 * * * *", stdout.getvalue())
+        self.assertNotIn("*/17", stdout.getvalue())
+
+    def test_schedule_print_unknown_profile_fails_clearly(self):
+        tgcs = load_tgcs_module(self)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stdout = io.StringIO()
+            with patch.object(tgcs, "PROJECT_ROOT", root):
+                with patch("sys.stdout", stdout):
+                    with self.assertRaises(SystemExit) as raised:
+                        tgcs.main(["schedule", "print", "--platform", "windows", "--profile-id", "missing"])
+
+        self.assertIn("Profile id not found: missing", str(raised.exception))
 
     def test_schedule_print_windows_quotes_tgcs_path_inside_task_action(self):
         tgcs = load_tgcs_module(self)

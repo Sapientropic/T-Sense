@@ -132,10 +132,20 @@ the `jobs-fast` profile against a topic-filtered registry.
 `dashboard/dist` assets when they are missing. `--no-build` skips this for
 packaged/offline environments or custom static asset handling.
 Dashboard artifact links use `/artifacts/<url-encoded-path>` and are restricted
-to `report.html` or `report.md` files under a workspace-local `runs/` directory.
-Traversal, non-run paths, and raw scan artifacts are rejected.
+to report Markdown/HTML files under a workspace-local `runs/` directory.
+Legacy `report.html` / `report.md` names and user-facing names such as
+`developer-opportunity-signal-report-2026-05-09-1225.html` are allowed; traversal, non-run
+paths, and raw scan artifacts are rejected. Dashboard surfaces should display a
+human report name/category instead of exposing internal absolute paths. Legacy
+generic report filenames should display as the profile report title plus
+extension, not as `Reports/report.html` or `Reports/report.md`. If both
+Markdown and HTML report artifacts exist for a run, the Dashboard projection must
+use HTML as the default click target. Markdown-only report artifacts are served
+as rendered HTML by the local artifact route.
 `tgcs schedule print` is a no-side-effect helper: it prints a Windows Task
 Scheduler or cron command for review and never installs or starts a system task.
+When `--interval-minutes` is omitted, it previews the selected profile's
+`work_interval_minutes`; an explicit `--interval-minutes` remains the override.
 Agents should call the lower-level commands when they need stable JSON output:
 
 ```powershell
@@ -150,7 +160,7 @@ python scripts/report.py --input output/scan.jsonl --profile profiles/templates/
 python scripts/report.py --input output/scan.jsonl --profile profiles/templates/market-news.md --items-json output/extracted-items.json --state-dir .tgcs/state --feedback-jsonl output/report-feedback.jsonl --format json
 python scripts/daily_report.py --source-registry .tgcs/sources.json --profile profiles/templates/market-news.md --html --state-dir .tgcs/state --format json
 python scripts/monitor.py run --profile-id market-news --delivery-mode dry-run --format json
-python scripts/monitor.py feedback-export --db .tgcs/tgcs.db --output output/dashboard-feedback.jsonl --format json
+python scripts/monitor.py feedback-export --db .tgcs/tgcs.db --output output/feedback/review-feedback.jsonl --format json
 ```
 
 `doctor.py` reports `dashboard_assets` as pass/warn only; missing dashboard
@@ -271,8 +281,8 @@ chat_id = ""
   "run_id": "run_20260508T090000Z_abcd1234",
   "manifest_path": "output/runs/run_20260508T090000Z_abcd1234/run-manifest.json",
   "db_path": ".tgcs/tgcs.db",
-  "report_path": "output/runs/run_20260508T090000Z_abcd1234/report.md",
-  "html_path": "output/runs/run_20260508T090000Z_abcd1234/report.html",
+  "report_path": "output/runs/run_20260508T090000Z_abcd1234/developer-opportunity-signal-report-2026-05-08-0900.md",
+  "html_path": "output/runs/run_20260508T090000Z_abcd1234/developer-opportunity-signal-report-2026-05-08-0900.html",
   "review_card_count": 3,
   "alert_count": 1,
   "prefilter": {
@@ -312,7 +322,7 @@ exporting raw Telegram text. The human facade defaults to:
 tgcs feedback export
 ```
 
-which reads `.tgcs/tgcs.db` and writes `output/dashboard-feedback.jsonl`.
+which reads `.tgcs/tgcs.db` and writes `output/feedback/review-feedback.jsonl`.
 
 Run manifests use `run_manifest_v1`. They include profile/source hashes,
 scan window, source filters, alert rule, alert schedule, prefilter status,
@@ -337,17 +347,38 @@ SQLite stores dashboard state using these projections:
   cards usable after display-title fixes.
 - `alert_event_v1`: alert target, status, redacted payload, delivery result.
 - `delivery_target_v1`: target id/type/enabled/config; never bot tokens.
+  Dashboard projections also include `display_name`, `status_label`, and a
+  short `detail` so the Settings tab can read as delivery state instead of raw
+  config ids such as `telegram-bot-default`.
+- `runs`: dashboard run projection, not the full `run_manifest_v1`. The state
+  API keeps `run_id`, profile/status/timestamps, `review_card_count`,
+  `alert_count`, `quality`, a human `display_name`, and one selected
+  `report_artifact`; internal scan, metadata, registry, raw-scan, errors, and
+  hash fields stay in run manifests and artifact tables instead of becoming the
+  default Dashboard surface. HTML report artifacts take precedence over Markdown
+  siblings for the Dashboard click target. UI visualizations should aggregate run health by day or another bounded window,
+  and the visible run ledger should be capped by default; they should not
+  require rendering one visual cell or always-visible row for every
+  high-frequency monitor run.
+- `dashboard_profile_v1`: profile display projection, not the full
+  `profile_run_config_v1`. It includes `profile_id`, `display_name`,
+  `display_path`, `enabled`, `alert_schedule_mode`, `source_topics`,
+  `scan_window_hours`, `semantic_max_messages`, `delivery_target_count`, and
+  `updated_at`; local absolute paths and full profile config stay internal.
 - `profile_patch_suggestion_v1`: follow-up note, diff, proposed profile text.
-  Dashboard projections also include display-only `profile_path` and
-  placeholder-aware `card_title` so the user can see which card created the
-  pending profile diff and which local profile file will be changed.
+  Dashboard projections include `profile_display_path`, placeholder-aware
+  `card_title`, a short base hash, and apply readiness so the user can see
+  which card created the pending profile diff and whether it is safe to apply
+  without exposing machine-specific absolute paths as dashboard JSON fields.
 - `source_stats`: dashboard projection of source channel value and latest-run
   yield. It includes all-time review-card counts, high-rate, alert counts, and,
   when the latest run has a `scan_meta` artifact, source-level `raw_count`,
   `kept_count`, `scan_keep_rate`, `latest_card_count`, `latest_high_count`, and
-  `card_yield_rate`. This projection reads only `scan.meta.json` source-health
-  counters and must not copy raw Telegram message bodies into SQLite or the
-  dashboard JSON.
+  `card_yield_rate`. It also includes `display_name` so user-facing Dashboard
+  labels do not have to expose snake_case Telegram handles as primary copy; the
+  display label normalizes common technical initialisms and obvious channel-name
+  typos. This projection reads only `scan.meta.json` source-health counters and
+  must not copy raw Telegram message bodies into SQLite or the dashboard JSON.
 - `source_insights`: dashboard projection of actionable source suggestions:
   `promote` for high-yield sources, `prune` for false-positive-heavy sources,
   `watch` for mixed medium-signal sources or latest-run sources with fresh
@@ -355,25 +386,34 @@ SQLite stores dashboard state using these projections:
   failed, and `observe` for a source with one high signal that needs more sample
   size before promotion.
 - `feedback_summary`: count of keep, skip, and false-positive feedback rows that
-  can be exported as note-free `tgcs-feedback-v1` JSONL, plus `by_action`
-  counts for dashboard feedback distribution. It also includes `by_rating` and
-  `by_decision_status` so validation can inspect feedback quality without
-  opening exported JSONL.
+  can be exported as `tgcs-feedback-v1` JSONL, plus `by_action` counts for
+  dashboard feedback distribution. It also includes `by_rating`,
+  `by_decision_status`, a user-facing `next_action`, and redacted
+  `recent_impacts` so Settings can show what is ready to export or review
+  without opening exported JSONL or leaking feedback note bodies.
+- `validation_summary`: 14-day behavior evidence for the Developer Opportunity
+  loop. It includes run/card/action counts plus `triage_rate`, `keep_rate`, and
+  `false_positive_rate` so the Dashboard can visualize whether the inbox is
+  producing real decisions rather than just more cards.
 - `setup_status`: first-use guidance for the dashboard empty state. Stable
   fields are `stage`, `next_step`, `has_profiles`, `has_runs`, and delivery
   booleans; `checks` is a display-oriented list with `check_id`, `label`,
   `status`, optional `detail`, and optional `command`. Commands are shown to the
   user for review and are not executed by the dashboard.
-- `opportunity_summary`: latest-run first-screen projection with scanned and
-  prefilter-matched counts, high new/changed count, alert count, top ranked
-  review cards, all-clear state, diagnostic counts, `decision_counts` for the
-  latest run's new/changed/seen/recurring/expired cards, and a display-oriented
-  `next_action` object with `label`, `detail`, and optional reviewable command.
+- `opportunity_summary`: latest-run first-screen projection with the profile
+  `display_name`, scanned and prefilter-matched counts, high new/changed count,
+  alert count, top ranked review cards, all-clear state, diagnostic counts,
+  `decision_counts` for the latest run's new/changed/seen/recurring/expired
+  cards, and a display-oriented `next_action` object with `label`, `detail`, and
+  optional reviewable command.
   It is built from sanitized review-card projections and run manifests, not raw
   Telegram message bodies. When a run bypassed live scanning through
   `--scan-input`, the scanned and matched counts may fall back to
   `scan_meta.total_messages_collected` so replay/offline validation does not
-  show a misleading `0/0` first-screen summary.
+  show a misleading `0/0` first-screen summary. Dashboard clients should render
+  this as a compact judgment plus bounded funnel/health visualization; the
+  summary is not a license to repeat the full report title or every top card on
+  the first screen.
 - `runs[*].quality`: dashboard run-quality projection with prefilter ratio,
   semantic stage, LLM provider/cache/latency, and report diagnostic counts.
 
@@ -416,6 +456,18 @@ cache-friendly: stable profile/schema/instructions first, incremental scan
 messages last, and a stable cache key per monitor lane when the selected
 provider supports one. [⚠️ 需确认] Cache retention and pricing are
 provider/model-specific.
+
+`report.py` must not pass the full scan metadata sidecar into the extraction
+prompt. The LLM prompt uses a small allowlisted scan summary only: scan date,
+window, source/message counts, failure/incomplete counts, and OCR flags.
+Diagnostic fields such as `source_health`, run timestamps, cutoff times, output
+paths, registry paths, and errors paths stay in artifacts/manifests, not in the
+LLM prompt. Prompt message JSON is also minimized to extraction-relevant fields
+such as `channel`, `id`, `date`, `text`, and resolved origin fields; runtime
+debug fields like `sender_id`, media metadata, prefilter traces, and duplicate
+message refs stay out of the provider request. `agent_extraction_request_v1`
+uses the same minimized projection for `selected_messages` so agent fallback
+work sees the same extraction surface as LLM mode.
 
 For the high-frequency `jobs-fast` lane, keep semantic batches bounded with
 `semantic_max_messages=20` and `semantic_max_tokens=2000`. Larger catch-up or

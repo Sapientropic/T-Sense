@@ -43,6 +43,53 @@ class MonitorTests(unittest.TestCase):
             24,
         )
 
+    def test_report_command_uses_human_readable_report_filenames(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            run_dir = root / "output" / "runs" / "run_20260509T122524Z_a85fdfaa"
+            profile_file = root / "profiles" / "templates" / "jobs.md"
+            profile_file.parent.mkdir(parents=True)
+            profile_file.write_text(
+                '## Report Labels\nreport_title: "Developer Opportunity Signal Report"\n',
+                encoding="utf-8",
+            )
+            cmd = monitor.report_command_for_scan_input(
+                scan_input=root / "scan.jsonl",
+                profile_file=profile_file,
+                run_dir=run_dir,
+                state_dir=root / ".tgcs" / "state",
+                source_registry=None,
+                items_json=None,
+                profile_id="jobs-fast",
+                run_id="run_20260509T122524Z_a85fdfaa",
+            )
+
+        markdown_path = Path(cmd[cmd.index("--output") + 1])
+        html_path = Path(cmd[cmd.index("--html-output") + 1])
+        self.assertEqual(markdown_path.name, "developer-opportunity-signal-report-2026-05-09-1225.md")
+        self.assertEqual(html_path.name, "developer-opportunity-signal-report-2026-05-09-1225.html")
+
+    def test_report_artifact_metadata_has_user_facing_name_and_category(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            report = root / "output" / "runs" / "run_20260509T122524Z_a85fdfaa" / "jobs-fast-signal-report-2026-05-09-1225.html"
+            report.parent.mkdir(parents=True)
+            report.write_text("<html>report</html>", encoding="utf-8")
+
+            with patch.object(monitor, "PROJECT_ROOT", root):
+                artifact = monitor.artifact(
+                    report,
+                    "report_html",
+                    profile_id="jobs-fast",
+                    run_id="run_20260509T122524Z_a85fdfaa",
+                    report_title="Developer Opportunity Signal Report",
+                )
+
+        self.assertEqual(artifact["category"], "reports")
+        self.assertEqual(artifact["format"], "HTML")
+        self.assertEqual(artifact["display_name"], "Developer Opportunity Signal Report")
+        self.assertEqual(artifact["display_path"], "Reports/jobs-fast-signal-report-2026-05-09-1225.html")
+
     def test_source_registry_filter_keeps_legacy_untagged_sources_when_topic_filter_would_empty_it(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -281,6 +328,27 @@ class MonitorTests(unittest.TestCase):
         self.assertEqual(payload["data"]["feedback_count"], 1)
         self.assertEqual(rows[0]["feedback"], "keep")
         self.assertEqual(rows[0]["note"], "")
+
+    def test_feedback_export_default_output_is_grouped(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            db_path = root / ".tgcs" / "tgcs.db"
+            conn = monitor_state.connect(db_path)
+            conn.close()
+
+            stdout = io.StringIO()
+            with patch.object(monitor, "PROJECT_ROOT", root):
+                with patch("sys.stdout", stdout):
+                    exit_code = monitor.main(["feedback-export", "--db", str(db_path), "--format", "json"])
+
+            payload = json.loads(stdout.getvalue())
+            output = root / "output" / "feedback" / "review-feedback.jsonl"
+            output_exists = output.exists()
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["data"]["output_path"], "output/feedback/review-feedback.jsonl")
+        self.assertTrue(output_exists)
 
     def test_prefilter_skips_semantic_stage_without_keyword_match(self):
         with tempfile.TemporaryDirectory() as tmp:
