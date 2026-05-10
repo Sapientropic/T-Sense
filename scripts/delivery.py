@@ -2,8 +2,8 @@
 
 This module deliberately keeps outbound delivery separate from monitor state.
 The monitor can dry-run delivery in tests and CI, while live Telegram Bot API
-calls must be explicitly selected by the caller.  Bot tokens are read from the
-environment and are never accepted as persisted config values.
+calls must be explicitly selected by the caller.  Bot tokens are resolved from
+the environment first, then from the local OS credential store when available.
 """
 
 from __future__ import annotations
@@ -16,9 +16,11 @@ from dataclasses import dataclass
 from typing import Any
 
 from scripts.item_display import display_item_title
+from scripts import local_credentials
 
 
 TELEGRAM_BOT_TOKEN_ENV = "TGCS_TELEGRAM_BOT_TOKEN"
+TELEGRAM_BOT_TOKEN_CREDENTIAL_TARGET = "tgcs.signal-desk.telegram-bot-token"
 
 
 class DeliveryError(Exception):
@@ -45,6 +47,36 @@ class DeliveryAttempt:
             "message_id": self.message_id,
             "error": self.error,
         }
+
+
+@dataclass(frozen=True)
+class TelegramBotToken:
+    token: str
+    source: str
+    updated_at: str | None = None
+
+
+def resolve_telegram_bot_token(
+    *,
+    token_env: str = TELEGRAM_BOT_TOKEN_ENV,
+    credential_target: str = TELEGRAM_BOT_TOKEN_CREDENTIAL_TARGET,
+) -> TelegramBotToken:
+    env_token = os.environ.get(token_env, "").strip()
+    if env_token:
+        return TelegramBotToken(token=env_token, source="environment")
+    if not local_credentials.is_supported():
+        return TelegramBotToken(token="", source="missing")
+    try:
+        stored = local_credentials.read_secret(credential_target)
+    except local_credentials.CredentialStoreError:
+        return TelegramBotToken(token="", source="credential_error")
+    if stored and stored.secret.strip():
+        return TelegramBotToken(
+            token=stored.secret.strip(),
+            source="windows_credential_manager",
+            updated_at=stored.updated_at,
+        )
+    return TelegramBotToken(token="", source="missing")
 
 
 def _clean_text(value: object, *, max_len: int = 240) -> str:
@@ -140,18 +172,18 @@ def send_telegram_bot_message(
             status="dry_run",
         )
 
-    token = os.environ.get(token_env, "").strip()
-    if not token:
+    token_status = resolve_telegram_bot_token(token_env=token_env)
+    if not token_status.token:
         return DeliveryAttempt(
             target_id=target_id,
             target_type="telegram_bot",
             mode=mode,
             ok=False,
             status="token_missing",
-            error=f"Environment variable {token_env} is not set.",
+            error=f"Telegram bot token is not configured. Save it in Signal Desk Settings or set {token_env}.",
         )
 
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    url = f"https://api.telegram.org/bot{token_status.token}/sendMessage"
     body = json.dumps(
         {
             "chat_id": chat_id,

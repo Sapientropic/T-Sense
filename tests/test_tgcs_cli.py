@@ -357,6 +357,7 @@ class TgcsCliTests(unittest.TestCase):
         self.assertIn("dashboard_server.py", cmd[1])
         self.assertIn("--host", cmd)
         self.assertIn("127.0.0.1", cmd)
+        self.assertNotIn("--auto-port", cmd)
 
     def test_dashboard_open_flag_delegates_to_dashboard_server(self):
         tgcs = load_tgcs_module(self)
@@ -376,6 +377,8 @@ class TgcsCliTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         cmd = [str(part) for part in run_mock.call_args.args[0]]
         self.assertIn("--open", cmd)
+        self.assertIn("--auto-port", cmd)
+        self.assertIn("8765", cmd)
 
     def test_dashboard_auto_builds_missing_static_assets_before_serving(self):
         tgcs = load_tgcs_module(self)

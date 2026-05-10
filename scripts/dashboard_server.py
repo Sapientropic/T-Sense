@@ -11,29 +11,37 @@ import mimetypes
 import os
 import re
 import subprocess
+import socket
 import sys
 import tomllib
 import webbrowser
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from pathlib import PurePosixPath
 from threading import Lock
+from urllib import error as urllib_error
 from urllib.parse import unquote, urlparse
+from urllib.request import urlopen
 
 try:
-    from scripts import agent_cli, delivery, monitor_state, source_registry
+    from scripts import agent_cli, delivery, local_credentials, monitor_state, source_registry
 except ModuleNotFoundError:
     _PROJECT_ROOT = str(Path(__file__).resolve().parent.parent)
     if _PROJECT_ROOT not in sys.path:
         sys.path.insert(0, _PROJECT_ROOT)
-    from scripts import agent_cli, delivery, monitor_state, source_registry
+    from scripts import agent_cli, delivery, local_credentials, monitor_state, source_registry
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DESK_HEALTH_SCHEMA_VERSION = "desk_health_v1"
+DESK_APP_ID = "tgcs-signal-desk"
+DESK_VERSION = "0.5.0-alpha.1"
+DESK_AUTO_PORT_END = 8799
 GIT_TIMEOUT_SECONDS = 25
 DESK_ACTION_TIMEOUT_SECONDS = 180
 LOOPBACK_DASHBOARD_HOSTS = {"127.0.0.1", "localhost", "::1"}
@@ -48,6 +56,7 @@ TELEGRAM_LOGIN_CODE_TTL_SECONDS = 300
 DESK_DELIVERY_TARGET_ID = "telegram-bot-default"
 DESK_DELIVERY_ALLOWED_FIELDS = {"chat_id", "enabled"}
 DESK_DELIVERY_TEST_ALLOWED_FIELDS = {"chat_id"}
+DESK_NOTIFICATION_TOKEN_ALLOWED_FIELDS = {"token", "clear"}
 DESK_SOURCE_IMPORT_ALLOWED_FIELDS = {"sources", "topic"}
 DESK_SOURCE_UPDATE_ALLOWED_FIELDS = {"enabled"}
 DESK_SOURCE_TOPIC_ALLOWED_FIELDS = {"topics"}
@@ -86,6 +95,14 @@ class DashboardArtifactError(Exception):
 
 class DashboardDeskActionError(Exception):
     """Raised when a Signal Desk action request is not on the local allowlist."""
+
+
+@dataclass(frozen=True)
+class DashboardServerSelection:
+    url: str
+    port: int
+    server: ThreadingHTTPServer | None
+    reused_existing: bool = False
 
 
 DESK_ACTIONS: tuple[dict, ...] = (
@@ -222,10 +239,10 @@ DESK_ACTIONS: tuple[dict, ...] = (
         "action_id": "live_delivery_human",
         "group": "Human takeover",
         "title": "Live delivery",
-        "detail": "Live Telegram Bot delivery requires an intentional token and chat target outside Desk.",
+        "detail": "Live Telegram Bot delivery requires an intentional chat target and local token in Settings.",
         "run_mode": "needs_human",
         "display_command": "tgcs delivery test telegram-bot --delivery-mode live --chat-id <chat_id>",
-        "next_action": "Configure TGCS_TELEGRAM_BOT_TOKEN and chat id only when you intend to send live messages.",
+        "next_action": "Save the token and chat id in Settings only when you intend to send live messages.",
     },
     {
         "action_id": "schedule_install_human",
@@ -260,6 +277,97 @@ def dashboard_host_warning(host: str) -> str | None:
         "Dashboard host is not loopback. Dashboard state can include local workflow context "
         "and report artifacts may include raw context; only bind this server to a trusted interface."
     )
+
+
+def _browser_host(host: str) -> str:
+    normalized = str(host or "").strip()
+    if normalized in {"", "0.0.0.0"}:
+        return "127.0.0.1"
+    if normalized == "::":
+        return "::1"
+    return normalized
+
+
+def dashboard_url(host: str, port: int) -> str:
+    browser_host = _browser_host(host)
+    if ":" in browser_host and not browser_host.startswith("["):
+        browser_host = f"[{browser_host}]"
+    return f"http://{browser_host}:{port}"
+
+
+def desk_health(*, host: str, port: int) -> dict:
+    return {
+        "schema_version": DESK_HEALTH_SCHEMA_VERSION,
+        "app": DESK_APP_ID,
+        "version": DESK_VERSION,
+        "ok": True,
+        "url": dashboard_url(host, port),
+        "capabilities": [
+            "desk_actions_v1",
+            "desk_telegram_setup_v1",
+            "desk_notification_token_v1",
+            "desk_sources_v1",
+            "desk_scheduler_v1",
+            "dashboard_state_v1",
+        ],
+    }
+
+
+def fetch_compatible_desk_health(host: str, port: int, *, timeout_seconds: float = 0.25) -> dict | None:
+    try:
+        with socket.create_connection((_browser_host(host), port), timeout=0.15):
+            pass
+    except OSError:
+        return None
+    try:
+        with urlopen(f"{dashboard_url(host, port)}/api/desk/health", timeout=timeout_seconds) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (OSError, urllib_error.URLError, TimeoutError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    if payload.get("schema_version") != DESK_HEALTH_SCHEMA_VERSION:
+        return None
+    if payload.get("app") != DESK_APP_ID:
+        return None
+    return payload
+
+
+def select_dashboard_server(
+    *,
+    host: str,
+    port: int,
+    auto_port: bool,
+    handler_cls: type[BaseHTTPRequestHandler] | None = None,
+) -> DashboardServerSelection:
+    if handler_cls is None:
+        handler_cls = DashboardHandler
+    ports = [port]
+    if auto_port:
+        ports.extend(range(port + 1, DESK_AUTO_PORT_END + 1))
+    last_error: OSError | None = None
+    for candidate in ports:
+        if auto_port:
+            health = fetch_compatible_desk_health(host, candidate)
+            if health:
+                return DashboardServerSelection(
+                    url=str(health.get("url") or dashboard_url(host, candidate)),
+                    port=candidate,
+                    server=None,
+                    reused_existing=True,
+                )
+        try:
+            server = ThreadingHTTPServer((host, candidate), handler_cls)
+            return DashboardServerSelection(
+                url=dashboard_url(host, candidate),
+                port=candidate,
+                server=server,
+            )
+        except OSError as exc:
+            last_error = exc
+            if not auto_port:
+                raise
+    raise OSError(f"No available Signal Desk port in {port}-{DESK_AUTO_PORT_END}.") from last_error
 
 
 def is_loopback_address(value: object) -> bool:
@@ -842,6 +950,89 @@ def test_desk_delivery_target(conn, target_id: str, body: dict) -> dict:
         "detail": detail,
         "finished_at": _utc_now(),
     }
+
+
+def _local_notification_token() -> local_credentials.StoredSecret | None:
+    if not local_credentials.is_supported():
+        return None
+    return local_credentials.read_secret(delivery.TELEGRAM_BOT_TOKEN_CREDENTIAL_TARGET)
+
+
+def desk_notification_token_status() -> dict:
+    env_configured = bool(os.environ.get(delivery.TELEGRAM_BOT_TOKEN_ENV, "").strip())
+    local_supported = local_credentials.is_supported()
+    local_configured = False
+    local_updated_at: str | None = None
+    local_error = ""
+    if local_supported:
+        try:
+            stored = _local_notification_token()
+        except local_credentials.CredentialStoreError as exc:
+            stored = None
+            local_error = str(exc)
+        local_configured = bool(stored and stored.secret.strip())
+        local_updated_at = stored.updated_at if stored else None
+
+    source = "environment" if env_configured else "windows_credential_manager" if local_configured else "missing"
+    configured = env_configured or local_configured
+    if env_configured:
+        detail = "Telegram bot token is configured from the environment. Environment wins over local storage."
+    elif local_configured:
+        detail = "Telegram bot token is saved in Windows Credential Manager."
+    elif local_supported:
+        detail = "Telegram bot token is not configured."
+    else:
+        detail = "[⚠️ 需确认] Local secure token storage currently supports Windows Credential Manager only."
+    return {
+        "schema_version": "desk_notification_token_status_v1",
+        "configured": configured,
+        "source": source,
+        "updated_at": None if env_configured else local_updated_at,
+        "env_configured": env_configured,
+        "local_store_supported": local_supported,
+        "local_store_configured": local_configured,
+        "can_save": local_supported,
+        "can_clear": local_supported and local_configured,
+        "platform": sys.platform,
+        "detail": detail if not local_error else f"{detail} {local_error}",
+    }
+
+
+def _clean_notification_token(value: object) -> str:
+    token = str(value or "").strip()
+    if not token:
+        raise ValueError("Enter a Telegram bot token before saving.")
+    if len(token) > 512:
+        raise ValueError("Telegram bot token is too long.")
+    if any(ord(char) < 32 for char in token) or any(char.isspace() for char in token):
+        raise ValueError("Telegram bot token cannot contain spaces or control characters.")
+    if not re.fullmatch(r"\d{5,16}:[A-Za-z0-9_-]{24,128}", token):
+        raise ValueError("Telegram bot token should look like 123456:ABC_def from BotFather.")
+    return token
+
+
+def update_desk_notification_token(body: dict) -> dict:
+    unexpected = sorted(str(key) for key in body.keys() if key not in DESK_NOTIFICATION_TOKEN_ALLOWED_FIELDS)
+    if unexpected:
+        raise ValueError(f"Unsupported notification token field: {', '.join(unexpected)}")
+    if not local_credentials.is_supported():
+        raise ValueError("[⚠️ 需确认] Saving bot tokens in Signal Desk currently requires Windows Credential Manager.")
+    clear = body.get("clear")
+    raw_token = body.get("token")
+    if clear is not None and not isinstance(clear, bool):
+        raise ValueError("Notification token clear value must be true or false.")
+    if clear and raw_token:
+        raise ValueError("Save or clear the notification token, not both.")
+    if clear:
+        local_credentials.delete_secret(delivery.TELEGRAM_BOT_TOKEN_CREDENTIAL_TARGET)
+    else:
+        token = _clean_notification_token(raw_token)
+        local_credentials.write_secret(
+            delivery.TELEGRAM_BOT_TOKEN_CREDENTIAL_TARGET,
+            token,
+            username="Telegram bot token",
+        )
+    return desk_notification_token_status()
 
 
 def _reject_unexpected_source_fields(body: dict) -> None:
@@ -1609,6 +1800,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
         try:
+            if parsed.path == "/api/desk/health":
+                DashboardHandler._require_loopback_access(self, "Signal Desk health")
+                server_host, server_port = self.server.server_address[:2]
+                self._json(HTTPStatus.OK, desk_health(host=str(server_host), port=int(server_port)))
+                return
             if parsed.path == "/api/desk/actions":
                 self._json(HTTPStatus.OK, desk_actions())
                 return
@@ -1623,6 +1819,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
             if parsed.path == "/api/desk/scheduler-status":
                 DashboardHandler._require_loopback_access(self, "Scheduler status")
                 self._json(HTTPStatus.OK, {"ok": True, "scheduler": desk_scheduler_status()})
+                return
+            if parsed.path == "/api/desk/notification-token/status":
+                DashboardHandler._require_loopback_access(self, "Notification token status")
+                self._json(HTTPStatus.OK, {"ok": True, "token": desk_notification_token_status()})
                 return
             if parsed.path == "/api/state":
                 with close_after_use(self._connect()) as conn:
@@ -1668,6 +1868,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
             if parsed.path == "/api/desk/telegram-login/cancel":
                 DashboardHandler._require_loopback_access(self, "Telegram setup")
                 self._json(HTTPStatus.OK, {"ok": True, "telegram": telegram_cancel_login()})
+                return
+            if parsed.path == "/api/desk/notification-token":
+                DashboardHandler._require_loopback_access(self, "Notification token settings")
+                self._json(HTTPStatus.OK, {"ok": True, "token": update_desk_notification_token(body)})
                 return
             if parsed.path.startswith("/api/desk/delivery-targets/"):
                 DashboardHandler._require_loopback_access(self, "Notification settings")
@@ -1842,6 +2046,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--db", default=".tgcs/tgcs.db")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument(
+        "--auto-port",
+        action="store_true",
+        help="Use an existing compatible Signal Desk or try the next free port through 8799.",
+    )
     parser.add_argument("--static-dir", default="dashboard/dist")
     parser.add_argument("--open", dest="open_browser", action="store_true", help="Open Signal Desk in the default browser.")
     agent_cli.add_format_argument(parser)
@@ -1859,11 +2068,30 @@ def main(argv: list[str] | None = None) -> int:
         static_dir = PROJECT_ROOT / static_dir
     DashboardHandler.db_path = db_path
     DashboardHandler.static_dir = static_dir
-    server = ThreadingHTTPServer((args.host, args.port), DashboardHandler)
-    url = f"http://{args.host}:{args.port}"
+    try:
+        selection = select_dashboard_server(host=args.host, port=args.port, auto_port=args.auto_port)
+    except OSError as exc:
+        message = f"Signal Desk could not use port {args.port}: {exc}"
+        agent_cli.emit_error(
+            args,
+            code="dashboard_port_unavailable",
+            message=message,
+            retryable=True,
+            next_step=(
+                f"Close the other service on port {args.port}, pass --port with a free port, "
+                "or omit --port so Signal Desk can auto-select one."
+            ),
+        )
+        return agent_cli.EXIT_RUNTIME
+    url = selection.url
     warning = dashboard_host_warning(str(args.host))
     if agent_cli.is_json_format(args):
-        payload = {"url": url, "db_path": str(db_path)}
+        payload = {
+            "url": url,
+            "db_path": str(db_path),
+            "port": selection.port,
+            "reused_existing": selection.reused_existing,
+        }
         if warning:
             payload["warning"] = warning
         agent_cli.print_json(
@@ -1872,12 +2100,20 @@ def main(argv: list[str] | None = None) -> int:
     else:
         if warning:
             print(f"Warning: {warning}", file=sys.stderr)
-        print(f"TGCS dashboard listening on {url}")
+        if selection.reused_existing:
+            print(f"Signal Desk is already running on {url}")
+        else:
+            print(f"TGCS dashboard listening on {url}")
         if args.open_browser:
             if webbrowser.open(url, new=2):
                 print("Opened Signal Desk in your browser.")
             else:
                 print(f"Open Signal Desk manually: {url}", file=sys.stderr)
+    if selection.reused_existing:
+        return agent_cli.EXIT_SUCCESS
+    server = selection.server
+    if server is None:
+        raise AssertionError("Signal Desk server selection did not include a server.")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

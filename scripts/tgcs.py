@@ -650,10 +650,12 @@ def run_dashboard(args: argparse.Namespace) -> int:
         "--host",
         args.host,
         "--port",
-        str(args.port),
+        str(args.port or 8765),
         "--db",
         _root_path(args.db or f"{LOCAL_DIR}/tgcs.db"),
     ]
+    if args.port is None:
+        cmd.append("--auto-port")
     if args.static_dir:
         cmd.extend(["--static-dir", _root_path(args.static_dir)])
     if args.open:
@@ -885,7 +887,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     dashboard = subparsers.add_parser("dashboard", help="Serve the local review dashboard.")
     dashboard.add_argument("--host", default="127.0.0.1")
-    dashboard.add_argument("--port", type=int, default=8765)
+    dashboard.add_argument(
+        "--port",
+        type=int,
+        default=None,
+        help="Strict port. Omit to reuse Signal Desk or auto-select 8765-8799.",
+    )
     dashboard.add_argument("--db")
     dashboard.add_argument("--static-dir")
     dashboard.add_argument("--no-build", action="store_true", help="Do not auto-build dashboard/dist before serving.")

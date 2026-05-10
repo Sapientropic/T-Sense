@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from scripts import delivery
 
@@ -49,6 +50,27 @@ class DeliveryTests(unittest.TestCase):
 
         self.assertTrue(attempt.ok)
         self.assertEqual(attempt.status, "dry_run")
+
+    def test_token_resolution_prefers_environment_over_credential_store(self):
+        with patch.dict("os.environ", {delivery.TELEGRAM_BOT_TOKEN_ENV: "env-token"}):
+            with patch.object(delivery.local_credentials, "is_supported", return_value=True):
+                with patch.object(delivery.local_credentials, "read_secret") as read_secret:
+                    token = delivery.resolve_telegram_bot_token()
+
+        self.assertEqual(token.token, "env-token")
+        self.assertEqual(token.source, "environment")
+        read_secret.assert_not_called()
+
+    def test_token_resolution_uses_windows_credential_store_when_env_missing(self):
+        stored = delivery.local_credentials.StoredSecret(secret="stored-token", updated_at="2026-05-10T00:00:00Z")
+        with patch.dict("os.environ", {}, clear=True):
+            with patch.object(delivery.local_credentials, "is_supported", return_value=True):
+                with patch.object(delivery.local_credentials, "read_secret", return_value=stored):
+                    token = delivery.resolve_telegram_bot_token()
+
+        self.assertEqual(token.token, "stored-token")
+        self.assertEqual(token.source, "windows_credential_manager")
+        self.assertEqual(token.updated_at, "2026-05-10T00:00:00Z")
 
 
 if __name__ == "__main__":

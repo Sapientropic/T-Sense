@@ -228,6 +228,63 @@ class DashboardServerGitTests(unittest.TestCase):
         self.assertTrue(dashboard_server.is_loopback_address("::ffff:127.0.0.1"))
         self.assertFalse(dashboard_server.is_loopback_address("192.168.1.10"))
 
+    def test_select_dashboard_server_reuses_existing_compatible_instance(self):
+        with patch.object(
+            dashboard_server,
+            "fetch_compatible_desk_health",
+            return_value={
+                "schema_version": "desk_health_v1",
+                "app": "tgcs-signal-desk",
+                "url": "http://127.0.0.1:8765",
+            },
+        ):
+            with patch.object(dashboard_server, "ThreadingHTTPServer") as server_mock:
+                selection = dashboard_server.select_dashboard_server(
+                    host="127.0.0.1",
+                    port=8765,
+                    auto_port=True,
+                    handler_cls=dashboard_server.BaseHTTPRequestHandler,
+                )
+
+        server_mock.assert_not_called()
+        self.assertTrue(selection.reused_existing)
+        self.assertEqual(selection.url, "http://127.0.0.1:8765")
+
+    def test_select_dashboard_server_auto_port_skips_incompatible_occupied_port(self):
+        calls = []
+
+        def fake_server(address, handler_cls):
+            calls.append(address[1])
+            if address[1] == 8765:
+                raise OSError("port in use")
+            return object()
+
+        with patch.object(dashboard_server, "fetch_compatible_desk_health", return_value=None):
+            with patch.object(dashboard_server, "ThreadingHTTPServer", side_effect=fake_server):
+                selection = dashboard_server.select_dashboard_server(
+                    host="127.0.0.1",
+                    port=8765,
+                    auto_port=True,
+                    handler_cls=dashboard_server.BaseHTTPRequestHandler,
+                )
+
+        self.assertEqual(calls, [8765, 8766])
+        self.assertFalse(selection.reused_existing)
+        self.assertEqual(selection.port, 8766)
+
+    def test_select_dashboard_server_explicit_port_stays_strict(self):
+        with patch.object(dashboard_server, "fetch_compatible_desk_health") as health_mock:
+            with patch.object(dashboard_server, "ThreadingHTTPServer", side_effect=OSError("port in use")):
+                with self.assertRaises(OSError):
+                    dashboard_server.select_dashboard_server(
+                        host="127.0.0.1",
+                        port=8765,
+                        auto_port=False,
+                        handler_cls=dashboard_server.BaseHTTPRequestHandler,
+                    )
+
+        health_mock.assert_not_called()
+
     def test_sensitive_desk_setup_endpoint_requires_loopback_client(self):
         class FakeHandler:
             path = "/api/desk/telegram-status"
@@ -880,6 +937,66 @@ class DashboardServerGitTests(unittest.TestCase):
                     )
             finally:
                 conn.close()
+
+    def test_notification_token_status_prefers_env_without_echoing_token(self):
+        stored = dashboard_server.local_credentials.StoredSecret(
+            secret="local-token",
+            updated_at="2026-05-10T00:00:00Z",
+        )
+        with patch.dict("os.environ", {dashboard_server.delivery.TELEGRAM_BOT_TOKEN_ENV: "env-token"}):
+            with patch.object(dashboard_server.local_credentials, "is_supported", return_value=True):
+                with patch.object(dashboard_server.local_credentials, "read_secret", return_value=stored):
+                    status = dashboard_server.desk_notification_token_status()
+
+        self.assertTrue(status["configured"])
+        self.assertEqual(status["source"], "environment")
+        rendered = json.dumps(status, ensure_ascii=False)
+        self.assertNotIn("env-token", rendered)
+        self.assertNotIn("local-token", rendered)
+
+    def test_notification_token_save_and_clear_uses_credential_store_without_echoing_secret(self):
+        store: dict[str, dashboard_server.local_credentials.StoredSecret] = {}
+
+        def fake_write(target_name, secret, *, username="Signal Desk"):
+            store[target_name] = dashboard_server.local_credentials.StoredSecret(
+                secret=secret,
+                updated_at="2026-05-10T00:00:00Z",
+            )
+
+        def fake_delete(target_name):
+            store.pop(target_name, None)
+
+        def fake_read(target_name):
+            return store.get(target_name)
+
+        with patch.dict("os.environ", {}, clear=True):
+            with patch.object(dashboard_server.local_credentials, "is_supported", return_value=True):
+                with patch.object(dashboard_server.local_credentials, "write_secret", side_effect=fake_write):
+                    with patch.object(dashboard_server.local_credentials, "delete_secret", side_effect=fake_delete):
+                        with patch.object(dashboard_server.local_credentials, "read_secret", side_effect=fake_read):
+                            saved = dashboard_server.update_desk_notification_token(
+                                {"token": "123456:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef12"}
+                            )
+                            cleared = dashboard_server.update_desk_notification_token({"clear": True})
+
+        self.assertTrue(saved["configured"])
+        self.assertEqual(saved["source"], "windows_credential_manager")
+        self.assertFalse(cleared["configured"])
+        self.assertNotIn("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef12", json.dumps(saved, ensure_ascii=False))
+
+    def test_notification_token_update_rejects_command_fields(self):
+        with patch.object(dashboard_server.local_credentials, "is_supported", return_value=True):
+            with self.assertRaises(ValueError):
+                dashboard_server.update_desk_notification_token(
+                    {"token": "123456:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef12", "command": "tgcs monitor run"}
+                )
+
+    def test_notification_token_update_rejects_invalid_token_shapes(self):
+        with patch.object(dashboard_server.local_credentials, "is_supported", return_value=True):
+            for bad_token in ["", "bad-token", "123:short", "123456:has space"]:
+                with self.subTest(bad_token=bad_token):
+                    with self.assertRaises(ValueError):
+                        dashboard_server.update_desk_notification_token({"token": bad_token})
 
     def test_desk_source_import_preview_does_not_write_default_registry(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1692,6 +1809,51 @@ class DashboardServerGitTests(unittest.TestCase):
 
         self.assertEqual(handler.status, HTTPStatus.BAD_REQUEST)
         self.assertEqual(handler.payload, {"ok": False, "error": "state failed"})
+
+    def test_health_endpoint_returns_json_before_static_fallback(self):
+        class FakeServer:
+            server_address = ("127.0.0.1", 8765)
+
+        class FakeHandler:
+            path = "/api/desk/health"
+            status = None
+            payload = None
+            server = FakeServer()
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        handler = FakeHandler()
+        dashboard_server.DashboardHandler.do_GET(handler)
+
+        self.assertEqual(handler.status, HTTPStatus.OK)
+        self.assertEqual(handler.payload["schema_version"], "desk_health_v1")
+        self.assertEqual(handler.payload["app"], "tgcs-signal-desk")
+        self.assertIn("desk_notification_token_v1", handler.payload["capabilities"])
+
+    def test_notification_token_status_endpoint_requires_loopback_and_returns_status(self):
+        class FakeHandler:
+            path = "/api/desk/notification-token/status"
+            client_address = ("127.0.0.1", 12345)
+            status = None
+            payload = None
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        with patch.object(
+            dashboard_server,
+            "desk_notification_token_status",
+            return_value={"schema_version": "desk_notification_token_status_v1", "configured": False},
+        ) as status_mock:
+            handler = FakeHandler()
+            dashboard_server.DashboardHandler.do_GET(handler)
+
+        status_mock.assert_called_once_with()
+        self.assertEqual(handler.status, HTTPStatus.OK)
+        self.assertFalse(handler.payload["token"]["configured"])
 
     def test_profile_patch_revert_endpoint_calls_monitor_state(self):
         class FakeConnection:
