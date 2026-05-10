@@ -312,3 +312,32 @@ The highest current blockers are interaction/information-architecture problems, 
 - Hook enforcement: manual.
 - Artifact hygiene: generated review packets and screenshots stay under `output/quality-review/`.
 - Next: commit checkpoint, run Qwen process-integrity review, then continue to the next high-impact slice.
+
+## Iteration 10 - Claude Fallback Findings
+
+- Target: incorporate the fallback reviewer report that Claude Code wrote to `C:\Users\Administrator\.claude\plans\fallback-gemini-reviewer-vast-nest.md` instead of returning through Orchestra.
+- Changes:
+  - Multi-run evidence report links now say `Latest report · 1 of N runs`, avoiding the false impression that one report contains all clustered cards/alerts.
+  - Info-only diagnostics no longer escalate to the warning/attention group.
+  - Run health success rate no longer treats running/pending scans as failed.
+  - Mobile Runs increased compact timeline readability and strengthened evidence group separation.
+  - Mobile Runs hides repeated metadata/no-report lines so actual Report actions appear earlier.
+- Verification:
+  - `npm test -- --run src/components/runs.test.tsx`: 1 file / 9 tests passed.
+  - `npm test -- --run`: 11 files / 81 tests passed.
+  - `npm run build`: passed.
+  - Real-browser screenshots and metrics: `output/quality-review/20260511-0328-claude-fallback-fix/`.
+  - Mobile Runs scroll height is 945; no horizontal overflow; mobile small-target count remains zero.
+- External review:
+  - Claude fallback report was useful but hidden in the local Claude plans folder; accepted P0/P1 findings and remediated them.
+- Triage:
+  - Accepted: aggregate counts require explicit report scope.
+  - Accepted: info diagnostics should not be red attention work.
+  - Deferred: global-normalized count bars remain P2 unless later review says they mislead in real data.
+- Task state: checkpoint ready; Qwen process-integrity review pending.
+- `needs_human`: final visual/taste acceptance remains user-owned.
+- Residual risk: mobile Review filter density and Settings maze remain open.
+- Memory closeout: pending.
+- Hook enforcement: manual.
+- Artifact hygiene: no Claude plan file was copied into project docs; this log keeps only the actionable summary.
+- Next: commit checkpoint and run process-integrity review.

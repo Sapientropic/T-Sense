@@ -80,7 +80,7 @@ export function RunsView({ runs }: { runs: Run[] }) {
       <div className="run-list-head">
         <strong>Recent Evidence</strong>
         <span>
-          Grouped latest {visibleRunCount} of {runs.length}
+          {visibleRunCount} recent · {runs.length} total
         </span>
       </div>
       <div className="run-evidence-groups">
@@ -145,7 +145,7 @@ function RunClusterRow({ cluster }: { cluster: RunEvidenceCluster }) {
         >
           <ExternalLink size={14} />
           <span>{artifactShortLabel(artifact)}</span>
-          <small>{artifactShortDetail(artifact, run)}</small>
+          <small>{cluster.runs.length === 1 ? artifactShortDetail(artifact, run) : `Latest report · 1 of ${cluster.runs.length} runs`}</small>
         </a>
       ) : (
         <span className="run-report-missing">No report</span>
@@ -179,9 +179,11 @@ function RunHealthChart({ runs }: { runs: Run[] }) {
   const totalRuns = recentRuns.length;
   const completeRuns = recentRuns.filter((run) => run.status.toLowerCase() === "complete").length;
   const failedRuns = recentRuns.filter((run) => run.status.toLowerCase() === "failed").length;
+  const runningRuns = recentRuns.filter((run) => ["running", "pending"].includes(run.status.toLowerCase())).length;
   const cards = recentRuns.reduce((sum, run) => sum + (run.review_card_count ?? 0), 0);
   const alerts = recentRuns.reduce((sum, run) => sum + (run.alert_count ?? 0), 0);
-  const successRate = totalRuns ? completeRuns / totalRuns : 0;
+  const settledRuns = completeRuns + failedRuns;
+  const successRate = settledRuns ? completeRuns / settledRuns : 0;
   const decision = buildRunHealthDecision(recentRuns);
   return (
     <div className="run-health-chart" aria-label="Recent run health by day">
@@ -192,6 +194,7 @@ function RunHealthChart({ runs }: { runs: Run[] }) {
         <small>
           {completeRuns} ok / {failedRuns} failed
         </small>
+        {runningRuns > 0 && <small>{runningRuns} in progress</small>}
         <small>
           {cards} cards / {alerts} alerts
         </small>
@@ -304,7 +307,7 @@ export function buildRunOutcome(run: Run): RunOutcome {
   }
   if (diagnosticFailures > 0 || diagnosticWarnings > 0 || diagnosticCount > 0) {
     return {
-      tone: diagnosticFailures > 0 ? "danger" : "warn",
+      tone: diagnosticFailures > 0 ? "danger" : diagnosticWarnings > 0 ? "warn" : "info",
       title: formatRunDiagnostics(run.quality),
       detail: formatRunDiagnosticAction(run.quality) || "Open report diagnostics.",
     };

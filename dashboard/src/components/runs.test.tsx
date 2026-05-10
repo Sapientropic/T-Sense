@@ -106,6 +106,17 @@ describe("run health decision", () => {
     expect(clusters[0].outcome.title).toBe("OCR media skipped");
   });
 
+  it("does not escalate info-only diagnostics into the attention group", () => {
+    const groups = buildRunEvidenceGroups([
+      run({
+        run_id: "run-1",
+        quality: { diagnostic_count: 1, diagnostic_info_count: 1, top_diagnostic_code: "missing_scan_metadata" },
+      }),
+    ]);
+    expect(buildRunOutcome(groups[0].runs[0])).toMatchObject({ tone: "info" });
+    expect(groups.map((group) => group.key)).toEqual(["clean"]);
+  });
+
   it("keeps the mobile timeline daily while compacting each day", () => {
     const timeline = buildCompactRunTimeline([
       { key: "2026-05-04", label: "05-04", runs: 0, complete: 0, failed: 0, cards: 0, alerts: 0 },
