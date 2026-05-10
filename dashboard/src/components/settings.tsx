@@ -301,6 +301,7 @@ function SourceLibraryPanel({
   const [query, setQuery] = useState("");
   const [selectedTopic, setSelectedTopic] = useState("");
   const [showAllTopics, setShowAllTopics] = useState(false);
+  const [showSourceList, setShowSourceList] = useState(false);
   const [visibleCount, setVisibleCount] = useState(SOURCE_LIBRARY_PAGE_SIZE);
   const filteredSources = filterDeskSourcesByQuery(sources, query, selectedTopic);
   const visibleSources = paginatedDeskSources(filteredSources, visibleCount);
@@ -309,7 +310,10 @@ function SourceLibraryPanel({
   const topicPreview = showAllTopics ? topics : topics.slice(0, 12);
   const hiddenTopicCount = Math.max(0, topics.length - topicPreview.length);
   const hasFilters = Boolean(query.trim() || selectedTopic);
-  const countLabel = sourceLibraryCountLabel(visibleSources.length, filteredSources.length, hasFilters);
+  const listVisible = showSourceList || hasFilters;
+  const countLabel = listVisible
+    ? sourceLibraryCountLabel(visibleSources.length, filteredSources.length, hasFilters)
+    : `${filteredSources.length} saved; search or manage when needed`;
   useEffect(() => {
     if (selectedTopic && !sources.some((source) => source.topics.includes(selectedTopic))) {
       setSelectedTopic("");
@@ -396,6 +400,20 @@ function SourceLibraryPanel({
       )}
       {isLoading ? (
         <InlineEmpty title="Loading saved sources" />
+      ) : sources.length && !listVisible ? (
+        <div className="source-library-gate" aria-label="Saved source list collapsed">
+          <div>
+            <strong>{library?.source_count ?? sources.length} saved sources</strong>
+            <span>Use search for one source, or open the list only when you need bulk cleanup.</span>
+          </div>
+          <button
+            className="text-button secondary"
+            onClick={() => setShowSourceList(true)}
+            type="button"
+          >
+            Show first {SOURCE_LIBRARY_PAGE_SIZE}
+          </button>
+        </div>
       ) : sources.length ? (
         <div className="source-library-list">
           {visibleSources.map((source) => (

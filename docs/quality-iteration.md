@@ -166,3 +166,27 @@ The dashboard has a strong visual language, but Settings currently fails the ord
 - Hook enforcement: manual.
 - Artifact hygiene: screenshots and audit JSON stay in the timestamped evidence folder.
 - Next: Settings long-list disclosure and source-management copy.
+
+## Iteration 5 - Settings Source List Progressive Disclosure
+
+- Target: stop Saved Sources from becoming a default 82-row management wall on the ordinary Settings path.
+- Changes:
+  - `dashboard/src/components/settings.tsx`: Saved Sources now defaults to summary/search plus a deliberate "Show first 8" action. Search or topic filters still reveal matching rows immediately.
+  - `dashboard/src/styles/settings/sources.css` and `dashboard/src/styles/responsive.css`: added a compact saved-source gate with mobile-safe layout.
+- Verification:
+  - `npm test -- --run`: 10 files / 71 tests passed.
+  - `npm run build`: passed.
+  - Real-browser screenshots and metrics: `output/quality-review/20260511-0305/`.
+  - Mobile Start / Review / Runs / Settings: no horizontal overflow and zero small-target findings.
+- External review:
+  - Addresses reviewer A/B complaint that Settings opened as a source-management wall instead of an app-user task surface.
+- Triage:
+  - Accepted: source rows should be available on demand, not forced into the first Settings pass.
+  - Preserved: search, topic filtering, and the first-page management list remain one click or one typed query away.
+- Task state: checkpoint ready.
+- `needs_human`: final taste acceptance remains user-owned.
+- Residual risk: the 20260511-0300 screenshot run caught a transient local API error; 20260511-0305 re-run was healthy and is the evidence for this slice.
+- Memory closeout: pending.
+- Hook enforcement: manual.
+- Artifact hygiene: invalid transient-error screenshots kept only as raw evidence; use 0305 as current visual reference.
+- Next: desktop compact-control polish and local API error-state clarity.

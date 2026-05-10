@@ -552,6 +552,14 @@
     justify-items: stretch;
   }
 
+  .source-library-gate {
+    grid-template-columns: 1fr;
+  }
+
+  .source-library-gate .text-button {
+    width: 100%;
+  }
+
   .source-library-side .text-button {
     width: 100%;
   }

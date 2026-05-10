@@ -209,6 +209,41 @@
   min-width: 0;
 }
 
+.source-library-gate {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+  padding: 12px;
+  border: 1px dashed var(--wash-paper-18);
+  background: color-mix(in oklch, var(--ink) 28%, transparent);
+}
+
+.source-library-gate > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.source-library-gate strong,
+.source-library-gate span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.source-library-gate strong {
+  color: var(--paper);
+  font-size: 13px;
+}
+
+.source-library-gate span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: var(--body-weight);
+  line-height: 1.35;
+}
+
 .source-library-more {
   justify-content: center;
   min-height: 44px;
