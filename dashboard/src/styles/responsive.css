@@ -375,6 +375,27 @@
     grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 
+  .settings-task-switch {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .settings-task-switch button {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    min-height: 54px;
+    padding: 7px 5px;
+    text-align: center;
+  }
+
+  .settings-task-switch strong {
+    font-size: 22px;
+  }
+
+  .settings-task-switch small {
+    display: none;
+  }
+
   .tab {
     grid-template-columns: 1fr;
     justify-items: center;

@@ -43,6 +43,8 @@ const SOURCE_HEAT_LIMIT = 72;
 const SOURCE_ACTION_LIMIT = 6;
 export const SOURCE_LIBRARY_PAGE_SIZE = 8;
 
+type SettingsTask = "sources" | "notifications" | "learning";
+
 export function SettingsView({
   targets,
   sourceStats,
@@ -99,11 +101,13 @@ export function SettingsView({
   onFocusHandled?: () => void;
 }) {
   const notificationsPanelRef = useRef<HTMLDivElement | null>(null);
+  const [activeTask, setActiveTask] = useState<SettingsTask>("sources");
 
   useEffect(() => {
     if (focusTarget !== "notifications") {
       return;
     }
+    setActiveTask("notifications");
     const panel = notificationsPanelRef.current;
     if (!panel) {
       return;
@@ -117,7 +121,18 @@ export function SettingsView({
 
   return (
     <section className="settings-workbench" aria-label="Settings workspace">
-      <section className="settings-section settings-section-sources" aria-label="Sources settings">
+      <SettingsTaskSwitch
+        activeTask={activeTask}
+        feedbackCount={feedbackSummary?.exportable_count ?? 0}
+        notificationCount={targets.length}
+        onSelect={setActiveTask}
+        sourceCount={sourceLibrary?.source_count ?? sourceStats.length}
+      />
+      <section
+        className="settings-section settings-section-sources"
+        aria-label="Sources settings"
+        data-active={activeTask === "sources" ? "true" : "false"}
+      >
         <div className="settings-grid sources-settings-grid">
           <SourceImportPanel
             busy={busy}
@@ -151,7 +166,11 @@ export function SettingsView({
         </details>
       </section>
 
-      <section className="settings-section settings-section-notifications" aria-label="Notifications settings">
+      <section
+        className="settings-section settings-section-notifications"
+        aria-label="Notifications settings"
+        data-active={activeTask === "notifications" ? "true" : "false"}
+      >
         <div className="table-section delivery-targets-panel" ref={notificationsPanelRef} tabIndex={-1} aria-label="Notifications">
           <PanelHeader icon={<Bell size={18} />} title="Notifications" count={targets.length} />
           <NotificationTokenPanel
@@ -180,7 +199,11 @@ export function SettingsView({
         </div>
       </section>
 
-      <section className="settings-section settings-section-feedback" aria-label="Feedback settings">
+      <section
+        className="settings-section settings-section-feedback"
+        aria-label="Feedback settings"
+        data-active={activeTask === "learning" ? "true" : "false"}
+      >
         <LearningPanel
           busy={busy}
           clearFeedback={clearFeedback}
@@ -192,6 +215,42 @@ export function SettingsView({
         />
       </section>
     </section>
+  );
+}
+
+function SettingsTaskSwitch({
+  activeTask,
+  sourceCount,
+  notificationCount,
+  feedbackCount,
+  onSelect,
+}: {
+  activeTask: SettingsTask;
+  sourceCount: number;
+  notificationCount: number;
+  feedbackCount: number;
+  onSelect: (task: SettingsTask) => void;
+}) {
+  const tasks: Array<{ id: SettingsTask; label: string; count: number; detail: string }> = [
+    { id: "sources", label: "Sources", count: sourceCount, detail: "Add and manage channels" },
+    { id: "notifications", label: "Notify", count: notificationCount, detail: "Token and delivery" },
+    { id: "learning", label: "Learning", count: feedbackCount, detail: "Export feedback" },
+  ];
+  return (
+    <div className="settings-task-switch" aria-label="Settings task switcher">
+      {tasks.map((task) => (
+        <button
+          aria-pressed={activeTask === task.id}
+          key={task.id}
+          onClick={() => onSelect(task.id)}
+          type="button"
+        >
+          <span>{task.label}</span>
+          <strong>{task.count}</strong>
+          <small>{task.detail}</small>
+        </button>
+      ))}
+    </div>
   );
 }
 

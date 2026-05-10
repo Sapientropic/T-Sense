@@ -24,7 +24,7 @@ Current truth for the 2026-05-11 quality loop. Product rules stay in `.frontend-
 
 Cannot claim acceptance readiness yet.
 
-The highest current blockers are interaction/information-architecture problems, not build or test failures: desktop Review can become a one-card island, mobile Runs compresses too much timeline information into 390px, Recent Evidence repeats near-identical rows, mobile Review still has a filter/action density problem, and Settings remains a long configuration maze.
+The highest current blockers are interaction/information-architecture problems, not build or test failures. Runs evidence and Settings have been materially reduced, but mobile Review still has a filter/action density problem and Settings still needs reviewer pressure before it can be claimed as solved.
 
 ## Repair Roadmap
 
@@ -48,10 +48,10 @@ The highest current blockers are interaction/information-architecture problems, 
    - After each slice: rebuild or typecheck, rerun focused tests, recapture screenshots, and triage reviewer reports.
    - Commit checkpoint when a slice is coherent and verified enough to roll back.
 
-5. Current next slice - Runs information surface:
-   - Replace the mobile seven-label day strip with a readable compact health summary.
-   - Group and label recent run evidence so repeated profile/date rows do not look like noise.
-   - Preserve report access, but make the user's next decision visible before artifact links.
+5. Current next slice - mobile Review density:
+   - Reduce the Review filter/action wall on 390px without hiding the user's next useful action.
+   - Keep desktop backlog context visible, but avoid repeating the same counts in multiple places.
+   - Re-run real screenshots and KIMI review before claiming UX quality.
 
 ## Iteration 0 - Ground Truth And Plan
 
@@ -271,10 +271,11 @@ The highest current blockers are interaction/information-architecture problems, 
 - External review:
   - Orchestra/KIMI task `badd817414f0` rejected the mobile timeline and mobile Evidence cut-off as P0.
   - Gemini task `852700f86744` failed with provider rate limit; it is not counted as a pass.
-  - Claude fallback task `673d63a4fdcf` returned no actionable findings; it is not counted as a meaningful product review.
+  - Claude fallback task `673d63a4fdcf` returned only a generic Orchestra result; the useful report was later recovered from the local Claude plans folder and handled in Iteration 10.
 - Triage:
   - Accepted: grouping without clustering was insufficient; repeated OCR rows still created noise, so the same slice was tightened before checkpoint.
   - Accepted: diagnostic labels outrank aggregate alert volume, so `OCR media skipped` remains the row title even when the cluster includes alert candidates.
+  - Rejected by KIMI: the segmented mobile timeline approach destroyed daily temporal structure; Iteration 9 reverted/reworked it into per-day compact buckets.
 - Task state: superseded by Iteration 9 remediation.
 - `needs_human`: final visual/taste acceptance remains user-owned.
 - Residual risk: Review single-card dead space, mobile Review filter density, and Settings maze remain outside this slice.
@@ -301,6 +302,7 @@ The highest current blockers are interaction/information-architecture problems, 
   - Mobile Start / Review / Runs / Settings: no horizontal overflow and zero small-target findings.
 - External review:
   - KIMI findings were accepted and remediated; process-integrity review still pending.
+  - Qwen later noted that this checkpoint also included desktop Review backlog-map work; this was useful but not strictly part of KIMI Runs remediation.
 - Triage:
   - Accepted: previous `compact timeline segments` wording was overclaiming; the UI now keeps daily temporal structure.
   - Accepted: Report access must be visible before decorative/count details on mobile.
@@ -330,14 +332,42 @@ The highest current blockers are interaction/information-architecture problems, 
   - Mobile Runs scroll height is 945; no horizontal overflow; mobile small-target count remains zero.
 - External review:
   - Claude fallback report was useful but hidden in the local Claude plans folder; accepted P0/P1 findings and remediated them.
+  - Qwen process-integrity task `a48f01568526` found no P0 and gave a conditional go, but required the Iteration 8/10 Claude fallback contradiction to be corrected.
 - Triage:
   - Accepted: aggregate counts require explicit report scope.
   - Accepted: info diagnostics should not be red attention work.
   - Deferred: global-normalized count bars remain P2 unless later review says they mislead in real data.
-- Task state: checkpoint ready; Qwen process-integrity review pending.
+- Task state: checkpoint ready; Qwen process-integrity review later gave conditional go after doc corrections.
 - `needs_human`: final visual/taste acceptance remains user-owned.
 - Residual risk: mobile Review filter density and Settings maze remain open.
 - Memory closeout: pending.
 - Hook enforcement: manual.
 - Artifact hygiene: no Claude plan file was copied into project docs; this log keeps only the actionable summary.
 - Next: commit checkpoint and run process-integrity review.
+
+## Iteration 11 - Settings Task Switcher
+
+- Target: reduce the Settings configuration maze for ordinary app users without deleting source, notification, learning, or repository controls.
+- Changes:
+  - `dashboard/src/components/settings.tsx`: added a three-task switcher for Sources, Notify, and Learning; only the selected settings task is shown.
+  - `dashboard/src/components/status-rail.tsx`: collapsed Repository controls behind a status summary so maintenance controls do not dominate the default Settings task.
+  - `dashboard/src/styles/settings/layout.css`, `repository.css`, `sources.css`, and `responsive.css`: added responsive task switch styling and fixed Settings source topic chips to 44px target size.
+- Verification:
+  - `npm test -- --run`: 11 files / 81 tests passed.
+  - `npm run build`: passed.
+  - Real-browser screenshots and metrics: `output/quality-review/20260511-0342-settings-switch-targets/`.
+  - Desktop Settings scroll height is 1000 with zero small targets.
+  - Mobile Settings scroll height is 1575, down from the earlier 3051px baseline; no horizontal overflow and zero small targets.
+- External review:
+  - Pending KIMI product/interaction review for this Settings slice; do not claim reviewer-gated acceptance yet.
+- Triage:
+  - Accepted: Settings needed task-level IA, not another explanation block.
+  - Accepted: Repository controls are expert/maintenance actions and should not be first-scan noise.
+  - Deferred: Add Sources itself still consumes most of the first mobile viewport; reviewer should judge whether this is acceptable or needs a second compression pass.
+- Task state: local checkpoint ready; reviewer gate pending.
+- `needs_human`: final visual/taste acceptance remains user-owned.
+- Residual risk: mobile Review filter density remains the next open UX slice.
+- Memory closeout: pending.
+- Hook enforcement: manual.
+- Artifact hygiene: screenshot evidence remains timestamped under `output/quality-review/`; no generated packet promoted into docs.
+- Next: commit checkpoint, dispatch KIMI review for Settings, then continue to mobile Review density while reviewer is pending.

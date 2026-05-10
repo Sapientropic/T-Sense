@@ -170,7 +170,8 @@
 .source-library-topics button {
   min-width: 0;
   max-width: 100%;
-  min-height: 26px;
+  min-height: 44px;
+  min-width: 44px;
   padding: 5px 8px;
   border: 1px solid var(--wash-paper-18);
   background: color-mix(in oklch, var(--paper) 7%, transparent);

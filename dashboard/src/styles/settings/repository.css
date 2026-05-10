@@ -20,6 +20,49 @@
   color: color-mix(in oklch, var(--signal-danger) 32%, var(--paper));
 }
 
+.repository-details {
+  min-width: 0;
+}
+
+.repository-details summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid var(--wash-paper-14);
+  background: var(--wash-paper-5);
+  color: var(--paper);
+  cursor: pointer;
+  list-style: none;
+}
+
+.repository-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.repository-details summary span,
+.repository-details summary strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+  font-weight: var(--badge-weight);
+  text-transform: uppercase;
+}
+
+.repository-details summary span {
+  color: var(--muted);
+}
+
+.repository-details summary strong {
+  color: var(--amber);
+}
+
+.repository-details .repository-toolbar {
+  margin-top: 8px;
+}
+
 .status-line {
   display: grid;
   grid-template-columns: 0.78fr minmax(0, 1fr);
