@@ -11,6 +11,8 @@
   ·
   <a href="#signal-desk"><strong>Signal Desk</strong></a>
   ·
+  <a href="#demo"><strong>Demo</strong></a>
+  ·
   <a href="#quick-start"><strong>Quick Start</strong></a>
   ·
   <a href="#cli-for-agents"><strong>CLI for Agents</strong></a>
@@ -30,6 +32,15 @@ setup, scanning, review, profile tuning, run health, and settings.
 The first supported lane is developer opportunities: remote jobs, contracts,
 paid engineering requests, and other time-sensitive posts that get buried in
 Telegram channels.
+
+## Demo
+
+The 49-second demo video shows the T-Sense flow from noisy channels to a ranked
+Signal Desk/report workflow.
+
+<p align="center">
+  <a href="docs/demo.mp4"><strong>Watch the T-Sense demo video</strong></a>
+</p>
 
 ## Signal Desk
 

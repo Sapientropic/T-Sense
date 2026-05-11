@@ -11,6 +11,8 @@
   ·
   <a href="#signal-desk"><strong>Signal Desk</strong></a>
   ·
+  <a href="#demo"><strong>Demo</strong></a>
+  ·
   <a href="#快速开始"><strong>快速开始</strong></a>
   ·
   <a href="#agent--cli"><strong>Agent / CLI</strong></a>
@@ -29,6 +31,14 @@ Review、profile 调整、运行健康检查和设置。
 
 第一条重点场景是开发者机会：远程工作、合同单、付费工程需求、Mini Apps / TON
 相关机会，以及其他容易被频道流刷掉的时效性信息。
+
+## Demo
+
+49 秒 Demo 视频展示 T-Sense 如何从频道噪音里抽出信号，并进入 Signal Desk / 报告工作流。
+
+<p align="center">
+  <a href="docs/demo.mp4"><strong>观看 T-Sense Demo 视频</strong></a>
+</p>
 
 ## Signal Desk
 

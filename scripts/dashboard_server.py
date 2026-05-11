@@ -1762,13 +1762,27 @@ def _desk_safe_result_text(*parts: object) -> str:
     text = "\n".join(str(part or "") for part in parts).strip()
     if not text:
         return ""
+    sanitized = text
+    for root in {PROJECT_ROOT, PROJECT_ROOT.resolve()}:
+        raw = str(root)
+        if not raw:
+            continue
+        # Windows scheduler errors often include a concrete file below the
+        # project root. Replace the whole local project path before the generic
+        # drive-letter scrubber, otherwise the user sees a vague "local path"
+        # and loses the actionable context that the failing file belongs to
+        # this project folder.
+        normalized = re.escape(raw).replace(r"\\", r"[\\/]")
+        sanitized = re.sub(
+            normalized + r"(?:[\\/][^\r\n\"<>|]*)?",
+            "project folder",
+            sanitized,
+            flags=re.IGNORECASE,
+        )
     replacements = {
-        str(PROJECT_ROOT.resolve()): "project folder",
-        str(PROJECT_ROOT.resolve()).replace("\\", "/"): "project folder",
         str(Path.home().resolve()): "~",
         str(Path.home().resolve()).replace("\\", "/"): "~",
     }
-    sanitized = text
     for needle, replacement in replacements.items():
         if needle:
             sanitized = sanitized.replace(needle, replacement)
