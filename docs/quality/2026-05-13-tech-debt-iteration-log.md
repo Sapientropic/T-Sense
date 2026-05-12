@@ -537,3 +537,43 @@ Next:
 
 - Commit this checkpoint, then inspect the Bot free-text/knowledge-answer LLM
   defaults and decide whether another behavior hardening slice is warranted.
+
+## Slice 14: Bot Free-Text And Knowledge LLM Opt-In
+
+Status: completed.
+
+Actions:
+
+- Changed Bot Gateway defaults so free-text LLM routing is local-only unless
+  the operator explicitly passes `--llm`.
+- Kept `--no-llm` accepted as a compatibility/default marker and added `--llm`
+  passthrough to the `tgcs bot run` facade.
+- Added tests proving the default path does not call the intent-routing LLM,
+  while explicit `--llm` opt-in remains available. The current modular Bot WIP
+  also keeps knowledge-answer fallback local-only by tagging deterministic
+  knowledge intents as `deterministic-no-llm`.
+
+Verification:
+
+- `python -m pytest tests/test_bot_gateway.py` passed: `32 passed`.
+- `python -m pytest tests/test_tgcs_cli.py tests/test_bot_gateway.py` passed:
+  `62 passed`.
+- Applied the staged patch to a temporary `HEAD` export and re-ran
+  `python -m pytest tests/test_tgcs_cli.py tests/test_bot_gateway.py` there:
+  `62 passed`.
+
+Reviewer Gate:
+
+- Addresses the read-only audit concern that ordinary Bot free text and
+  knowledge questions could default to external model calls.
+
+Residual Risk:
+
+- Explicit `--llm` still sends Telegram message text and selected local
+  documentation snippets to the configured provider. That is now an operator
+  opt-in, not the default.
+
+Next:
+
+- Commit this checkpoint, then continue with the next dashboard/API hardening
+  candidate rather than expanding the Bot feature surface.

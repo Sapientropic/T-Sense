@@ -33,6 +33,22 @@ class BotGatewayTests(unittest.TestCase):
         self.assertIn("sources", commands)
         self.assertIn("latest", commands)
 
+    def test_free_text_routing_is_local_only_by_default(self):
+        with patch.object(bot_gateway, "llm_intent", return_value=bot_gateway.BotIntent(action="status")) as llm_mock:
+            intent = bot_gateway.route_text_to_intent("semantic fuzzy intent zzz")
+
+        self.assertEqual(intent.action, "help")
+        llm_mock.assert_not_called()
+
+    def test_free_text_routing_can_explicitly_opt_into_llm(self):
+        routed = bot_gateway.BotIntent(action="status", source="llm")
+
+        with patch.object(bot_gateway, "llm_intent", return_value=routed) as llm_mock:
+            intent = bot_gateway.route_text_to_intent("semantic fuzzy intent zzz", use_llm=True)
+
+        self.assertEqual(intent, routed)
+        llm_mock.assert_called_once_with("semantic fuzzy intent zzz")
+
     def test_unauthorized_chat_gets_setup_message_without_action(self):
         api = FakeBotApi()
         gateway = bot_gateway.BotGateway(api, allowed={"11111"})
@@ -213,6 +229,23 @@ class BotGatewayTests(unittest.TestCase):
         self.assertIn("--allow-chat-id", cmd)
         self.assertIn("--no-llm", cmd)
         self.assertIn("--install-menu", cmd)
+
+    def test_tgcs_bot_llm_flag_is_explicit_opt_in(self):
+        from tests.test_tgcs_cli import load_tgcs_module
+
+        tgcs = load_tgcs_module(self)
+        calls: list[list[str]] = []
+
+        def fake_run(cmd, check=False, cwd=None):
+            calls.append([str(part) for part in cmd])
+            return subprocess.CompletedProcess(cmd, 0)
+
+        with patch.object(tgcs.subprocess, "run", side_effect=fake_run):
+            self.assertEqual(tgcs.main(["bot", "run"]), 0)
+            self.assertEqual(tgcs.main(["bot", "run", "--llm"]), 0)
+
+        self.assertNotIn("--llm", calls[0])
+        self.assertIn("--llm", calls[1])
 
     def test_tgcs_bot_run_can_skip_default_menu_installation(self):
         from tests.test_tgcs_cli import load_tgcs_module

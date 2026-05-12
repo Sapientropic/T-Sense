@@ -897,6 +897,8 @@ def run_bot(args: argparse.Namespace) -> int:
             cmd.append("--install-menu")
         if args.skip_menu:
             cmd.append("--skip-menu")
+        if args.llm:
+            cmd.append("--llm")
         if args.no_llm:
             cmd.append("--no-llm")
     return _run(cmd)
@@ -1051,7 +1053,8 @@ def build_parser() -> argparse.ArgumentParser:
     bot_run.add_argument("--poll-timeout", type=int, default=0)
     bot_run.add_argument("--install-menu", action="store_true", help="Install the bot command menu before polling; this is now the default.")
     bot_run.add_argument("--skip-menu", action="store_true", help="Skip command menu installation before polling.")
-    bot_run.add_argument("--no-llm", action="store_true")
+    bot_run.add_argument("--llm", action="store_true", help="Opt in to optional LLM routing.")
+    bot_run.add_argument("--no-llm", action="store_true", help="Keep free-form routing local-only; this is the default.")
     bot_run.set_defaults(func=run_bot)
     bot_menu = bot_subparsers.add_parser("install-menu", help="Install the Telegram Bot command menu.")
     bot_menu.set_defaults(func=run_bot)

@@ -472,7 +472,7 @@ def llm_intent(text: str) -> BotIntent | None:
     )
 
 
-def route_text_to_intent(text: str, *, use_llm: bool = True) -> BotIntent:
+def route_text_to_intent(text: str, *, use_llm: bool = False) -> BotIntent:
     deterministic = deterministic_intent(text)
     if deterministic:
         return deterministic
@@ -524,7 +524,7 @@ class BotGateway:
         api: TelegramBotApi,
         *,
         db_path: Path = DEFAULT_DB_PATH,
-        use_llm: bool = True,
+        use_llm: bool = False,
         allowed: set[str] | None = None,
         extra_allowed: list[str] | None = None,
     ):
@@ -697,7 +697,7 @@ def run_loop(args: argparse.Namespace) -> int:
     if not args.skip_menu:
         api.set_my_commands()
     extra_allowed = args.allow_chat_id or []
-    gateway = BotGateway(api, db_path=Path(args.db), use_llm=not args.no_llm, extra_allowed=extra_allowed)
+    gateway = BotGateway(api, db_path=Path(args.db), use_llm=bool(args.llm) and not args.no_llm, extra_allowed=extra_allowed)
     state_path = Path(args.state)
     state = load_state(state_path)
     offset = state.get("offset") if isinstance(state.get("offset"), int) else None
@@ -724,7 +724,8 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--poll-timeout", type=int, default=BOT_POLL_TIMEOUT_SECONDS)
     run.add_argument("--install-menu", action="store_true", help="Install the Telegram command menu before polling; this is now the default.")
     run.add_argument("--skip-menu", action="store_true", help="Skip command menu installation before polling.")
-    run.add_argument("--no-llm", action="store_true", help="Disable optional LLM routing for free-form messages.")
+    run.add_argument("--llm", action="store_true", help="Opt in to optional LLM routing for free-form messages.")
+    run.add_argument("--no-llm", action="store_true", help="Keep free-form routing local-only; this is the default.")
     run.set_defaults(func=run_loop)
 
     menu = subparsers.add_parser("install-menu", help="Install Telegram Bot command menu.")
