@@ -280,7 +280,7 @@ function sanitizeSourceAccessActionSummary(value: unknown): DeskActionResult["so
 }
 
 export function sanitizeDeskSchedulerStatus(value: unknown): DeskSchedulerStatus | null {
-  if (!isRecord(value)) {
+  if (!isRecord(value) || value.schema_version !== "desk_scheduler_status_v1") {
     return null;
   }
   const status = optionalString(value.status);
@@ -324,11 +324,15 @@ export function sanitizeDeskSchedulerStatus(value: unknown): DeskSchedulerStatus
 }
 
 export function sanitizeDeskTelegramStatus(value: unknown): DeskTelegramStatus | null {
-  if (!isRecord(value)) {
+  if (!isRecord(value) || value.schema_version !== "desk_telegram_status_v1") {
     return null;
   }
   const loginState = optionalString(value.login_state);
-  if (!loginState) {
+  const detail = optionalString(value.detail);
+  const nextStep = optionalString(value.next_step);
+  const configPath = optionalString(value.config_path);
+  const sessionPath = optionalString(value.session_path);
+  if (!loginState || !detail || !nextStep || !configPath || !sessionPath) {
     return null;
   }
   return {
@@ -336,33 +340,45 @@ export function sanitizeDeskTelegramStatus(value: unknown): DeskTelegramStatus |
     credentials_ready: value.credentials_ready === true,
     session_ready: value.session_ready === true,
     login_state: loginState,
-    detail: optionalString(value.detail) ?? "",
-    next_step: optionalString(value.next_step) ?? "",
-    config_path: optionalString(value.config_path) ?? "",
-    session_path: optionalString(value.session_path) ?? "",
+    detail,
+    next_step: nextStep,
+    config_path: configPath,
+    session_path: sessionPath,
   };
 }
 
 export function sanitizeDeskNotificationTokenStatus(value: unknown): DeskNotificationTokenStatus | null {
-  if (!isRecord(value)) {
+  if (!isRecord(value) || value.schema_version !== "desk_notification_token_status_v1") {
     return null;
   }
   const source = optionalString(value.source);
-  if (!source) {
+  const platform = optionalString(value.platform);
+  const detail = optionalString(value.detail);
+  if (
+    !source ||
+    !platform ||
+    !detail ||
+    typeof value.configured !== "boolean" ||
+    typeof value.env_configured !== "boolean" ||
+    typeof value.local_store_supported !== "boolean" ||
+    typeof value.local_store_configured !== "boolean" ||
+    typeof value.can_save !== "boolean" ||
+    typeof value.can_clear !== "boolean"
+  ) {
     return null;
   }
   const sanitized: DeskNotificationTokenStatus = {
     schema_version: "desk_notification_token_status_v1",
-    configured: value.configured === true,
+    configured: value.configured,
     source,
     updated_at: optionalStringOrNull(value.updated_at),
-    env_configured: value.env_configured === true,
-    local_store_supported: value.local_store_supported === true,
-    local_store_configured: value.local_store_configured === true,
-    can_save: value.can_save === true,
-    can_clear: value.can_clear === true,
-    platform: optionalString(value.platform) ?? "",
-    detail: optionalString(value.detail) ?? "",
+    env_configured: value.env_configured,
+    local_store_supported: value.local_store_supported,
+    local_store_configured: value.local_store_configured,
+    can_save: value.can_save,
+    can_clear: value.can_clear,
+    platform,
+    detail,
   };
   const localStoreBackend = optionalString(value.local_store_backend);
   const localStoreLabel = optionalString(value.local_store_label);

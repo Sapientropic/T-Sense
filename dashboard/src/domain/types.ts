@@ -152,7 +152,7 @@ export type DeskSourcesResult = {
 };
 
 export type DeskNotificationTokenStatus = {
-  schema_version?: "desk_notification_token_status_v1";
+  schema_version: "desk_notification_token_status_v1";
   configured: boolean;
   source: string;
   updated_at?: string | null;

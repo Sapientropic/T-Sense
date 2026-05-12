@@ -8,14 +8,20 @@ import {
   detectDeskDeliveryChatId,
   exportFeedback,
   generateFeedbackProfileSuggestions,
+  clearDeskNotificationToken,
   loadDashboardState,
   loadDeskActions,
   loadDeskAiSettingsStatus,
+  loadDeskNotificationTokenStatus,
   loadDeskSources,
+  loadDeskSchedulerStatus,
+  loadDeskTelegramStatus,
   normalizeDashboardError,
   previewSourceAssistant,
   pullLatestGit,
   runDeskAction,
+  saveDeskNotificationToken,
+  saveDeskTelegramCredentials,
   saveDeskDeliveryTarget,
   testDeskDeliveryTarget,
 } from "./client";
@@ -130,6 +136,102 @@ describe("dashboard API contract validation", () => {
     mockJsonResponse({ ai: { schema_version: "desk_ai_settings_status_v1" } });
 
     await expect(loadDeskAiSettingsStatus()).rejects.toThrow("Invalid AI API settings response");
+  });
+
+  it("throws on schema-less status payloads instead of rendering fallback scheduler, token, or Telegram state", async () => {
+    mockJsonResponse({
+      scheduler: {
+        available: true,
+        installed: false,
+        status: "not_installed",
+        task_label: "jobs-fast dry-run",
+        interval_minutes: 15,
+        detail: "Background scan is off.",
+        next_action: "Install scheduler.",
+        checked_at: "2026-05-13T00:00:00Z",
+      },
+    });
+
+    await expect(loadDeskSchedulerStatus()).rejects.toThrow("Invalid scheduler status response");
+
+    mockJsonResponse({
+      token: {
+        configured: false,
+        source: "missing",
+        env_configured: false,
+        local_store_supported: true,
+        local_store_configured: false,
+        can_save: true,
+        can_clear: false,
+        platform: "win32",
+        detail: "Telegram bot token is not configured.",
+      },
+    });
+
+    await expect(loadDeskNotificationTokenStatus()).rejects.toThrow("Invalid notification token response");
+
+    mockJsonResponse({
+      telegram: {
+        credentials_ready: true,
+        session_ready: false,
+        login_state: "ready_for_code",
+        detail: "Credentials are saved.",
+        next_step: "Send a code.",
+        config_path: "~/.config/tgcli/config.toml",
+        session_path: "~/.config/tgcli/session",
+      },
+    });
+
+    await expect(loadDeskTelegramStatus()).rejects.toThrow("Invalid Telegram status response");
+  });
+
+  it("throws on schema-less notification token and Telegram mutation responses", async () => {
+    mockJsonResponse({
+      token: {
+        configured: true,
+        source: "local_keyring",
+        env_configured: false,
+        local_store_supported: true,
+        local_store_configured: true,
+        can_save: true,
+        can_clear: true,
+        platform: "win32",
+        detail: "Telegram bot token is saved locally.",
+      },
+    });
+
+    await expect(saveDeskNotificationToken("bot-token")).rejects.toThrow("Invalid notification token response");
+
+    mockJsonResponse({
+      token: {
+        schema_version: "desk_notification_token_status_v1",
+        configured: false,
+        source: "missing",
+        env_configured: false,
+        local_store_supported: true,
+        local_store_configured: false,
+        can_save: true,
+        can_clear: false,
+        platform: "",
+        detail: "Telegram bot token is not configured.",
+      },
+    });
+
+    await expect(clearDeskNotificationToken()).rejects.toThrow("Invalid notification token response");
+
+    mockJsonResponse({
+      telegram: {
+        credentials_ready: true,
+        session_ready: false,
+        login_state: "code_sent",
+        detail: "Telegram sent a verification code.",
+        next_step: "Enter the code.",
+        config_path: "~/.config/tgcli/config.toml",
+        session_path: "~/.config/tgcli/session",
+      },
+    });
+
+    await expect(saveDeskTelegramCredentials("123", "hash")).rejects.toThrow("Invalid Telegram credentials response");
   });
 
   it("throws on schema-less Desk action results instead of accepting sanitizer fallback", async () => {

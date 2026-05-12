@@ -839,3 +839,47 @@ Next:
 - Commit this checkpoint, then continue with status-surface gates:
   scheduler, Telegram, notification token, and Bot Gateway if its WIP surface
   is stable enough to isolate safely.
+
+## Slice 22: Status Surface Schema Gates
+
+Status: completed.
+
+Actions:
+
+- Required `desk_scheduler_status_v1` before rendering scheduler status.
+- Required `desk_telegram_status_v1` before rendering Telegram login/session
+  status or accepting Telegram credential/login mutation responses.
+- Required `desk_notification_token_status_v1` before rendering or accepting
+  notification token status.
+- Tightened token status validation so schema-only or partially typed payloads
+  cannot become a plausible local-secret state.
+- Added client and sanitizer coverage for schema-less scheduler, token, and
+  Telegram payloads.
+
+Verification:
+
+- `npm test -- client sanitize` passed: `2` files, `49` tests.
+- `npm run typecheck` passed.
+- `npm test` passed: `13` files, `127` tests.
+- Exported the staged index to a temporary tree to verify this checkpoint
+  without unrelated working-tree WIP: `npm test -- client sanitize` passed
+  (`2` files, `47` tests), `npm run typecheck` passed, and `npm test` passed
+  (`13` files, `122` tests).
+
+Reviewer Gate:
+
+- Completes the remaining status-surface items from Bernoulli's audit:
+  scheduler, Telegram, and notification token no longer accept schema-less
+  payloads through frontend sanitizer fallback.
+
+Residual Risk:
+
+- Bot Gateway WIP is present in the working tree but was intentionally kept out
+  of this slice unless it can be isolated safely. Remaining hardening should
+  shift back to contract fixture coverage, privacy negative tests, or backend
+  endpoint split points.
+
+Next:
+
+- Commit this checkpoint after staged-snapshot verification, then choose the
+  next broad value slice rather than continuing to micro-fix schema edges.

@@ -202,21 +202,13 @@ export async function loadDeskActions(signal?: AbortSignal): Promise<DeskAction[
 export async function loadDeskSchedulerStatus(signal?: AbortSignal): Promise<DeskSchedulerStatus> {
   const response = await fetch("/api/desk/scheduler-status", { signal });
   const payload = await readJson(response);
-  const result = sanitizeDeskSchedulerStatus(payload.scheduler);
-  if (!result) {
-    throw new Error("Invalid scheduler status response");
-  }
-  return result;
+  return readDeskSchedulerStatus(payload.scheduler);
 }
 
 export async function loadDeskNotificationTokenStatus(signal?: AbortSignal): Promise<DeskNotificationTokenStatus> {
   const response = await fetch("/api/desk/notification-token/status", { signal });
   const payload = await readJson(response);
-  const result = sanitizeDeskNotificationTokenStatus(payload.token);
-  if (!result) {
-    throw new Error("Invalid notification token response");
-  }
-  return result;
+  return readDeskNotificationTokenStatus(payload.token, "Invalid notification token response");
 }
 
 export async function loadDeskAiSettingsStatus(signal?: AbortSignal): Promise<DeskAiSettingsStatus> {
@@ -249,20 +241,12 @@ export async function clearDeskAiApiKey(provider: string): Promise<DeskAiSetting
 
 export async function saveDeskNotificationToken(token: string): Promise<DeskNotificationTokenStatus> {
   const payload = await postJson("/api/desk/notification-token", { token });
-  const result = sanitizeDeskNotificationTokenStatus(payload.token);
-  if (!result) {
-    throw new Error("Invalid notification token response");
-  }
-  return result;
+  return readDeskNotificationTokenStatus(payload.token, "Invalid notification token response");
 }
 
 export async function clearDeskNotificationToken(): Promise<DeskNotificationTokenStatus> {
   const payload = await postJson("/api/desk/notification-token", { clear: true });
-  const result = sanitizeDeskNotificationTokenStatus(payload.token);
-  if (!result) {
-    throw new Error("Invalid notification token response");
-  }
-  return result;
+  return readDeskNotificationTokenStatus(payload.token, "Invalid notification token response");
 }
 
 export async function loadDeskSources(signal?: AbortSignal): Promise<DeskSourcesResult> {
@@ -287,47 +271,27 @@ export async function runDeskAction(
 export async function loadDeskTelegramStatus(signal?: AbortSignal): Promise<DeskTelegramStatus> {
   const response = await fetch("/api/desk/telegram-status", { signal });
   const payload = await readJson(response);
-  const result = sanitizeDeskTelegramStatus(payload.telegram);
-  if (!result) {
-    throw new Error("Invalid Telegram status response");
-  }
-  return result;
+  return readDeskTelegramStatus(payload.telegram, "Invalid Telegram status response");
 }
 
 export async function saveDeskTelegramCredentials(apiId: string, apiHash: string): Promise<DeskTelegramStatus> {
   const payload = await postJson("/api/desk/telegram-credentials", { api_id: apiId, api_hash: apiHash });
-  const result = sanitizeDeskTelegramStatus(payload.telegram);
-  if (!result) {
-    throw new Error("Invalid Telegram credentials response");
-  }
-  return result;
+  return readDeskTelegramStatus(payload.telegram, "Invalid Telegram credentials response");
 }
 
 export async function sendDeskTelegramCode(phone: string): Promise<DeskTelegramStatus> {
   const payload = await postJson("/api/desk/telegram-login/send-code", { phone });
-  const result = sanitizeDeskTelegramStatus(payload.telegram);
-  if (!result) {
-    throw new Error("Invalid Telegram login response");
-  }
-  return result;
+  return readDeskTelegramStatus(payload.telegram, "Invalid Telegram login response");
 }
 
 export async function verifyDeskTelegramCode(code: string, password = ""): Promise<DeskTelegramStatus> {
   const payload = await postJson("/api/desk/telegram-login/verify-code", { code, password });
-  const result = sanitizeDeskTelegramStatus(payload.telegram);
-  if (!result) {
-    throw new Error("Invalid Telegram login response");
-  }
-  return result;
+  return readDeskTelegramStatus(payload.telegram, "Invalid Telegram login response");
 }
 
 export async function cancelDeskTelegramLogin(): Promise<DeskTelegramStatus> {
   const payload = await postJson("/api/desk/telegram-login/cancel", {});
-  const result = sanitizeDeskTelegramStatus(payload.telegram);
-  if (!result) {
-    throw new Error("Invalid Telegram login response");
-  }
-  return result;
+  return readDeskTelegramStatus(payload.telegram, "Invalid Telegram login response");
 }
 
 export async function saveDeskDeliveryTarget(
@@ -431,6 +395,33 @@ function readDeskSourcesResult(value: unknown): DeskSourcesResult {
   const result = sanitizeDeskSourcesResult(value);
   if (!result) {
     throw new Error("Invalid source library response");
+  }
+  return result;
+}
+
+function readDeskSchedulerStatus(value: unknown): DeskSchedulerStatus {
+  assertSchemaVersion(value, "desk_scheduler_status_v1", "Invalid scheduler status response");
+  const result = sanitizeDeskSchedulerStatus(value);
+  if (!result) {
+    throw new Error("Invalid scheduler status response");
+  }
+  return result;
+}
+
+function readDeskNotificationTokenStatus(value: unknown, message: string): DeskNotificationTokenStatus {
+  assertSchemaVersion(value, "desk_notification_token_status_v1", message);
+  const result = sanitizeDeskNotificationTokenStatus(value);
+  if (!result) {
+    throw new Error(message);
+  }
+  return result;
+}
+
+function readDeskTelegramStatus(value: unknown, message: string): DeskTelegramStatus {
+  assertSchemaVersion(value, "desk_telegram_status_v1", message);
+  const result = sanitizeDeskTelegramStatus(value);
+  if (!result) {
+    throw new Error(message);
   }
   return result;
 }

@@ -5,6 +5,7 @@ import {
   sanitizeDeskActions,
   sanitizeDeskActionResult,
   sanitizeDeskAiSettingsStatus,
+  sanitizeDeskNotificationTokenStatus,
   sanitizeDeskSchedulerStatus,
   sanitizeDeskSourcesResult,
   sanitizeDeskTelegramStatus,
@@ -1098,6 +1099,80 @@ describe("dashboard state sanitizers", () => {
     });
 
     expect(sanitizeDeskSchedulerStatus({ available: true, installed: false })).toBeNull();
+    expect(
+      sanitizeDeskSchedulerStatus({
+        available: true,
+        installed: false,
+        status: "not_installed",
+        task_label: "jobs-fast dry-run",
+        interval_minutes: 15,
+        detail: "Background scan is off.",
+        next_action: "Install scheduler.",
+        checked_at: "2026-05-10T00:00:00Z",
+      }),
+    ).toBeNull();
+  });
+
+  it("sanitizes notification token status only when the local secret contract is explicit", () => {
+    expect(
+      sanitizeDeskNotificationTokenStatus({
+        schema_version: "desk_notification_token_status_v1",
+        configured: true,
+        source: " local_keyring ",
+        updated_at: " 2026-05-10T00:00:00Z ",
+        env_configured: false,
+        local_store_supported: true,
+        local_store_configured: true,
+        local_store_backend: " windows_credential_manager ",
+        local_store_label: " Windows Credential Manager ",
+        can_save: true,
+        can_clear: true,
+        platform: " win32 ",
+        detail: " Telegram bot token is saved locally. ",
+        token: "secret",
+      }),
+    ).toEqual({
+      schema_version: "desk_notification_token_status_v1",
+      configured: true,
+      source: "local_keyring",
+      updated_at: "2026-05-10T00:00:00Z",
+      env_configured: false,
+      local_store_supported: true,
+      local_store_configured: true,
+      local_store_backend: "windows_credential_manager",
+      local_store_label: "Windows Credential Manager",
+      can_save: true,
+      can_clear: true,
+      platform: "win32",
+      detail: "Telegram bot token is saved locally.",
+    });
+    expect(
+      sanitizeDeskNotificationTokenStatus({
+        configured: false,
+        source: "missing",
+        env_configured: false,
+        local_store_supported: true,
+        local_store_configured: false,
+        can_save: true,
+        can_clear: false,
+        platform: "win32",
+        detail: "Telegram bot token is not configured.",
+      }),
+    ).toBeNull();
+    expect(
+      sanitizeDeskNotificationTokenStatus({
+        schema_version: "desk_notification_token_status_v1",
+        configured: false,
+        source: "missing",
+        env_configured: false,
+        local_store_supported: true,
+        local_store_configured: false,
+        can_save: true,
+        can_clear: false,
+        platform: "",
+        detail: "Telegram bot token is not configured.",
+      }),
+    ).toBeNull();
   });
 
   it("sanitizes Desk Telegram status without trusting secret backend fields", () => {
@@ -1124,6 +1199,18 @@ describe("dashboard state sanitizers", () => {
       session_path: "~/.config/tgcli/session",
     });
     expect(sanitizeDeskTelegramStatus({ credentials_ready: true })).toBeNull();
+    expect(
+      sanitizeDeskTelegramStatus({
+        schema_version: "desk_telegram_status_v1",
+        credentials_ready: true,
+        session_ready: false,
+        login_state: "ready_for_code",
+        detail: "",
+        next_step: "Send a code.",
+        config_path: "~/.config/tgcli/config.toml",
+        session_path: "~/.config/tgcli/session",
+      }),
+    ).toBeNull();
   });
 
   it("filters non-object inbox entries instead of casting them through", () => {
