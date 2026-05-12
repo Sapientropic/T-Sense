@@ -1,6 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { errorMessage, normalizeDashboardError } from "./client";
+import { errorMessage, loadDashboardState, loadDeskActions, normalizeDashboardError } from "./client";
+
+function mockJsonResponse(payload: unknown) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(JSON.stringify(payload), { status: 200, headers: { "Content-Type": "application/json" } })),
+  );
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("dashboard API errors", () => {
   it("turns generic server failures into local recovery guidance", () => {
@@ -21,5 +32,28 @@ describe("dashboard API errors", () => {
     expect(errorMessage(new Error("Invalid source library response"))).toBe(
       "Local dashboard API returned data this screen cannot read. Refresh once; if it repeats, restart Signal Desk.",
     );
+  });
+});
+
+describe("dashboard API contract validation", () => {
+  it("throws on malformed dashboard state payloads instead of sanitizing to empty state", async () => {
+    mockJsonResponse({
+      schema_version: "dashboard_state_v1",
+      profiles: "bad",
+      inbox: [],
+      runs: [],
+      delivery_targets: [],
+      profile_patch_suggestions: [],
+      source_stats: [],
+      source_insights: [],
+    });
+
+    await expect(loadDashboardState()).rejects.toThrow("Invalid dashboard state response");
+  });
+
+  it("throws on malformed Desk actions payloads instead of returning no controls", async () => {
+    mockJsonResponse({ schema_version: "desk_actions_v1", actions: "bad" });
+
+    await expect(loadDeskActions()).rejects.toThrow("Invalid Desk actions response");
   });
 });

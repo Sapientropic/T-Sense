@@ -184,3 +184,36 @@ Next:
 
 - Commit this verified dashboard boundary checkpoint, then continue with API
   client contract drift and stale sanitizer duplication.
+
+## Slice 4: Dashboard API Contract Drift
+
+Status: completed.
+
+Actions:
+
+- Added client-side top-level contract assertions for:
+  - `loadDashboardState`: requires `dashboard_state_v1` plus required array
+    fields before sanitizer fallback can run.
+  - `loadDeskActions`: requires `desk_actions_v1` plus an `actions` array.
+- Added Vitest coverage proving malformed OK payloads throw visible contract
+  errors instead of becoming empty state or empty controls.
+
+Verification:
+
+- `npm test -- client` passed: `1` file, `5` tests.
+- `npm run typecheck` passed.
+
+Reviewer Gate:
+
+- Addresses Cicero P1 API client contract drift finding for the two highest
+  impact entrypoints.
+
+Residual Risk:
+
+- This keeps sanitizer functions permissive for local partial payload reuse.
+  Only network entrypoints now fail fast on malformed top-level contracts.
+
+Next:
+
+- Continue with stale duplicate sanitizer drift and source-import/action result
+  fixture coverage.

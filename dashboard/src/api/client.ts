@@ -37,7 +37,9 @@ import type {
 export async function loadDashboardState(signal?: AbortSignal): Promise<DashboardState> {
   const response = await fetch("/api/state", { signal });
   await assertOk(response);
-  return sanitizeDashboardState(await response.json());
+  const payload = await response.json();
+  assertDashboardStatePayload(payload);
+  return sanitizeDashboardState(payload);
 }
 
 export async function postReviewCardAction(cardId: string, action: string, note = "") {
@@ -186,6 +188,7 @@ export async function clearFeedbackDecisions(): Promise<number> {
 export async function loadDeskActions(signal?: AbortSignal): Promise<DeskAction[]> {
   const response = await fetch("/api/desk/actions", { signal });
   const payload = await readJson(response);
+  assertDeskActionsPayload(payload);
   return sanitizeDeskActions(payload);
 }
 
@@ -499,6 +502,35 @@ async function readJson(response: Response) {
   return payload as Record<string, unknown>;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function assertDashboardStatePayload(value: unknown): asserts value is Record<string, unknown> {
+  if (!isRecord(value) || value.schema_version !== "dashboard_state_v1") {
+    throw new Error("Invalid dashboard state response");
+  }
+  const requiredArrayFields = [
+    "profiles",
+    "inbox",
+    "runs",
+    "delivery_targets",
+    "profile_patch_suggestions",
+    "source_stats",
+    "source_insights",
+  ];
+  for (const field of requiredArrayFields) {
+    if (!Array.isArray(value[field])) {
+      throw new Error("Invalid dashboard state response");
+    }
+  }
+}
+
+function assertDeskActionsPayload(value: unknown): asserts value is Record<string, unknown> {
+  if (!isRecord(value) || value.schema_version !== "desk_actions_v1" || !Array.isArray(value.actions)) {
+    throw new Error("Invalid Desk actions response");
+  }
+}
 export function errorMessage(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   return normalizeDashboardError(message);
