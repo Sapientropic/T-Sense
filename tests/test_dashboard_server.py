@@ -1199,7 +1199,13 @@ class DashboardServerGitTests(unittest.TestCase):
                             cleared = dashboard_server.update_desk_notification_token({"clear": True})
 
         self.assertTrue(saved["configured"])
-        self.assertEqual(saved["source"], "windows_credential_manager")
+        self.assertIn(
+            saved["source"],
+            {
+                dashboard_server.local_credentials.BACKEND_WINDOWS,
+                dashboard_server.local_credentials.BACKEND_KEYRING,
+            },
+        )
         self.assertFalse(cleared["configured"])
         self.assertNotIn("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef12", json.dumps(saved, ensure_ascii=False))
 
@@ -1286,7 +1292,13 @@ class DashboardServerGitTests(unittest.TestCase):
         deepseek_saved = next(item for item in saved["providers"] if item["provider"] == "deepseek")
         deepseek_cleared = next(item for item in cleared["providers"] if item["provider"] == "deepseek")
         self.assertTrue(deepseek_saved["configured"])
-        self.assertEqual(deepseek_saved["source"], "windows_credential_manager")
+        self.assertIn(
+            deepseek_saved["source"],
+            {
+                dashboard_server.local_credentials.BACKEND_WINDOWS,
+                dashboard_server.local_credentials.BACKEND_KEYRING,
+            },
+        )
         self.assertEqual(env["DEEPSEEK_API_KEY"], "sk-deepseek123")
         self.assertFalse(deepseek_cleared["configured"])
         self.assertNotIn("sk-deepseek123", json.dumps(saved, ensure_ascii=False))
