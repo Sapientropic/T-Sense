@@ -470,7 +470,7 @@ Next:
 
 ## Slice 12: Profile Patch Workspace Scope
 
-Status: in progress.
+Status: completed.
 
 Actions:
 
@@ -501,4 +501,39 @@ Residual Risk:
 
 Next:
 
-- Commit this checkpoint, then run a broader `monitor_state` regression.
+- Commit this checkpoint, then continue with bot source-assistant external AI
+  consent boundaries.
+
+## Slice 13: Bot Source Assistant AI Consent Boundary
+
+Status: completed.
+
+Actions:
+
+- Changed Telegram bot source-plan preview to call the Source Assistant in
+  parser-only mode instead of setting `confirm_external_ai=true`.
+- Added an inline maintenance note explaining that Telegram apply confirmation
+  authorizes applying a cached local plan, not sending saved source metadata to
+  an external model.
+- Added Bot Gateway test coverage so the normal source-plan/apply flow proves
+  the preview request keeps external AI disabled.
+
+Verification:
+
+- `python -m pytest tests/test_bot_gateway.py` passed: `29 passed`.
+
+Reviewer Gate:
+
+- Addresses the read-only audit concern that Bot source planning could bypass
+  the Signal Desk external-AI confirmation boundary.
+
+Residual Risk:
+
+- Bot source planning remains local parser-only for existing-source operations
+  that need semantic matching. Those cases should be handled by a future
+  dedicated confirmation flow rather than silently falling back to external AI.
+
+Next:
+
+- Commit this checkpoint, then inspect the Bot free-text/knowledge-answer LLM
+  defaults and decide whether another behavior hardening slice is warranted.

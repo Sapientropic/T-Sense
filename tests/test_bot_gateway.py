@@ -99,6 +99,7 @@ class BotGatewayTests(unittest.TestCase):
                 gateway.handle_callback("12345", "cb-ok", callback_data)
 
         self.assertEqual(preview_mock.call_count, 1)
+        self.assertEqual(preview_mock.call_args.args[0]["confirm_external_ai"], False)
         apply_mock.assert_called_once_with({"add": ["remote_jobs"], "remove": [], "disable": [], "enable": []}, "jobs")
         self.assertIn("Source plan applied", api.messages[-1]["text"])
 

@@ -484,12 +484,16 @@ def route_text_to_intent(text: str, *, use_llm: bool = True) -> BotIntent:
 
 
 def source_plan_preview(instruction: str, topic: str) -> tuple[str, dict[str, Any]]:
+    # Telegram chat confirmation only authorizes applying the resolved local
+    # plan. It is not a consent boundary for sending the saved source list to
+    # an external model, so bot previews stay parser-only until Signal Desk
+    # provides a dedicated AI source planning confirmation flow.
     result = dashboard_server.run_source_assistant(
         {
             "instruction": instruction,
             "topic": topic,
             "dry_run": True,
-            "confirm_external_ai": True,
+            "confirm_external_ai": False,
         }
     )
     lines = [
