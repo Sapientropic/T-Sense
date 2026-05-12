@@ -261,11 +261,7 @@ export async function clearDeskNotificationToken(): Promise<DeskNotificationToke
 export async function loadDeskSources(signal?: AbortSignal): Promise<DeskSourcesResult> {
   const response = await fetch("/api/desk/sources", { signal });
   const payload = await readJson(response);
-  const result = sanitizeDeskSourcesResult(payload.sources);
-  if (!result) {
-    throw new Error("Invalid source library response");
-  }
-  return result;
+  return readDeskSourcesResult(payload.sources);
 }
 
 export async function runDeskAction(
@@ -364,29 +360,17 @@ export async function detectDeskDeliveryChatId(targetId: string): Promise<Delive
 
 export async function previewDeskSourceImport(sources: string, topic: string): Promise<SourceImportResult> {
   const payload = await postJson("/api/desk/sources/preview", { sources, topic });
-  const result = sanitizeSourceImportResult(payload.result);
-  if (!result) {
-    throw new Error("Invalid source preview response");
-  }
-  return result;
+  return readSourceImportResult(payload.result, "Invalid source preview response");
 }
 
 export async function importDeskSources(sources: string, topic: string): Promise<SourceImportResult> {
   const payload = await postJson("/api/desk/sources/import", { sources, topic });
-  const result = sanitizeSourceImportResult(payload.result);
-  if (!result) {
-    throw new Error("Invalid source import response");
-  }
-  return result;
+  return readSourceImportResult(payload.result, "Invalid source import response");
 }
 
 export async function importStarterSources(topic: string): Promise<SourceImportResult> {
   const payload = await postJson("/api/desk/sources/starter", { topic });
-  const result = sanitizeSourceImportResult(payload.result);
-  if (!result) {
-    throw new Error("Invalid starter source response");
-  }
-  return result;
+  return readSourceImportResult(payload.result, "Invalid starter source response");
 }
 
 export async function previewSourceAssistant(
@@ -400,11 +384,7 @@ export async function previewSourceAssistant(
     dry_run: true,
     confirm_external_ai: confirmExternalAi,
   });
-  const result = sanitizeSourceImportResult(payload.result);
-  if (!result) {
-    throw new Error("Invalid source assistant response");
-  }
-  return result;
+  return readSourceImportResult(payload.result, "Invalid source assistant response");
 }
 
 export async function applySourceAssistant(
@@ -420,37 +400,39 @@ export async function applySourceAssistant(
     confirm_external_ai: confirmExternalAi,
     ...(resolvedPlan ? { resolved_plan: resolvedPlan } : {}),
   });
-  const result = sanitizeSourceImportResult(payload.result);
-  if (!result) {
-    throw new Error("Invalid source assistant response");
-  }
-  return result;
+  return readSourceImportResult(payload.result, "Invalid source assistant response");
 }
 
 export async function setDeskSourceEnabled(sourceId: string, enabled: boolean): Promise<DeskSourcesResult> {
   const payload = await postJson(`/api/desk/sources/${encodeURIComponent(sourceId)}/enabled`, { enabled });
-  const result = sanitizeDeskSourcesResult(payload.sources);
-  if (!result) {
-    throw new Error("Invalid source library response");
-  }
-  return result;
+  return readDeskSourcesResult(payload.sources);
 }
 
 export async function removeDeskSource(sourceId: string): Promise<DeskSourcesResult> {
   const payload = await postJson(`/api/desk/sources/${encodeURIComponent(sourceId)}/remove`, { confirm: true });
-  const result = sanitizeDeskSourcesResult(payload.sources);
-  if (!result) {
-    throw new Error("Invalid source library response");
-  }
-  return result;
+  return readDeskSourcesResult(payload.sources);
 }
 
 export async function setDeskSourceTopics(sourceId: string, topics: string[]): Promise<DeskSourcesResult> {
   assertDeskSourceTopics(topics);
   const payload = await postJson(`/api/desk/sources/${encodeURIComponent(sourceId)}/topics`, { topics });
-  const result = sanitizeDeskSourcesResult(payload.sources);
+  return readDeskSourcesResult(payload.sources);
+}
+
+function readDeskSourcesResult(value: unknown): DeskSourcesResult {
+  assertSchemaVersion(value, "desk_sources_v1", "Invalid source library response");
+  const result = sanitizeDeskSourcesResult(value);
   if (!result) {
     throw new Error("Invalid source library response");
+  }
+  return result;
+}
+
+function readSourceImportResult(value: unknown, message: string): SourceImportResult {
+  assertSchemaVersion(value, "desk_source_import_result_v1", message);
+  const result = sanitizeSourceImportResult(value);
+  if (!result) {
+    throw new Error(message);
   }
   return result;
 }
@@ -531,6 +513,13 @@ function assertDeskActionsPayload(value: unknown): asserts value is Record<strin
     throw new Error("Invalid Desk actions response");
   }
 }
+
+function assertSchemaVersion(value: unknown, schemaVersion: string, message: string): asserts value is Record<string, unknown> {
+  if (!isRecord(value) || value.schema_version !== schemaVersion) {
+    throw new Error(message);
+  }
+}
+
 export function errorMessage(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   return normalizeDashboardError(message);

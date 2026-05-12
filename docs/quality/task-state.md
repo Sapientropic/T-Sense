@@ -1,7 +1,7 @@
 state: implementing
 mode: Standard
 run_shape: continuous_until_stop
-slice_goal: "Checkpoint backend full-suite fixture alignment, then continue with dashboard/API hardening."
+slice_goal: "Checkpoint source API schema gates, then continue with frontend/backend verification."
 stop_condition: "2026-05-13 14:00 +08:00 user acceptance window"
 handoff_policy: after_deadline_closeout
 continuation_policy: continue_after_initial_plan_until_stop_condition
@@ -11,13 +11,13 @@ blockers: []
 needs_human:
   - "Final acceptance at 2026-05-13 14:00 +08:00."
 residual_risk: "Current branch starts with substantial bot/dashboard WIP; isolate commits where possible and do not treat pre-existing changes as this slice's output."
-next_action: "Stage and commit the profile draft-note fixture alignment, then choose the next high-value dashboard/API hardening slice."
+next_action: "Stage and commit source API schema gates, then broaden frontend verification before choosing the next hardening slice."
 candidate_slices:
   - "Add fixture-backed backend/frontend contract tests for high-risk v0.5 dashboard and monitor payloads."
   - "Add privacy negative tests for raw Telegram text, tokens, local paths, argv, and command leakage."
   - "Extract shared sanitizer primitives after fixture tests prove the repeated behavior."
   - "Split dashboard_server.py boundaries only after contract tests protect endpoint behavior."
-last_update: "2026-05-13T07:14:00+08:00"
+last_update: "2026-05-13T07:18:00+08:00"
 deadline: "2026-05-13T14:00:00+08:00"
 time_budget_remaining: "about 7 hours"
 checkpoint_ready: true

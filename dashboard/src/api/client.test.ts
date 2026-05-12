@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { errorMessage, loadDashboardState, loadDeskActions, normalizeDashboardError } from "./client";
+import {
+  errorMessage,
+  loadDashboardState,
+  loadDeskActions,
+  loadDeskSources,
+  normalizeDashboardError,
+  previewSourceAssistant,
+} from "./client";
 
 function mockJsonResponse(payload: unknown) {
   vi.stubGlobal(
@@ -55,5 +62,34 @@ describe("dashboard API contract validation", () => {
     mockJsonResponse({ schema_version: "desk_actions_v1", actions: "bad" });
 
     await expect(loadDeskActions()).rejects.toThrow("Invalid Desk actions response");
+  });
+
+  it("throws on schema-less source library payloads instead of accepting sanitizer fallback", async () => {
+    mockJsonResponse({
+      sources: {
+        registry_path: ".tgcs/sources.json",
+        source_count: 0,
+        enabled_count: 0,
+        topics: [],
+        sources: [],
+      },
+    });
+
+    await expect(loadDeskSources()).rejects.toThrow("Invalid source library response");
+  });
+
+  it("throws on schema-less source assistant payloads instead of accepting sanitizer fallback", async () => {
+    mockJsonResponse({
+      result: {
+        dry_run: true,
+        written: false,
+        topic: "jobs",
+        registry_path: ".tgcs/sources.json",
+        preview_sources: [],
+        resolved_plan: { add: [], remove: [], disable: [], enable: [] },
+      },
+    });
+
+    await expect(previewSourceAssistant("add @remote_jobs", "jobs")).rejects.toThrow("Invalid source assistant response");
   });
 });

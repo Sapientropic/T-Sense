@@ -620,3 +620,39 @@ Next:
 
 - Commit this checkpoint, then continue with a dashboard/API contract hardening
   slice.
+
+## Slice 16: Source API Schema Gates
+
+Status: completed.
+
+Actions:
+
+- Added explicit frontend schema gates for Source Library responses
+  (`desk_sources_v1`) before sanitizer fallback can run.
+- Added explicit frontend schema gates for source import/source assistant
+  responses (`desk_source_import_result_v1`) before sanitizer fallback can run.
+- Reused small reader helpers so all source mutations share the same contract
+  check rather than repeating loose sanitizer calls.
+- Added API client tests proving schema-less but otherwise plausible source
+  payloads now throw visible contract errors.
+
+Verification:
+
+- `npm test -- client` passed: `1` file, `7` tests.
+- `npm run typecheck` passed.
+
+Reviewer Gate:
+
+- Extends the earlier API contract-drift fix beyond dashboard state and Desk
+  actions into the source-management surface.
+
+Residual Risk:
+
+- Other endpoint families still rely on nested sanitizer null checks. This
+  slice intentionally focused on source management because it is the highest
+  privacy/behavior surface after the Bot AI boundary fixes.
+
+Next:
+
+- Commit this checkpoint, then run broader frontend verification and continue
+  with the next highest-value contract or sanitizer hardening target.
