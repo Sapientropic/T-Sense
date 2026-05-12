@@ -79,6 +79,7 @@ export type SourceStat = {
   card_yield_rate?: number;
   latest_run_id?: string;
   scan_failure?: boolean;
+  scan_failure_reason?: string;
   scan_incomplete?: boolean;
 };
 

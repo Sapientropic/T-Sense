@@ -224,6 +224,17 @@ action API for human-friendly wrappers around fixed local commands:
   paths, commands, argv, tokens, or raw Telegram message data.
 - `POST /api/desk/sources/<source_id>/remove` removes one validated source id
   after `{confirm:true}` and returns the refreshed source list.
+- Desk actions separate registry syntax from real Telegram access.
+  `sources_validate` runs the fixed source-registry syntax check.
+  `sources_probe_access` uses the local Telegram session to run a bounded
+  source-access probe, stores only safe labels/counts/reasons in
+  `.tgcs/source-access-health.json`, and does not store Telegram message text.
+  `sources_pause_inaccessible` and `sources_keep_accessible` require
+  `{confirm:true}`, read only that recent health summary, and disable matching
+  source ids in the fixed registry.
+- Long-running Desk actions such as a practice scan or source-access probe are
+  server-side locked. A second click returns a display result saying the action
+  is already running instead of stacking another scan process.
 - Live delivery, session access, raw Telegram message operations, and unsupported
   scheduler installation return guarded preview / `needs_human` or remain
   outside the action API. Non-systemd Linux remains a manual cron-preview path;
@@ -488,8 +499,10 @@ SQLite stores dashboard state using these projections:
   yield. It includes all-time review-card counts, high-rate, alert counts, and,
   when the latest run has a `scan_meta` artifact, source-level `raw_count`,
   `kept_count`, `scan_keep_rate`, `latest_card_count`, `latest_high_count`, and
-  `card_yield_rate`. It also includes `display_name` so user-facing Dashboard
-  labels do not have to expose snake_case Telegram handles as primary copy; the
+  `card_yield_rate`. It can also include `scan_failure`,
+  `scan_failure_reason`, and `scan_incomplete` for latest-run access diagnosis.
+  It also includes `display_name` so user-facing Dashboard labels do not have
+  to expose snake_case Telegram handles as primary copy; the
   display label normalizes common technical initialisms and obvious channel-name
   typos. This projection reads only `scan.meta.json` source-health counters and
   must not copy raw Telegram message bodies into SQLite or the dashboard JSON.
@@ -755,6 +768,7 @@ single-run evidence only:
 - `newest_message_at`
 - `incomplete`
 - `failure`
+- `failure_reason`
 - `ocr_count`
 
 `report.py` can combine scan meta and the registry to produce single-run pruning

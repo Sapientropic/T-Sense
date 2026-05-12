@@ -37,6 +37,12 @@ The app path is:
 - `Source assistant` accepts short instructions such as `add @remote_jobs` or
   `remove @old_jobs` and previews the local registry change before applying it.
 - Saved sources can be paused, resumed, retagged, or removed from Settings.
+- `Check source syntax` validates the registry file only. `Check source access`
+  uses the local Telegram session to run a bounded, no-message-text probe and
+  stores a source-health summary in `.tgcs/source-access-health.json`.
+- After a source access check, Start can pause only inaccessible sources or keep
+  only sources with recent readable messages. Both repair actions require an
+  explicit confirmation and only disable sources; they never delete them.
 
 External AI planning is opt-in because source names can be private. The offline
 parser handles explicit Telegram handles and `t.me` links locally; when the user

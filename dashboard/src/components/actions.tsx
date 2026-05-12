@@ -464,6 +464,7 @@ export function buildJourneySteps(
   const sourceAttention = stage === "needs_source_access";
   const firstRunReady = stage === "needs_first_run";
   const ready = stage === "ready";
+  const sourceAccessDetail = setupCheckDetail(setupStatus, "source_access");
 
   const hasSuccess = (actionId: string) => results[actionId]?.status === "success";
   const dryRunScheduleOn = scheduler?.installed || (hasSuccess("schedule_install_dry_run") && results.schedule_remove_dry_run?.status !== "success");
@@ -510,16 +511,32 @@ export function buildJourneySteps(
       key: "workspace",
       title: sourceAttention ? "Repair source list" : "Prepare Signal Desk files",
       detail: sourceAttention
-        ? "Restore the saved Telegram channels, then check that Signal Desk can read them."
-        : "Create the private settings and saved-channel files Signal Desk needs after Telegram is connected.",
+        ? sourceAccessDetail || "Check real Telegram source access, then pause sources that cannot be read."
+        : sourceAccessDetail
+          ? sourceAccessDetail
+          : "Create the private settings and saved-channel files Signal Desk needs after Telegram is connected.",
       state: workspaceState(stage, workspaceDone, sourceAttention),
       stateLabel: workspaceStateLabel(stage, workspaceDone, sourceAttention),
       buttons: availableButtons([
         { actionId: "init_jobs", label: workspaceDone ? "Refresh files" : "Prepare files", variant: workspaceDone ? "secondary" : "primary" },
         { actionId: "sources_import_jobs", label: "Repair source list", variant: sourceAttention ? "primary" : "secondary" },
-        { actionId: "sources_validate", label: "Check source list", variant: "secondary" },
+        { actionId: "sources_probe_access", label: "Check source access", variant: sourceAttention ? "primary" : "secondary" },
+        ...(sourceAttention
+          ? [
+              { actionId: "sources_pause_inaccessible", label: "Pause inaccessible", variant: "secondary" as const },
+              { actionId: "sources_keep_accessible", label: "Keep accessible only", variant: "secondary" as const },
+            ]
+          : []),
+        { actionId: "sources_validate", label: "Check syntax", variant: "secondary" },
       ]),
-      advancedActionIds: availableAdvanced(["init_jobs", "sources_import_jobs", "sources_validate"]),
+      advancedActionIds: availableAdvanced([
+        "init_jobs",
+        "sources_import_jobs",
+        "sources_probe_access",
+        "sources_pause_inaccessible",
+        "sources_keep_accessible",
+        "sources_validate",
+      ]),
     },
     {
       key: "first-run",
@@ -687,6 +704,11 @@ export function notificationReadiness(targets: DeliveryTarget[]): NotificationRe
     value: "Muted",
     detail: "A Telegram target is saved, but live notifications are muted.",
   };
+}
+
+function setupCheckDetail(setupStatus: DashboardState["setup_status"] | undefined, checkId: string) {
+  const check = setupStatus?.checks?.find((item) => item.check_id === checkId);
+  return check?.detail || "";
 }
 
 function workspaceState(stage: string, workspaceDone: boolean, sourceAttention: boolean): JourneyState {

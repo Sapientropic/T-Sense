@@ -798,6 +798,9 @@ function App() {
     if (actionId === "schedule_remove_dry_run") {
       body.confirm = true;
     }
+    if (actionId === "sources_pause_inaccessible" || actionId === "sources_keep_accessible") {
+      body.confirm = true;
+    }
     try {
       const result = await runAction(actionId, body);
       if (actionId === "schedule_install_dry_run" || actionId === "schedule_remove_dry_run") {
@@ -1026,6 +1029,22 @@ function deskActionConfirmation(actionId: string): DeskActionConfirmation | null
       confirmLabel: "Turn off auto scan",
     };
   }
+  if (actionId === "sources_pause_inaccessible") {
+    return {
+      actionId,
+      title: "Pause inaccessible sources?",
+      detail: "Signal Desk will disable only the sources that the latest access check could not resolve or read. It will not delete them.",
+      confirmLabel: "Pause sources",
+    };
+  }
+  if (actionId === "sources_keep_accessible") {
+    return {
+      actionId,
+      title: "Keep only accessible sources?",
+      detail: "Signal Desk will disable inaccessible and quiet sources from the latest access check, leaving only sources with recent readable messages enabled.",
+      confirmLabel: "Keep accessible only",
+    };
+  }
   return null;
 }
 
@@ -1095,7 +1114,7 @@ function DeskActionConfirmDialog({
         aria-describedby="desk-confirm-detail"
       >
         <div>
-          <span className="panel-kicker">Confirm automation</span>
+          <span className="panel-kicker">Confirm local change</span>
           <h2 id="desk-confirm-title">{confirmation.title}</h2>
           <p id="desk-confirm-detail">{confirmation.detail}</p>
         </div>

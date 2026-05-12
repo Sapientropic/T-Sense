@@ -61,6 +61,9 @@ const actions = [
   action("demo_render"),
   action("doctor_jobs"),
   action("sources_validate"),
+  action("sources_probe_access"),
+  action("sources_pause_inaccessible", "confirm_execute"),
+  action("sources_keep_accessible", "confirm_execute"),
   action("sources_import_jobs"),
   action("monitor_jobs_dry_run"),
   action("feedback_export"),
@@ -134,6 +137,39 @@ describe("Signal Desk journey", () => {
     expect(steps.find((step) => step.key === "feedback")?.buttons[0]).toMatchObject({
       label: "Generate profile suggestions",
     });
+  });
+
+  it("separates source syntax checks from real Telegram access checks", () => {
+    const steps = buildJourneySteps(
+      actions,
+      {},
+      {
+        stage: "needs_source_access",
+        has_profiles: true,
+        has_runs: true,
+        checks: [
+          {
+            check_id: "source_access",
+            label: "Source access",
+            status: "blocked",
+            detail: "Access check: 2 accessible, 1 quiet, 5 inaccessible across 8 checked sources.",
+          },
+        ],
+      },
+      telegramReady,
+    );
+
+    const workspace = steps.find((step) => step.key === "workspace");
+
+    expect(workspace?.detail).toContain("2 accessible");
+    expect(workspace?.buttons.map((button) => button.label)).toEqual([
+      "Refresh files",
+      "Repair source list",
+      "Check source access",
+      "Pause inaccessible",
+      "Keep accessible only",
+      "Check syntax",
+    ]);
   });
 
   it("keeps commands as advanced fallback data instead of primary controls", () => {

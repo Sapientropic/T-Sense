@@ -63,12 +63,12 @@ describe("dashboard state sanitizers", () => {
     const state = sanitizeDashboardState({
       profiles: [null, { profile_id: "jobs-fast", enabled: true, updated_at: "2026-05-09T00:00:00Z" }],
       runs: [{ run_id: "run-1", profile_id: "jobs-fast" }, { run_id: "run-2", profile_id: "jobs-fast", status: "complete", started_at: "2026-05-09T00:00:00Z" }],
-      source_stats: [{ channel: "jobs", high_count: 2 }],
+      source_stats: [{ channel: "jobs", high_count: 2, scan_failure_reason: " permission_or_private " }],
       source_insights: [{ channel: "jobs", label: "Watch", reason: "Thin source", stats: { channel: "jobs" } }],
     });
     expect(state.profiles).toEqual([{ profile_id: "jobs-fast", enabled: true, updated_at: "2026-05-09T00:00:00Z" }]);
     expect(state.runs).toEqual([{ run_id: "run-2", profile_id: "jobs-fast", status: "complete", started_at: "2026-05-09T00:00:00Z" }]);
-    expect(state.source_stats[0]).toMatchObject({ channel: "jobs", card_count: 0, high_count: 2, high_rate: 0 });
+    expect(state.source_stats[0]).toMatchObject({ channel: "jobs", card_count: 0, high_count: 2, high_rate: 0, scan_failure_reason: "permission_or_private" });
     expect(state.source_insights[0].stats).toMatchObject({ channel: "jobs", card_count: 0 });
     expect(warn).toHaveBeenCalledWith("[tgcs dashboard schema] profiles[0] expected object", null);
     expect(warn).toHaveBeenCalledWith("[tgcs dashboard schema] runs[0].status expected non-empty string", undefined);

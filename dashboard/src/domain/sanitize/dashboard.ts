@@ -785,7 +785,7 @@ function sanitizeSourceStat(record: Record<string, unknown>, index: number, scop
     alert_count: numberOrDefault(record.alert_count, 0),
     high_rate: numberOrDefault(record.high_rate, 0),
   };
-  assignOptionalStrings(stat, record, ["display_name", "latest_run_id"]);
+  assignOptionalStrings(stat, record, ["display_name", "latest_run_id", "scan_failure_reason"]);
   assignOptionalNumbers(stat, record, [
     "latest_card_count",
     "latest_high_count",

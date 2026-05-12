@@ -116,8 +116,8 @@ chmod +x setup.sh tgcs signal-desk "Signal Desk.command"
 1. 在 `Start` 创建离线 demo 报告；这一步不需要 Telegram 登录，也不需要 LLM key。
 2. 用 [my.telegram.org/apps](https://my.telegram.org/apps) 的 `api_id` / `api_hash`
    连接 Telegram。
-3. 在 `Settings -> Sources` 用 starter、粘贴 handle，或让 Source assistant 预览并应用来源变更。
-4. 从 `Start` 跑一次 dry scan，不发送真实通知。
+3. 在 `Start` / `Settings -> Sources` 添加并检查来源：starter、粘贴 handle，或让 Source assistant 预览并应用变更。
+4. 从 `Start` 跑一次 dry scan；如果来源访问失败，先用 source access 修复按钮处理，再重新扫描。
 5. 在 `Review` 处理卡片；如果结果太宽或太窄，再去 `Profiles` 调整匹配规则。
 6. 如果扫描失败，打开 `Runs`，它会先给出修复路径，再让你重新扫描。
 

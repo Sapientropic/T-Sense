@@ -125,8 +125,8 @@ Platform-specific notes for local key storage and auto-scan setup live in
    login or an LLM key.
 2. Connect Telegram using your `api_id` and `api_hash` from
    [my.telegram.org/apps](https://my.telegram.org/apps).
-3. Add sources in `Settings -> Sources` with the starter set, pasted handles, or Source assistant.
-4. Run a dry scan from `Start`.
+3. Add and check sources from `Start` / `Settings -> Sources` with the starter set, pasted handles, or Source assistant.
+4. Run a dry scan from `Start`; if access fails, use the source access repair buttons before scanning again.
 5. Review cards in `Review`, then tune the profile when the results are too
    broad or too narrow.
 6. Open `Runs` when something fails; it shows the next repair step before asking

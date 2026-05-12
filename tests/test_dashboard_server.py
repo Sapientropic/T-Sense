@@ -314,6 +314,7 @@ class DashboardServerGitTests(unittest.TestCase):
             "demo_render",
             "doctor_jobs",
             "sources_validate",
+            "sources_probe_access",
             "sources_import_jobs",
             "monitor_jobs_dry_run",
             "feedback_export",
@@ -324,8 +325,11 @@ class DashboardServerGitTests(unittest.TestCase):
 
         self.assertEqual(actions["schedule_install_dry_run"]["run_mode"], "confirm_execute")
         self.assertEqual(actions["schedule_remove_dry_run"]["run_mode"], "confirm_execute")
+        self.assertEqual(actions["sources_pause_inaccessible"]["run_mode"], "confirm_execute")
+        self.assertEqual(actions["sources_keep_accessible"]["run_mode"], "confirm_execute")
         self.assertNotIn("tgcs", actions["schedule_install_dry_run"]["display_command"].lower())
         self.assertNotIn("tgcs", actions["schedule_remove_dry_run"]["display_command"].lower())
+        self.assertNotIn("python", actions["sources_probe_access"]["display_command"].lower())
         self.assertEqual(actions["login_human"]["run_mode"], "needs_human")
         self.assertEqual(actions["live_delivery_human"]["run_mode"], "needs_human")
         self.assertEqual(actions["schedule_install_human"]["run_mode"], "needs_human")
@@ -405,6 +409,109 @@ class DashboardServerGitTests(unittest.TestCase):
         self.assertIn("practice scans would run every 15 minutes", result["detail"])
         self.assertNotIn("schtasks", result["detail"].lower())
         self.assertIn("Signal Desk", result["next_action"])
+
+    def test_source_access_probe_action_returns_cached_counts_without_shell_commands(self):
+        health = {
+            "schema_version": dashboard_server.DESK_SOURCE_ACCESS_HEALTH_SCHEMA_VERSION,
+            "checked_at": "2026-05-12T00:00:00Z",
+            "source_count": 4,
+            "checked_count": 4,
+            "truncated_count": 0,
+            "accessible_count": 2,
+            "quiet_count": 1,
+            "inaccessible_count": 1,
+            "reason_counts": {"cannot_resolve_entity": 1, "empty_recent_window": 1},
+            "sources": [],
+        }
+
+        with patch.object(dashboard_server, "probe_source_access", return_value=health):
+            with patch.object(dashboard_server.subprocess, "run") as run_mock:
+                result = dashboard_server.run_desk_action("sources_probe_access", body={"command": "ignored"})
+
+        run_mock.assert_not_called()
+        self.assertEqual(result["status"], "success")
+        self.assertIn("2 accessible", result["detail"])
+        self.assertIn("cannot resolve 1", result["detail"])
+
+    def test_desk_action_blocks_duplicate_long_running_scan(self):
+        lock = dashboard_server._desk_action_lock("monitor_jobs_dry_run")
+        self.assertTrue(lock.acquire(blocking=False))
+        try:
+            with patch.object(dashboard_server.subprocess, "run") as run_mock:
+                result = dashboard_server.run_desk_action("monitor_jobs_dry_run")
+        finally:
+            lock.release()
+
+        run_mock.assert_not_called()
+        self.assertEqual(result["status"], "blocked")
+        self.assertIn("already running", result["title"].lower())
+
+    def test_source_access_repair_disables_cached_inaccessible_sources_only_after_confirm(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            registry_path = root / ".tgcs" / "sources.json"
+            sources = [
+                dashboard_server.source_registry.source_from_channel("remote_jobs"),
+                dashboard_server.source_registry.source_from_channel("quiet_jobs"),
+                dashboard_server.source_registry.source_from_channel("good_jobs"),
+            ]
+            dashboard_server.source_registry.save_registry(
+                registry_path,
+                {"schema_version": dashboard_server.source_registry.SCHEMA_VERSION, "sources": sources},
+            )
+            health = {
+                "schema_version": dashboard_server.DESK_SOURCE_ACCESS_HEALTH_SCHEMA_VERSION,
+                "checked_at": datetime.now(UTC).isoformat(),
+                "source_count": 3,
+                "checked_count": 3,
+                "truncated_count": 0,
+                "accessible_count": 1,
+                "quiet_count": 1,
+                "inaccessible_count": 1,
+                "reason_counts": {"cannot_resolve_entity": 1, "empty_recent_window": 1},
+                "sources": [
+                    {
+                        "source_id": "telegram:remote_jobs",
+                        "label": "remote_jobs",
+                        "channel": "remote_jobs",
+                        "status": "inaccessible",
+                        "reason": "cannot_resolve_entity",
+                    },
+                    {
+                        "source_id": "telegram:quiet_jobs",
+                        "label": "quiet_jobs",
+                        "channel": "quiet_jobs",
+                        "status": "quiet",
+                        "reason": "empty_recent_window",
+                    },
+                    {
+                        "source_id": "telegram:good_jobs",
+                        "label": "good_jobs",
+                        "channel": "good_jobs",
+                        "status": "accessible",
+                        "reason": "recent_message_found",
+                    },
+                ],
+            }
+
+            with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                dashboard_server._write_source_access_health(health)
+                with self.assertRaises(dashboard_server.DashboardDeskActionError):
+                    dashboard_server.run_desk_action("sources_pause_inaccessible", body={"command": "ignored"})
+                paused = dashboard_server.run_desk_action("sources_pause_inaccessible", body={"confirm": True})
+                after_pause = dashboard_server.source_registry.load_registry(registry_path)
+                kept = dashboard_server.run_desk_action("sources_keep_accessible", body={"confirm": True})
+                after_keep = dashboard_server.source_registry.load_registry(registry_path)
+
+        pause_enabled = {source["source_id"]: source["enabled"] for source in after_pause["sources"]}
+        keep_enabled = {source["source_id"]: source["enabled"] for source in after_keep["sources"]}
+        self.assertEqual(paused["status"], "success")
+        self.assertFalse(pause_enabled["telegram:remote_jobs"])
+        self.assertTrue(pause_enabled["telegram:quiet_jobs"])
+        self.assertTrue(pause_enabled["telegram:good_jobs"])
+        self.assertEqual(kept["status"], "success")
+        self.assertFalse(keep_enabled["telegram:quiet_jobs"])
+        self.assertTrue(keep_enabled["telegram:good_jobs"])
 
     def test_schedule_install_dry_run_requires_confirmation(self):
         with patch.object(dashboard_server, "_run_scheduler_command") as run_mock:

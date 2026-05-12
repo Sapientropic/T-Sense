@@ -14,6 +14,7 @@ import subprocess
 import sys
 import tomllib
 import uuid
+from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime, time
 from pathlib import Path
@@ -250,14 +251,26 @@ def diagnostics_from_scan_meta(meta: dict[str, Any]) -> list[dict[str, Any]]:
     diagnostics: list[dict[str, Any]] = []
     failure_count = int(meta.get("failure_count") or 0)
     failed_channels = meta.get("failed_channels") if isinstance(meta.get("failed_channels"), list) else []
+    source_health = meta.get("source_health") if isinstance(meta.get("source_health"), list) else []
     if failure_count:
         hint = ", ".join(str(channel) for channel in failed_channels[:5]) or f"{failure_count} channels"
+        reason_counts = Counter(
+            str(row.get("failure_reason") or row.get("failure") or "access_error")
+            for row in source_health
+            if isinstance(row, dict) and row.get("failure")
+        )
+        reason_hint = ", ".join(
+            f"{reason.replace('_', ' ')} {count}"
+            for reason, count in sorted(reason_counts.items(), key=lambda item: (-item[1], item[0]))[:3]
+        )
+        if reason_hint:
+            hint = f"{hint}. Top reasons: {reason_hint}"
         diagnostics.append(
             {
                 "code": "channel_failures",
                 "severity": "warning",
                 "message": f"{failure_count} channels failed during scan: {hint}.",
-                "next_step": "Open scan.errors.log and fix access, username, invite-link, or FloodWait issues.",
+                "next_step": "Open Start > Check source access, then pause inaccessible sources or inspect scan.errors.log.",
             }
         )
     if int(meta.get("total_messages_collected") or 0) == 0:

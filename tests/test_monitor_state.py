@@ -461,7 +461,13 @@ class MonitorStateTests(unittest.TestCase):
                         "source_health": [
                             {"channel": "jobs_a", "raw_count": 6, "kept_count": 3},
                             {"channel": "jobs_empty", "raw_count": 5, "kept_count": 0},
-                            {"channel": "jobs_failed", "raw_count": 0, "kept_count": 0, "failure": "private"},
+                            {
+                                "channel": "jobs_failed",
+                                "raw_count": 0,
+                                "kept_count": 0,
+                                "failure": "ChannelPrivateError",
+                                "failure_reason": "permission_or_private",
+                            },
                         ]
                     }
                 ),
@@ -506,6 +512,7 @@ class MonitorStateTests(unittest.TestCase):
         sources = {item["channel"]: item for item in snapshot["source_stats"]}
         self.assertEqual(snapshot["source_stats"][0]["channel"], "jobs_failed")
         self.assertTrue(sources["jobs_failed"]["scan_failure"])
+        self.assertEqual(sources["jobs_failed"]["scan_failure_reason"], "permission_or_private")
         self.assertEqual(sources["jobs_a"]["raw_count"], 6)
         self.assertEqual(sources["jobs_a"]["kept_count"], 3)
         self.assertEqual(sources["jobs_a"]["latest_card_count"], 1)

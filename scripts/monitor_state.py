@@ -2601,6 +2601,7 @@ def empty_source_stat(channel: str) -> dict[str, Any]:
         "card_yield_rate": 0.0,
         "latest_run_id": "",
         "scan_failure": False,
+        "scan_failure_reason": "",
         "scan_incomplete": False,
     }
 
@@ -2626,6 +2627,7 @@ def latest_source_scan_stats(runs: list[dict[str, Any]]) -> dict[str, dict[str, 
             "scan_keep_rate": round(kept_count / raw_count, 3) if raw_count else 0.0,
             "latest_run_id": str(latest.get("run_id") or ""),
             "scan_failure": bool(row.get("failure")),
+            "scan_failure_reason": str(row.get("failure_reason") or row.get("failure") or ""),
             "scan_incomplete": bool(row.get("incomplete")),
         }
     return result
@@ -2770,12 +2772,13 @@ def source_value_insights_from_stats(stats: list[dict[str, Any]]) -> list[dict[s
         kept_count = int(item.get("kept_count") or 0)
         latest_card_count = int(item.get("latest_card_count") or 0)
         if item.get("scan_failure"):
+            failure_reason = str(item.get("scan_failure_reason") or "access_error").replace("_", " ")
             insights.append(
                 source_insight(
                     kind="watch",
                     channel=channel,
                     label="Access",
-                    reason="Latest scan failed; check membership, handle, or Telegram session before judging value.",
+                    reason=f"Latest scan failed ({failure_reason}); check membership, handle, or Telegram session before judging value.",
                     priority=80,
                     stats=item,
                     confidence="high",

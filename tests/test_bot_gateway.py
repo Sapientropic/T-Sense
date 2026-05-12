@@ -44,7 +44,7 @@ class BotGatewayTests(unittest.TestCase):
 
     def test_source_plan_preview_requires_same_chat_callback_before_apply(self):
         api = FakeBotApi()
-        gateway = bot_gateway.BotGateway(api, allowed={"12345"})
+        gateway = bot_gateway.BotGateway(api, allowed={"12345"}, use_llm=False)
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -94,7 +94,7 @@ class BotGatewayTests(unittest.TestCase):
                 "apply_source_assistant_resolved_plan",
                 return_value=applied_result,
             ) as apply_mock:
-                gateway.handle_text("12345", "add a remote jobs source")
+                gateway.handle_text("12345", "add @remote_jobs")
                 callback_data = api.messages[-1]["reply_markup"]["inline_keyboard"][0][0]["callback_data"]
                 gateway.handle_callback("12345", "cb-ok", callback_data)
 

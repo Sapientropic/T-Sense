@@ -908,6 +908,20 @@ def _source_health_base(source: ScanSource) -> dict:
     }
 
 
+def source_access_failure_reason(exc: Exception) -> str:
+    name = exc.__class__.__name__.casefold()
+    text = str(exc).casefold()
+    if "floodwait" in name or "flood wait" in text or "too many requests" in text:
+        return "rate_limited"
+    if "timeout" in name or "timed out" in text or "timeout" in text:
+        return "timeout"
+    if any(marker in text for marker in ("cannot resolve", "cannot resolve channel", "cannot resolve entity", "could not find the input entity", "no user has")):
+        return "cannot_resolve_entity"
+    if any(marker in text for marker in ("private", "forbidden", "not a participant", "invite", "permission")):
+        return "permission_or_private"
+    return "access_error"
+
+
 def _health_from_result(source: ScanSource, result: ChannelResult, kept_count: int) -> dict:
     health = _source_health_base(source)
     message_dates = [
@@ -931,7 +945,11 @@ def _health_from_result(source: ScanSource, result: ChannelResult, kept_count: i
 
 def _health_from_failure(source: ScanSource, exc: Exception) -> dict:
     health = _source_health_base(source)
-    health.update({"failure": type(exc).__name__, "last_error": str(exc)})
+    health.update({
+        "failure": type(exc).__name__,
+        "failure_reason": source_access_failure_reason(exc),
+        "last_error": str(exc),
+    })
     return health
 
 
