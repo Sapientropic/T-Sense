@@ -36,7 +36,7 @@ Review、profile 调整、运行健康检查和设置，避免普通用户一上
 49 秒 Demo 视频展示 T-Sense 如何从频道噪音里抽出信号，并生成本地可复查的信号简报。
 
 <p align="center">
-  <a href="docs/demo.mp4"><strong>观看 T-Sense Demo 视频</strong></a>
+  <a href="https://github.com/user-attachments/assets/cf69300b-85cf-49b2-ab15-a0320945115c"><strong>观看 T-Sense Demo 视频</strong></a>
 </p>
 
 ## Signal Desk

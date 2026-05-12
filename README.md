@@ -40,7 +40,7 @@ The 49-second demo video shows the T-Sense flow from noisy channels to a ranked
 local signal brief.
 
 <p align="center">
-  <a href="docs/demo.mp4"><strong>Watch the T-Sense demo video</strong></a>
+  <a href="https://github.com/user-attachments/assets/cf69300b-85cf-49b2-ab15-a0320945115c"><strong>Watch the T-Sense demo video</strong></a>
 </p>
 
 ## Signal Desk
