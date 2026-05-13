@@ -640,9 +640,26 @@ def _item_key(profile_id: str, item: dict[str, Any]) -> str:
     return "monitor:" + sha256_text(stable_json(basis))[:24]
 
 
+def _is_raw_item_field(key: object) -> bool:
+    normalized = str(key or "").strip().lower()
+    return normalized in RAW_ITEM_FIELDS
+
+
 def _is_private_item_field(key: object) -> bool:
     normalized = str(key or "").strip().lower()
     return normalized in PRIVATE_ITEM_FIELDS or normalized.endswith(PRIVATE_ITEM_FIELD_SUFFIXES)
+
+
+def _sanitize_item_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _sanitize_item_value(nested)
+            for key, nested in value.items()
+            if not _is_raw_item_field(key) and not _is_private_item_field(key)
+        }
+    if isinstance(value, list):
+        return [_sanitize_item_value(item) for item in value]
+    return value
 
 
 def _sanitize_item(item: dict[str, Any]) -> dict[str, Any]:
@@ -650,9 +667,9 @@ def _sanitize_item(item: dict[str, Any]) -> dict[str, Any]:
     # as a product decision projection; runner control fields, local paths, and
     # credentials belong in manifests or guarded setup contracts instead.
     sanitized = {
-        key: value
+        key: _sanitize_item_value(value)
         for key, value in item.items()
-        if key not in RAW_ITEM_FIELDS and not _is_private_item_field(key)
+        if not _is_raw_item_field(key) and not _is_private_item_field(key)
     }
     sanitized["schema_version"] = "monitor_item_projection_v1"
     return sanitized

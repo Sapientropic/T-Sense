@@ -11,7 +11,9 @@
       "status": "new",
       "signals": ["new"],
       "explanations": {
-        "match_confidence": "high"
+        "match_confidence": "high",
+        "raw_text": "NESTED_DECISION_RAW_SHOULD_NOT_RENDER",
+        "token": "NESTED_DECISION_TOKEN_SHOULD_NOT_RENDER"
       }
     },
     "source_message_refs": [
@@ -30,6 +32,19 @@
     "command": "SECRET_COMMAND_SHOULD_NOT_RENDER",
     "argv": ["--dangerous-argv"],
     "path": "C:/Users/Administrator/private/scan.jsonl",
+    "details": {
+      "summary": "Safe derived summary",
+      "raw_text": "NESTED_DETAILS_RAW_SHOULD_NOT_RENDER",
+      "credentials": {
+        "api_key": "NESTED_DETAILS_API_KEY_SHOULD_NOT_RENDER"
+      }
+    },
+    "attachments": [
+      {
+        "label": "Safe artifact label",
+        "path": "C:/Users/Administrator/private/nested-scan.jsonl"
+      }
+    ],
     "headers": {
       "authorization": "Bearer SECRET_HEADER_SHOULD_NOT_RENDER"
     }
@@ -60,7 +75,12 @@
           "why": "Strong TypeScript and React match.",
           "decision_state": {
             "status": "new",
-            "signals": ["new"]
+            "signals": ["new"],
+            "explanations": {
+              "match_confidence": "high",
+              "token": "NESTED_DASHBOARD_TOKEN_SHOULD_NOT_RENDER",
+              "raw_text": "NESTED_DASHBOARD_RAW_SHOULD_NOT_RENDER"
+            }
           },
           "raw_text": "RAW_TELEGRAM_BODY_SHOULD_NOT_RENDER",
           "bot_token": "BOT_TOKEN_SHOULD_NOT_RENDER",
@@ -120,6 +140,13 @@
     "SECRET_COMMAND_SHOULD_NOT_RENDER",
     "--dangerous-argv",
     "SECRET_HEADER_SHOULD_NOT_RENDER",
-    "XSS_SHOULD_NOT_RENDER"
+    "XSS_SHOULD_NOT_RENDER",
+    "NESTED_DECISION_RAW_SHOULD_NOT_RENDER",
+    "NESTED_DECISION_TOKEN_SHOULD_NOT_RENDER",
+    "NESTED_DETAILS_RAW_SHOULD_NOT_RENDER",
+    "NESTED_DETAILS_API_KEY_SHOULD_NOT_RENDER",
+    "C:/Users/Administrator/private/nested-scan.jsonl",
+    "NESTED_DASHBOARD_TOKEN_SHOULD_NOT_RENDER",
+    "NESTED_DASHBOARD_RAW_SHOULD_NOT_RENDER"
   ]
 }

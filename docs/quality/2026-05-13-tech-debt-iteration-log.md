@@ -883,3 +883,54 @@ Next:
 
 - Commit this checkpoint after staged-snapshot verification, then choose the
   next broad value slice rather than continuing to micro-fix schema edges.
+
+## Slice 23: Recursive Review-Item Privacy Fixture
+
+Status: completed.
+
+Actions:
+
+- Changed backend review-card item projection to strip raw/private keys
+  recursively inside nested objects and arrays, not only at the top level.
+- Kept `monitor_item_projection_v1` as the stored item contract while removing
+  nested `raw_text`, token/API key, command, argv, session/path, and header-like
+  fields from derived review items.
+- Hardened the dashboard decision-state explanation sanitizer so private keys
+  inside `explanations` do not render.
+- Expanded the shared privacy contract fixture with nested backend and frontend
+  denial strings so Python state, dashboard state, and feedback export all share
+  the same privacy regression.
+
+Verification:
+
+- `python -m pytest tests/test_contract_privacy_fixtures.py tests/test_monitor_state.py::MonitorStateTests::test_review_card_item_sanitizer_strips_raw_media_text_fields -q`
+  passed: `2` tests, `20` subtests.
+- `python -m pytest tests/test_monitor_state.py -q` passed: `69` tests,
+  `6` subtests.
+- `npm test -- contract-privacy-fixtures sanitize` passed: `2` files,
+  `29` tests.
+- `npm run typecheck` passed.
+- `npm test` passed: `13` files, `127` tests.
+- Exported the staged index to a temporary tree to verify this checkpoint
+  without unrelated working-tree WIP: Python privacy tests passed (`2` tests,
+  `20` subtests), staged `tests/test_monitor_state.py` passed (`66` tests,
+  `6` subtests), frontend targeted tests passed (`2` files, `27` tests), and
+  `npm run typecheck` passed.
+
+Reviewer Gate:
+
+- This directly advances the spec's privacy goal: raw Telegram text, secrets,
+  local paths, command strings, and argv now stay out even when they arrive
+  nested inside otherwise allowed review-item structures.
+
+Residual Risk:
+
+- Key-based recursive stripping cannot detect sensitive values hidden under
+  benign keys. That would need a separate content classifier or stricter
+  allowlist for item projections, which may be too lossy without product
+  review.
+
+Next:
+
+- Commit this checkpoint after staged-snapshot verification, then triage the
+  parallel privacy audit and continue with the next broad high-value item.

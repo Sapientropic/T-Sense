@@ -1131,9 +1131,45 @@ function sanitizeStringRecord(value: unknown): Record<string, string> | undefine
     return undefined;
   }
   const clean = Object.fromEntries(
-    Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].trim() !== ""),
+    Object.entries(value).filter(
+      (entry): entry is [string, string] =>
+        typeof entry[1] === "string" && entry[1].trim() !== "" && !isPrivateStringRecordKey(entry[0]),
+    ),
   );
   return Object.keys(clean).length ? clean : undefined;
+}
+
+const PRIVATE_STRING_RECORD_KEYS = new Set([
+  "api_key",
+  "argv",
+  "authorization",
+  "bot_token",
+  "command",
+  "cookie",
+  "cookies",
+  "cwd",
+  "env",
+  "environment",
+  "headers",
+  "password",
+  "path",
+  "profile_path",
+  "raw",
+  "raw_text",
+  "request",
+  "response",
+  "scan_path",
+  "secret",
+  "session",
+  "session_path",
+  "token",
+]);
+
+const PRIVATE_STRING_RECORD_SUFFIXES = ["_api_key", "_client_secret", "_password", "_secret", "_session_path", "_token"];
+
+function isPrivateStringRecordKey(key: string) {
+  const normalized = key.trim().toLowerCase();
+  return PRIVATE_STRING_RECORD_KEYS.has(normalized) || PRIVATE_STRING_RECORD_SUFFIXES.some((suffix) => normalized.endsWith(suffix));
 }
 
 function warnUnexpectedInboxField(index: number, field: string, value: unknown) {
