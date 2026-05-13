@@ -18,6 +18,7 @@ try:
     from scripts import monitor_artifacts as _monitor_artifacts
     from scripts import monitor_config as _monitor_config
     from scripts import monitor_delivery as _monitor_delivery
+    from scripts import monitor_execution as _monitor_execution
     from scripts import monitor_prefilter as _monitor_prefilter
     from scripts import monitor_runner as _monitor_runner
 except ModuleNotFoundError:
@@ -28,6 +29,7 @@ except ModuleNotFoundError:
     from scripts import monitor_artifacts as _monitor_artifacts
     from scripts import monitor_config as _monitor_config
     from scripts import monitor_delivery as _monitor_delivery
+    from scripts import monitor_execution as _monitor_execution
     from scripts import monitor_prefilter as _monitor_prefilter
     from scripts import monitor_runner as _monitor_runner
 
@@ -108,6 +110,7 @@ def _sync_modules() -> None:
 
     _monitor_config.PROJECT_ROOT = PROJECT_ROOT
     _monitor_artifacts.PROJECT_ROOT = PROJECT_ROOT
+    _monitor_execution.PROJECT_ROOT = PROJECT_ROOT
     _monitor_runner.PROJECT_ROOT = PROJECT_ROOT
     _monitor_runner.run_json_command = run_json_command
 
@@ -155,19 +158,96 @@ def artifact(
     )
 
 
-def report_command_for_scan_input(**kwargs: Any) -> list[str | Path]:
+def report_command_for_scan_input(
+    *,
+    scan_input: Path,
+    profile_file: Path,
+    run_dir: Path,
+    state_dir: Path,
+    source_registry: Path | None,
+    items_json: str | None,
+    profile_id: str,
+    run_id: str,
+    max_messages: int | None = None,
+    max_tokens: int | None = None,
+    batch_size: int | None = None,
+    semantic_concurrency_value: int | None = None,
+) -> list[str | Path]:
     _sync_modules()
-    return _monitor_runner.report_command_for_scan_input(**kwargs)
+    return _monitor_runner.report_command_for_scan_input(
+        scan_input=scan_input,
+        profile_file=profile_file,
+        run_dir=run_dir,
+        state_dir=state_dir,
+        source_registry=source_registry,
+        items_json=items_json,
+        profile_id=profile_id,
+        run_id=run_id,
+        max_messages=max_messages,
+        max_tokens=max_tokens,
+        batch_size=batch_size,
+        semantic_concurrency_value=semantic_concurrency_value,
+    )
 
 
-def scan_command(**kwargs: Any) -> list[str | Path]:
+def scan_command(
+    *,
+    run_dir: Path,
+    source_args: list[str],
+    hours: int,
+    allow_incomplete: bool,
+    concurrency: int | None = None,
+    delay_seconds: float | None = None,
+) -> list[str | Path]:
     _sync_modules()
-    return _monitor_runner.scan_command(**kwargs)
+    return _monitor_runner.scan_command(
+        run_dir=run_dir,
+        source_args=source_args,
+        hours=hours,
+        allow_incomplete=allow_incomplete,
+        concurrency=concurrency,
+        delay_seconds=delay_seconds,
+    )
 
 
-def daily_report_command(**kwargs: Any) -> list[str | Path]:
+def daily_report_command(
+    *,
+    profile: dict[str, Any],
+    profile_file: Path,
+    run_dir: Path,
+    state_dir: Path,
+    source_args: list[str],
+    hours: int,
+    items_json: str | None,
+    allow_incomplete: bool,
+    profile_id: str,
+    run_id: str,
+    max_messages: int | None = None,
+    max_tokens: int | None = None,
+    scan_concurrency_value: int | None = None,
+    scan_delay_seconds_value: float | None = None,
+    batch_size: int | None = None,
+    semantic_concurrency_value: int | None = None,
+) -> list[str | Path]:
     _sync_modules()
-    return _monitor_runner.daily_report_command(**kwargs)
+    return _monitor_runner.daily_report_command(
+        profile=profile,
+        profile_file=profile_file,
+        run_dir=run_dir,
+        state_dir=state_dir,
+        source_args=source_args,
+        hours=hours,
+        items_json=items_json,
+        allow_incomplete=allow_incomplete,
+        profile_id=profile_id,
+        run_id=run_id,
+        max_messages=max_messages,
+        max_tokens=max_tokens,
+        scan_concurrency_value=scan_concurrency_value,
+        scan_delay_seconds_value=scan_delay_seconds_value,
+        batch_size=batch_size,
+        semantic_concurrency_value=semantic_concurrency_value,
+    )
 
 
 def run_profile(args: argparse.Namespace) -> int:

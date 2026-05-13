@@ -280,6 +280,34 @@ without changing dashboard state contracts:
   -q`, `python -m pytest tests/monitor_state -q`, targeted `ruff`/`py_compile`,
   `python -m ruff check .`, and full `python -m pytest -q`.
 
+## Progress Update: 2026-05-14 Monitor Command Execution Split
+
+The monitor runner shed the scan/report command execution boundary without
+changing monitor CLI behavior or run manifest contracts:
+
+- `scripts/monitor_execution.py` now owns report/scan/daily-report command
+  construction, source-registry argument lookup, latest-manifest pointer writes,
+  and the scan-input/prefilter/daily-report execution branches.
+- `scripts/monitor_runner.py` still owns profile validation, run directory
+  setup, DB writeback, review-card upsert, delivery, manifest assembly, and CLI
+  output, while delegating command execution through a typed
+  `MonitorCommandResult`.
+- `scripts/monitor.py` keeps the public facade and now syncs `PROJECT_ROOT`
+  into the execution module; `tests/monitor/test_config_helpers.py` locks
+  facade command-helper signatures and patched project-root command paths.
+- The CI explicit `py_compile` list now includes `scripts/monitor_runner.py`
+  and `scripts/monitor_execution.py`, so syntax coverage follows the split.
+- Review found no behavior-equivalence blocker for scan-input, prefilter
+  no-match/hit, scan-failure, items-json bypass, or daily-report branches. A
+  compatibility concern about public helper signature erosion was addressed by
+  restoring explicit keyword-only wrapper signatures.
+- Focused and full gates passed: `python -m pytest
+  tests/monitor/test_config_helpers.py tests/monitor/test_prefilter_and_manifest.py
+  -q`, `python -m pytest tests/monitor tests/test_contract_fixtures.py
+  tests/test_dashboard_state_contracts.py -q`, targeted and CI-list
+  `py_compile`, `python -m ruff check .`, `python -m pytest -q`, and
+  `git diff --check`.
+
 ## Current Debt Snapshot: 2026-05-14
 
 The debt register below remains the long-form reasoning. This table is the
@@ -305,7 +333,8 @@ Large current files are still the main maintainability signal:
 | Python server | `scripts/dashboard_server.py` | 1195 | HTTP routing, state payload assembly, route-level validation, and compatibility re-exports remain in the facade after profile creation moved out. |
 | Dashboard projection | `scripts/dashboard_projection.py` | 761 | Focused projection module for dashboard snapshots, run/report artifacts, delivery targets, profile patches, opportunity summaries, and setup status after profile projection moved out. |
 | Dashboard profile projection | `scripts/dashboard_profiles.py` | 186 | Focused profile projection module for profile labels, matching summaries, report titles, and display paths. |
-| Python monitor runner | `scripts/monitor_runner.py` | 852 | Repeated-run orchestration and manifest behavior are now a focused but still sizeable boundary after delivery target/runtime override helpers moved out. |
+| Python monitor runner | `scripts/monitor_runner.py` | 709 | Repeated-run orchestration and manifest behavior are now a focused but still sizeable boundary after delivery target/runtime override and command-execution helpers moved out. |
+| Monitor command execution | `scripts/monitor_execution.py` | 412 | Focused command-execution module for scan/report command construction, prefilter branching, and latest-manifest pointer writes. |
 | Monitor prefilter/manifest tests | `tests/monitor/test_prefilter_and_manifest.py` | 718 | Largest monitor test file after the split; scoped to expensive run/manifest paths rather than all monitor behavior. |
 | Tgcs CLI init tests | `tests/tgcs_cli/test_run_demo_init.py` | 282 | Largest CLI test file after the split; scoped to run/demo/init/quickstart/login/doctor behavior. |
 | Report rendering | `scripts/report_html.py` | 610 | HTML rendering is separated from extraction but remains large enough to merit focused tests before visual/report changes. |

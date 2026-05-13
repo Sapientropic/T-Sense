@@ -1,15 +1,15 @@
-state: active_quality_iteration_dashboard_profile_projection_split_checkpoint
+state: active_quality_iteration_monitor_command_execution_split_checkpoint
 mode: Standard
 run_shape: continuous_until_deadline
-slice_goal: "Continue the technical-debt SPEC with high-value dashboard/backend slices, including Inbox/Runs concentration cleanup, sanitizer test ownership cleanup, dashboard profile-creation facade cleanup, monitor/tgcs CLI test concentration cleanup, monitor delivery runtime cleanup, and dashboard profile projection cleanup, while preserving public props, review/run action names, sanitizer behavior, route contracts, monitor/tgcs CLI behavior, dashboard state contracts, and local-first privacy boundaries."
+slice_goal: "Continue the technical-debt SPEC with high-value dashboard/backend slices, including Inbox/Runs concentration cleanup, sanitizer test ownership cleanup, dashboard profile-creation facade cleanup, monitor/tgcs CLI test concentration cleanup, monitor delivery runtime cleanup, dashboard profile projection cleanup, and monitor command execution cleanup, while preserving public props, review/run action names, sanitizer behavior, route contracts, monitor/tgcs CLI behavior, dashboard state contracts, run manifest contracts, and local-first privacy boundaries."
 stop_condition: "Do not enter final closeout before 2026-05-14 14:00 Asia/Shanghai unless the user explicitly stops; if SPEC work is exhausted, research competitors/user pain points and expand ROADMAP/SPEC before continuing."
 handoff_policy: after_deadline_closeout
 continuation_policy: "Use docs/technical-debt-cleanup-spec.md as the debt authority; continue with one remaining boundary at a time and keep old facade exports until downstream callers move."
 intake_status: explicit_user_request
-gate_status: dashboard_profile_projection_split_gates_passed_review_clean
+gate_status: monitor_command_execution_split_gates_passed_review_clean
 blockers: []
 needs_human: []
-residual_risk: "This checkpoint is a backend projection boundary split for dashboard profile helpers. It does not exercise live Telegram, live LLM/provider behavior, Scheduler/Credential Manager, Docker packaging install/build commands, frontend browser smoke, or human product acceptance."
+residual_risk: "This checkpoint is a backend monitor command-execution split. It does not exercise live Telegram, live LLM/provider behavior, Scheduler/Credential Manager, Docker packaging install/build commands beyond CI compile parity, frontend browser smoke, or human product acceptance."
 completed_slices:
   - "dashboard_server artifact helpers moved to scripts/desk_artifacts.py with dashboard_server re-export compatibility."
   - "dashboard_server git helpers moved to scripts/desk_git.py with dashboard_server wrapper compatibility."
@@ -36,6 +36,7 @@ completed_slices:
   - "Tgcs CLI test split: removed tests/test_tgcs_cli.py and moved its 32 tests into tests/tgcs_cli/test_run_demo_init.py, test_delegates.py, and test_schedule_print.py; shared load_tgcs_module now lives in tests/tgcs_cli/__init__.py."
   - "Monitor delivery split: scripts/monitor_delivery.py now owns delivery target selection, Signal Desk delivery runtime overrides, and alert delivery dispatch; scripts/monitor.py preserves public facade exports."
   - "Dashboard profile projection split: scripts/dashboard_profiles.py now owns dashboard profile projection, profile matching summary extraction, display path labels, report-title lookup, and compact profile/report labels; dashboard_projection.py preserves compatibility re-exports."
+  - "Monitor command execution split: scripts/monitor_execution.py now owns scan/report/daily-report command construction, source-registry argument lookup, latest-manifest pointer writes, and scan-input/prefilter/daily-report execution branches; scripts/monitor_runner.py preserves profile validation, DB writeback, delivery, manifest assembly, and CLI output."
 verification:
   - "python -m pytest tests/dashboard -q -> 149 passed, 71 subtests passed"
   - "python -m pytest tests/monitor_state -q -> 81 passed, 24 subtests passed"
@@ -97,6 +98,14 @@ verification:
   - "python -m ruff check . -> passed"
   - "python -m pytest -q -> 497 passed, 2 skipped, 195 subtests passed"
   - "git diff --check -> passed for the dashboard profile projection split working tree"
+  - "python -m pytest tests/monitor/test_config_helpers.py tests/monitor/test_prefilter_and_manifest.py -q -> 17 passed, 3 subtests passed"
+  - "python -m ruff check scripts/monitor.py scripts/monitor_runner.py scripts/monitor_execution.py tests/monitor/test_config_helpers.py -> passed"
+  - "python -m py_compile scripts/monitor.py scripts/monitor_runner.py scripts/monitor_execution.py -> passed"
+  - "python -m pytest tests/monitor tests/test_contract_fixtures.py tests/test_dashboard_state_contracts.py -q -> 30 passed, 10 subtests passed"
+  - "python -m py_compile scripts/scan.py scripts/summarize.py scripts/media_ocr.py scripts/ocr_media.py scripts/report.py scripts/report_diagnostics.py scripts/daily_report.py scripts/doctor.py scripts/delivery.py scripts/monitor_state.py scripts/monitor.py scripts/monitor_runner.py scripts/monitor_execution.py scripts/dashboard_server.py -> passed"
+  - "python -m ruff check . -> passed"
+  - "python -m pytest -q -> 499 passed, 2 skipped, 198 subtests passed"
+  - "git diff --check -> passed for the monitor command execution split working tree"
 reviewer_status:
   - "Explorer review of the proposed split recommended a搬运式拆分: keep InboxView as facade, move filters/backlog, review-card/actions/source refs, and setup checklist into focused submodules."
   - "Post-diff reviewer found no blocking issues. Remaining risks were untracked new files, SSR-only test coverage, and preserving existing link sanitizer boundaries; untracked files are included in the checkpoint plan and the browser smoke covers the main interaction path."
@@ -108,6 +117,8 @@ reviewer_status:
   - "Tgcs CLI test split reviewer found 32 old tests mapped to 32 new tests and natural grouping. Blocking feedback about tests/test_bot_gateway.py importing the deleted tests.test_tgcs_cli helper was addressed by moving load_tgcs_module to tests/tgcs_cli/__init__.py and updating bot gateway imports; docs/testing.md was updated to use tests/tgcs_cli."
   - "Monitor delivery split reviewer was requested but did not return before checkpoint staging; focused/full gates and facade compatibility tests found no blocker. If a later reviewer result reports a substantive issue, handle it as the next checkpoint."
   - "Dashboard profile projection split reviewer found no behavior/import blocker. Compatibility feedback about dashboard_projection.PROJECT_ROOT monkeypatching was addressed by letting dashboard_profiles prefer an explicitly patched dashboard_projection.PROJECT_ROOT, otherwise preserving monitor_state.PROJECT_ROOT facade patch behavior; projection tests now cover this."
+  - "Monitor command execution split compatibility reviewer found no runtime blocker. Feedback about untracked new-module risk is handled by staging scripts/monitor_execution.py; CI explicit py_compile coverage was updated; public helper signature erosion was addressed with explicit monitor/monitor_runner wrapper signatures and signature tests."
+  - "Monitor command execution split behavior reviewer found no blocker or behavior mismatch across scan_input, prefilter no-match/hit, scan failure, items_json bypass, and daily-report branches; a focused reviewer run of test_config_helpers and test_prefilter_and_manifest passed."
 operator_checks:
   - "Docker Desktop 4.65.0 / engine 29.2.1 reachable after startup; docker build -t tgcs-local-smoke:<temp> . -> exit 0"
   - "Docker demo container -> exit 0, generated one demo report in a temporary mounted output directory; temporary directory and image removed."
@@ -117,10 +128,10 @@ operator_checks:
   - "Live Windows Task Scheduler dry-run task with random name -> install exit 0, status installed, remove exit 0, final status not_installed."
   - "Live Windows Credential Manager smoke -> random secret write/read/delete passed; post-delete read returned empty."
   - "Live LLM structured call -> provider=deepseek, model=deepseek-v4-flash, JSON response status=TGCS_LIVE_LLM_OK, total_tokens=58."
-next_action: "Stage scripts/dashboard_profiles.py, dashboard_projection facade changes, projection tests, and docs; commit the projection boundary checkpoint, then continue."
+next_action: "Stage scripts/monitor_execution.py, monitor facade/runner changes, CI compile coverage, monitor tests, and docs; commit the command-execution boundary checkpoint, then continue."
 candidate_slices:
   - "Inspect scripts/dashboard_projection.py report artifact or setup/opportunity helpers for another behavior-preserving projection split only if a clear ownership boundary exists."
-  - "Inspect scripts/monitor_runner.py run_profile body for a larger orchestration split only if behavior locks are strong enough."
+  - "Inspect scripts/monitor_runner.py for any remaining manifest-write helper boundary only if it can be split without obscuring run_profile flow or weakening manifest tests."
   - "Consider profile runtime/review-patch server helpers only when those route areas change next."
-last_update: "2026-05-14T07:12:04+08:00"
+last_update: "2026-05-14T07:25:44+08:00"
 checkpoint_ready: true
