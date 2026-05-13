@@ -1,0 +1,90 @@
+{
+  "schema_version": "desk_source_access_contract_fixture_v1",
+  "source_access": {
+    "schema_version": "desk_source_access_health_v1",
+    "checked_at": "2026-05-13T00:00:00Z",
+    "source_count": 4,
+    "checked_count": 3,
+    "accessible_count": 1,
+    "quiet_count": 1,
+    "inaccessible_count": 1,
+    "truncated_count": 1,
+    "reason_counts": {
+      "cannot_resolve_entity": 1,
+      "empty_recent_window": 1
+    },
+    "probe_window_hours_min": 2,
+    "probe_window_hours_max": 24
+  },
+  "frontend_action_result": {
+    "schema_version": "desk_action_result_v1",
+    "action_id": "sources_probe_access",
+    "status": "success",
+    "title": "Check source access",
+    "detail": "Source access checked.",
+    "display_command": "Signal Desk source access check",
+    "exit_code": 0,
+    "artifact_path": "",
+    "next_action": "Pause inaccessible sources or run a practice scan after access looks healthy.",
+    "finished_at": "2026-05-13T00:00:00Z",
+    "source_access": {
+      "schema_version": "desk_source_access_health_v1",
+      "checked_at": "2026-05-13T00:00:00Z",
+      "source_count": 4,
+      "checked_count": 3,
+      "accessible_count": 1,
+      "quiet_count": 1,
+      "inaccessible_count": 1,
+      "truncated_count": 1,
+      "reason_counts": {
+        "cannot_resolve_entity": 1,
+        "empty_recent_window": 1,
+        "raw_text": "RAW_SOURCE_ACCESS_SHOULD_NOT_SURFACE"
+      },
+      "probe_window_hours_min": 2,
+      "probe_window_hours_max": 24,
+      "sources": [
+        {
+          "source_id": "telegram:private",
+          "detail": "RAW_SOURCE_ACCESS_SHOULD_NOT_SURFACE",
+          "path": "C:/Users/Administrator/private/source-access.json"
+        }
+      ],
+      "token": "SECRET_SOURCE_ACCESS_TOKEN_SHOULD_NOT_SURFACE"
+    }
+  },
+  "frontend_expected": {
+    "schema_version": "desk_action_result_v1",
+    "action_id": "sources_probe_access",
+    "status": "success",
+    "title": "Check source access",
+    "detail": "Source access checked.",
+    "display_command": "Signal Desk source access check",
+    "exit_code": 0,
+    "artifact_path": "",
+    "next_action": "Pause inaccessible sources or run a practice scan after access looks healthy.",
+    "finished_at": "2026-05-13T00:00:00Z",
+    "source_access": {
+      "schema_version": "desk_source_access_health_v1",
+      "checked_at": "2026-05-13T00:00:00Z",
+      "source_count": 4,
+      "checked_count": 3,
+      "accessible_count": 1,
+      "quiet_count": 1,
+      "inaccessible_count": 1,
+      "truncated_count": 1,
+      "reason_counts": {
+        "cannot_resolve_entity": 1,
+        "empty_recent_window": 1
+      },
+      "probe_window_hours_min": 2,
+      "probe_window_hours_max": 24
+    }
+  },
+  "denied_strings": [
+    "RAW_SOURCE_ACCESS_SHOULD_NOT_SURFACE",
+    "SECRET_SOURCE_ACCESS_TOKEN_SHOULD_NOT_SURFACE",
+    "C:/Users/Administrator/private/source-access.json",
+    "telegram:private"
+  ]
+}

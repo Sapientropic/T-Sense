@@ -368,7 +368,7 @@ Next:
 
 ## Slice 9: Feedback Summary Legacy Path Hardening
 
-Status: in progress.
+Status: completed.
 
 Actions:
 
@@ -1318,3 +1318,56 @@ Next:
 
 - Commit this checkpoint, then continue with the next high-value Phase 1
   boundary.
+
+## Slice 32: Desk Source Access Health Summary Fixture
+
+Status: in progress.
+
+Actions:
+
+- Added `desk_source_access_health_v1.summary.json` as a shared contract
+  fixture for the aggregate source-access health summary exposed through Desk
+  action results and setup checks.
+- Added a backend test that builds a full internal source-access health payload
+  with per-source private details and asserts `_source_access_action_summary()`
+  emits only aggregate counts, reason counts, timestamps, and probe-window
+  bounds.
+- Added a frontend fixture test proving `sanitizeDeskActionResult()` keeps the
+  nested `source_access` summary aggregate-only and drops per-source details,
+  raw text, local paths, and token-like fields.
+
+Verification:
+
+- `python -m pytest tests/test_desk_source_access_contracts.py -q` passed:
+  `1` test and `4` subtests.
+- `python -m ruff check tests/test_desk_source_access_contracts.py` passed.
+- `cd dashboard; npm test -- --run desk-source-access-contract-fixtures` passed:
+  `1` test file and `1` test.
+- Broader related backend gate passed:
+  `python -m pytest tests/test_desk_source_access_contracts.py tests/test_dashboard_server.py -k "source_access or desk_source" -q`
+  passed `18` tests, `14` subtests, `126` deselected.
+- Broader related frontend gate passed:
+  `cd dashboard; npm test -- --run desk-source-access-contract-fixtures desk-contract-fixtures sanitize`
+  passed `3` test files and `30` tests.
+- `git diff --check -- tests/fixtures/contracts/desk_source_access_health_v1.summary.json tests/test_desk_source_access_contracts.py dashboard/src/domain/desk-source-access-contract-fixtures.test.ts`
+  passed.
+- Staged snapshot verification passed after checking out the index to a temp
+  directory and reusing only `dashboard/node_modules`: backend passed `18`
+  tests, `115` deselected, `14` subtests; frontend passed `3` test files and
+  `28` tests.
+
+Reviewer Gate:
+
+- This extends Rawls' Desk boundary recommendation to the cached source-access
+  health contract, which is a high-risk local Telegram boundary because full
+  probe records can contain source-specific failure detail.
+
+Residual Risk:
+
+- This does not exercise live Telegram access. It locks the serialization
+  boundary from internal health payload to public Desk summary and frontend
+  sanitizer behavior.
+
+Next:
+
+- Commit this checkpoint, then continue until the 14:00 stop condition.
