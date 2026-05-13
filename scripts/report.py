@@ -25,7 +25,14 @@ try:
     from scripts import agent_cli, decision_intelligence, local_credentials, report_diagnostics, source_registry, state_store
     from scripts.item_display import display_item_title, display_title_parts, meaningful_text
     from scripts.profile_schema import ProfileConfig, build_json_schema_prompt, parse_profile_config
-    from scripts.report_contracts import SEMANTIC_ITEMS_SCHEMA_VERSION, validate_semantic_items
+    from scripts.report_contracts import (
+        AGENT_EXTRACTION_REQUEST_SCHEMA_VERSION,
+        SEMANTIC_ITEMS_SCHEMA_VERSION,
+        extraction_prompt_messages,
+        extraction_prompt_meta,
+        profile_field_contract,
+        validate_semantic_items,
+    )
     from scripts.summarize import (
         positive_int,
         redact_contacts,
@@ -39,7 +46,14 @@ except ModuleNotFoundError:
     from scripts import agent_cli, decision_intelligence, local_credentials, report_diagnostics, source_registry, state_store
     from scripts.item_display import display_item_title, display_title_parts, meaningful_text
     from scripts.profile_schema import ProfileConfig, build_json_schema_prompt, parse_profile_config
-    from scripts.report_contracts import SEMANTIC_ITEMS_SCHEMA_VERSION, validate_semantic_items
+    from scripts.report_contracts import (
+        AGENT_EXTRACTION_REQUEST_SCHEMA_VERSION,
+        SEMANTIC_ITEMS_SCHEMA_VERSION,
+        extraction_prompt_messages,
+        extraction_prompt_meta,
+        profile_field_contract,
+        validate_semantic_items,
+    )
     from scripts.summarize import (
         positive_int,
         redact_contacts,
@@ -56,7 +70,6 @@ DEFAULT_MINIMAX_BASE_URL = "https://api.minimax.io/v1"
 DEFAULT_MINIMAX_CN_BASE_URL = "https://api.minimaxi.com/v1"
 DEFAULT_MINIMAX_TOKEN_PLAN_BASE_URL = DEFAULT_MINIMAX_CN_BASE_URL
 DEFAULT_MINIMAX_MODEL = "MiniMax-M2.7"
-AGENT_EXTRACTION_REQUEST_SCHEMA_VERSION = "agent_extraction_request_v1"
 LOCAL_AI_SECRET_TARGETS = {
     "OPENAI_API_KEY": "tgcs.signal-desk.openai-api-key",
     "DEEPSEEK_API_KEY": "tgcs.signal-desk.deepseek-api-key",
@@ -129,54 +142,6 @@ def load_meta(input_path: Path, explicit_meta: str | None = None) -> dict | None
         return None
     with path.open(encoding="utf-8") as handle:
         return json.load(handle)
-
-
-def extraction_prompt_meta(meta: dict | None) -> dict:
-    if not isinstance(meta, dict):
-        return {}
-    # The full scan sidecar contains per-source health rows, timestamps, and
-    # local output paths for diagnostics. Putting that blob before Telegram
-    # messages makes DeepSeek prompt caching brittle and wastes tokens; the LLM
-    # extraction step only needs a small run summary.
-    stable_keys = (
-        "scan_date",
-        "scan_window",
-        "channel_count",
-        "total_messages_collected",
-        "failure_count",
-        "incomplete_count",
-        "ocr_enabled",
-        "ocr_count",
-    )
-    summary: dict[str, Any] = {}
-    for key in stable_keys:
-        value = meta.get(key)
-        if isinstance(value, (str, int, float, bool)) or value is None:
-            summary[key] = value
-    return summary
-
-
-def extraction_prompt_messages(messages: Iterable[dict]) -> list[dict]:
-    prompt_keys = (
-        "channel",
-        "id",
-        "date",
-        "text",
-        "origin_channel",
-        "origin_url",
-        "origin_message_ref",
-    )
-    prompt_messages: list[dict] = []
-    for message in messages:
-        if not isinstance(message, dict):
-            continue
-        item: dict[str, Any] = {}
-        for key in prompt_keys:
-            value = message.get(key)
-            if value not in (None, "", [], {}):
-                item[key] = value
-        prompt_messages.append(item)
-    return prompt_messages
 
 
 def normalize_key(value: object) -> str:
@@ -1478,19 +1443,6 @@ def default_items_output_path(output: str | None, input_path: Path) -> Path:
     if output:
         return Path(output).with_suffix(".extracted-items.json")
     return input_path.with_suffix(".extracted-items.json")
-
-
-def profile_field_contract(profile_config: ProfileConfig) -> list[dict]:
-    return [
-        {
-            "name": field.name,
-            "required": field.required,
-            "type": field.type,
-            "values": field.values,
-            "extract_all": field.extract_all,
-        }
-        for field in profile_config.mode.fields
-    ]
 
 
 def build_agent_extraction_request(

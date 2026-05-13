@@ -434,7 +434,7 @@ Next:
 
 ## Slice 11: Dashboard POST Request Boundary
 
-Status: in progress.
+Status: completed.
 
 Actions:
 
@@ -1367,6 +1367,44 @@ Residual Risk:
 - This does not exercise live Telegram access. It locks the serialization
   boundary from internal health payload to public Desk summary and frontend
   sanitizer behavior.
+
+Next:
+
+- Commit this checkpoint, then continue until the 14:00 stop condition.
+
+## Slice 34: `agent_extraction_request_v1` Projection Helper Extraction
+
+Status: in progress.
+
+Actions:
+
+- Moved `AGENT_EXTRACTION_REQUEST_SCHEMA_VERSION`, scan meta allowlisting,
+  selected-message projection, and profile field contract projection into
+  `scripts/report_contracts.py`.
+- Kept `build_agent_extraction_request()` in `report.py` because it still
+  coordinates prompt construction and request file paths.
+- Preserved public names in `report.py` by importing the extracted helpers, so
+  existing tests and callers that reach through `report` keep working.
+
+Verification:
+
+- `python -m ruff check scripts/report.py scripts/report_contracts.py` passed.
+- `python -m pytest tests/test_contract_fixtures.py tests/test_report_contracts.py tests/test_agent_semantic_fallback.py tests/test_report.py -q`
+  passed `51` tests and `22` subtests.
+- Staged snapshot verification passed after checking out the index to a temp
+  directory: ruff passed and the same report contract test set passed `51`
+  tests and `22` subtests.
+
+Reviewer Gate:
+
+- This completes the spec's first `report_contracts.py` extraction target more
+  fully without moving provider or rendering code.
+
+Residual Risk:
+
+- `build_agent_extraction_request()` still lives in `report.py`; moving it
+  safely would require separating prompt construction from request shaping and
+  is better handled as a later, separately verified slice.
 
 Next:
 

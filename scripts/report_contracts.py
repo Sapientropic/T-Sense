@@ -11,6 +11,7 @@ import re
 from typing import Any, Iterable
 
 
+AGENT_EXTRACTION_REQUEST_SCHEMA_VERSION = "agent_extraction_request_v1"
 SEMANTIC_ITEMS_SCHEMA_VERSION = "semantic_items_v1"
 
 SEMANTIC_ITEM_PRIVATE_FIELDS = {
@@ -158,3 +159,64 @@ def validate_semantic_items(items: list, messages: list[dict]) -> list[str]:
                     f"{ref['channel']}:{ref['id']}"
                 )
     return issues
+
+
+def extraction_prompt_meta(meta: dict | None) -> dict:
+    if not isinstance(meta, dict):
+        return {}
+    # Agent/LLM extraction gets only a small cache-friendly run summary. Full
+    # scan sidecars can contain source-health rows, timestamps, and local paths;
+    # those belong in manifests and diagnostics, not in provider or fallback
+    # extraction contracts.
+    stable_keys = (
+        "scan_date",
+        "scan_window",
+        "channel_count",
+        "total_messages_collected",
+        "failure_count",
+        "incomplete_count",
+        "ocr_enabled",
+        "ocr_count",
+    )
+    summary: dict[str, Any] = {}
+    for key in stable_keys:
+        value = meta.get(key)
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            summary[key] = value
+    return summary
+
+
+def extraction_prompt_messages(messages: Iterable[dict]) -> list[dict]:
+    prompt_keys = (
+        "channel",
+        "id",
+        "date",
+        "text",
+        "origin_channel",
+        "origin_url",
+        "origin_message_ref",
+    )
+    prompt_messages: list[dict] = []
+    for message in messages:
+        if not isinstance(message, dict):
+            continue
+        item: dict[str, Any] = {}
+        for key in prompt_keys:
+            value = message.get(key)
+            if value not in (None, "", [], {}):
+                item[key] = value
+        prompt_messages.append(item)
+    return prompt_messages
+
+
+def profile_field_contract(profile_config: Any) -> list[dict]:
+    return [
+        {
+            "name": field.name,
+            "required": field.required,
+            "type": field.type,
+            "values": field.values,
+            "extract_all": field.extract_all,
+        }
+        for field in profile_config.mode.fields
+    ]
