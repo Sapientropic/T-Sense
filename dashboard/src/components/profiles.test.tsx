@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import { ProfilesView, runtimeSettingsSaveState } from "./profiles";
+import { runtimeSettingsSaveState as runtimeSettingsSaveStateFromModel } from "./profiles/runtime-settings-model";
 import type { Profile, ProfilePatch } from "../domain/types";
 
 function profile(overrides: Partial<Profile>): Profile {
@@ -31,6 +32,10 @@ const createProfileFromBrief = vi.fn(async () => ({
 }));
 
 describe("ProfilesView", () => {
+  it("keeps the split runtime settings model helper on the public profiles API", () => {
+    expect(runtimeSettingsSaveStateFromModel).toBe(runtimeSettingsSaveState);
+  });
+
   it("renders monitoring controls as human actions", () => {
     const html = renderToStaticMarkup(
       <ProfilesView

@@ -5,10 +5,25 @@ import unittest
 from datetime import UTC, datetime
 from pathlib import Path
 
-from scripts import monitor_state
+from scripts import monitor_alerts, monitor_state, review_cards
 
 
 class MonitorStateReviewCardsAlertsTests(unittest.TestCase):
+    def test_alert_helpers_stay_available_from_monitor_state_facade(self):
+        self.assertIs(monitor_state.alert_candidates, monitor_alerts.alert_candidates)
+        self.assertIs(monitor_state.sent_alert_card_ids, monitor_alerts.sent_alert_card_ids)
+        self.assertIs(monitor_state.sent_alert_suppression_keys, monitor_alerts.sent_alert_suppression_keys)
+        self.assertIs(monitor_state.record_alert_event, monitor_alerts.record_alert_event)
+
+
+    def test_review_card_helpers_stay_available_from_monitor_state_facade(self):
+        self.assertIs(monitor_state.card_id_for_item, review_cards.card_id_for_item)
+        self.assertIs(monitor_state.upsert_review_cards, review_cards.upsert_review_cards)
+        self.assertIs(monitor_state.get_review_card, review_cards.get_review_card)
+        self.assertIs(monitor_state.set_card_action, review_cards.set_card_action)
+        self.assertIs(monitor_state.undo_card_action, review_cards.undo_card_action)
+
+
     def test_review_card_dedupe_preserves_handled_status(self):
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row

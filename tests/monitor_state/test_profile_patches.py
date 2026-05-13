@@ -4,10 +4,21 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts import monitor_state
+from scripts import monitor_state, profile_patches
 
 
 class MonitorStateProfilePatchTests(unittest.TestCase):
+    def test_profile_patch_helpers_stay_available_from_monitor_state_facade(self):
+        self.assertIs(monitor_state.create_profile_patch_suggestion, profile_patches.create_profile_patch_suggestion)
+        self.assertIs(
+            monitor_state.create_profile_preferences_patch_suggestion,
+            profile_patches.create_profile_preferences_patch_suggestion,
+        )
+        self.assertIs(monitor_state.apply_profile_patch, profile_patches.apply_profile_patch)
+        self.assertIs(monitor_state.revert_profile_patch, profile_patches.revert_profile_patch)
+        self.assertIs(monitor_state.replay_profile_patch, profile_patches.replay_profile_patch)
+
+
     def test_follow_up_patch_can_apply_to_profile_file(self):
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row

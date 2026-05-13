@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import { buildJourneySteps, buildStartSummary, notificationReadiness } from "./actions";
+import {
+  buildJourneySteps as buildJourneyStepsFromModel,
+  buildStartSummary as buildStartSummaryFromModel,
+  notificationReadiness as notificationReadinessFromModel,
+} from "./actions/journey-model";
 import type { DeliveryTarget, DeskAction, DeskActionResult, DeskSchedulerStatus } from "../domain/types";
 
 function action(actionId: string, runMode = "execute"): DeskAction {
@@ -88,6 +93,12 @@ const telegramReady = {
 };
 
 describe("Signal Desk journey", () => {
+  it("keeps the split journey model helpers on the public actions API", () => {
+    expect(buildJourneyStepsFromModel).toBe(buildJourneySteps);
+    expect(buildStartSummaryFromModel).toBe(buildStartSummary);
+    expect(notificationReadinessFromModel).toBe(notificationReadiness);
+  });
+
   it("summarizes notification readiness without exposing the chat id", () => {
     expect(notificationReadiness([])).toMatchObject({ value: "Needs chat ID" });
     expect(notificationReadiness([deliveryTarget({ config: {} })])).toMatchObject({ value: "Needs chat ID" });

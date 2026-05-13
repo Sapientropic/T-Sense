@@ -3,10 +3,16 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts import dashboard_server
+from scripts import dashboard_server, desk_artifacts
 
 
 class DashboardArtifactTests(unittest.TestCase):
+    def test_dashboard_server_reexports_artifact_helpers(self):
+        self.assertIs(dashboard_server.DashboardArtifactError, desk_artifacts.DashboardArtifactError)
+        self.assertTrue(dashboard_server.is_dashboard_report_artifact_name("report.html"))
+        self.assertTrue(desk_artifacts.is_dashboard_report_artifact_name("report.html"))
+
+
     def test_resolve_run_artifact_allows_encoded_output_runs_file(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

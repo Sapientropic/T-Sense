@@ -4,10 +4,14 @@ import json
 from contextlib import AbstractContextManager
 from unittest.mock import patch
 
-from scripts import dashboard_server
+from scripts import dashboard_server, desk_git
 
 
 class DashboardGitTests(unittest.TestCase):
+    def test_dashboard_server_reexports_git_error(self):
+        self.assertIs(dashboard_server.DashboardGitError, desk_git.DashboardGitError)
+
+
     def test_close_after_use_closes_connection_handle(self):
         class FakeConnection:
             closed = False

@@ -32,8 +32,8 @@ Observed from the 2026-05-14 local workspace:
   cleanup should start from a fresh focused slice instead of treating the old
   dirty handoff as still active.
 - Each implementation checkpoint used focused mixed-tree verification first and
-  staged snapshot verification before commit. Docker packaging smoke remains
-  unverified because the local Docker client could not reach a daemon.
+  staged snapshot verification before commit. Docker packaging smoke was later
+  verified locally after Docker Desktop became reachable.
 - CI still covers Python 3.12/3.13 on Linux, Windows, macOS; ruff; pytest;
   dashboard tests/build; shell syntax; POSIX launcher LF line endings.
 
@@ -56,9 +56,9 @@ of unrelated dirty WIP:
 - `agent_extraction_request_v1` no longer serializes local input/profile/output
   handoff paths into the copyable request document; those writable paths remain
   in the local JSON envelope.
-- Bot Gateway status fixture coverage was later isolated as a checkpoint, but
-  live Telegram API, live scheduler, keyring, and LLM knowledge-answer behavior
-  remain operator checks.
+- Bot Gateway status fixture coverage was later isolated as a checkpoint. Live
+  Telegram API, live scheduler, keyring, and structured LLM behavior were
+  verified as workstation operator checks on 2026-05-14.
 
 The next cleanup phase should build on this baseline rather than re-litigating
 whether contract/privacy fixtures are worth keeping. New splits should either
@@ -82,6 +82,41 @@ time:
   `settings.tsx` into focused settings components and hooks. Frontend Vitest
   and production build passed from a staged snapshot.
 
+## Progress Update: 2026-05-14 Remaining Debt Split
+
+The remaining high-risk monolith slices were split behind the existing focused
+gates without changing HTTP endpoints, SQLite table names, or dashboard
+contract names:
+
+- `scripts/dashboard_server.py` is still the public server facade, but artifact
+  helpers, git update helpers, scheduler helpers, and Bot Gateway background
+  helpers now live in `scripts/desk_artifacts.py`, `scripts/desk_git.py`, and
+  `scripts/desk_scheduler.py`. A follow-up split moved Telegram credentials,
+  notification/AI key settings, source registry/access/assistant helpers, and
+  core Desk action execution into `desk_credentials.py`, `desk_sources.py`, and
+  `desk_actions.py`. Tests keep re-export/monkeypatch compatibility.
+- `scripts/monitor_state.py` remains the public state facade, while DB/schema,
+  shared privacy constants, review-card CRUD/actions, alert suppression,
+  feedback summaries, and profile patch lifecycle now live in
+  `monitor_db.py`, `monitor_common.py`, `review_cards.py`,
+  `monitor_alerts.py`, `monitor_feedback.py`, and `profile_patches.py`.
+  Dashboard state/run/report/setup projection now lives in
+  `dashboard_projection.py`.
+- Dashboard Start/Actions and Profiles are now composition entrypoints backed
+  by focused subcomponents and pure model modules. Existing helper exports from
+  `./actions` and `./profiles` are preserved for tests and callers.
+- Sanitizer shared primitives now cover object arrays, local relative paths,
+  string records, and source-access summaries. `sanitize/dashboard.ts` is now a
+  public facade over dashboard state/review/runs/profiles/summary modules and
+  re-exports Desk-owned sanitizer implementations from `sanitize/desk.ts`.
+- Focused gates passed: `tests/dashboard`, `tests/monitor_state`, shared
+  dashboard/desk/privacy contract fixtures, Dashboard targeted Vitest, and
+  Dashboard production build.
+- Operator checks passed on 2026-05-14: Docker build/demo/doctor smoke, live
+  Telegram status/source-access probe, Windows Task Scheduler install/status/
+  remove, Windows Credential Manager write/read/delete, and a structured
+  DeepSeek `deepseek-v4-flash` LLM call.
+
 ## Current Debt Snapshot: 2026-05-14
 
 The debt register below remains the long-form reasoning. This table is the
@@ -91,25 +126,23 @@ current triage view for what is still real after the later splits:
 | --- | --- | --- |
 | D1. WIP and branch hygiene | Cleared for the known backlog. The dirty implementation slices from the handoff are now checkpoint commits. | Keep using staged snapshot or clean worktree gates for future slices; do not use mixed-worktree gates as commit proof. |
 | D2. Contract sprawl | Materially improved. Shared fixtures now cover the high-risk Python/TypeScript contracts, but `docs/agent-cli-contract.md` is still long. | Keep the contract doc as an index and move new guarantees into fixtures first, prose second. |
-| D3. `dashboard_server.py` boundaries | Still high risk at `4320` lines, but Markdown/artifact rendering and dashboard tests are now separated. | Extract one route/action boundary at a time behind `tests/dashboard` focused gates. |
-| D4. `monitor_state.py` boundaries | Still high risk at `2773` lines. Source insights moved out, and monitor-state tests are now focused under `tests/monitor_state`. | Continue splitting DB, projection, review-card, and feedback behavior behind existing focused tests. |
+| D3. `dashboard_server.py` boundaries | Much smaller at `1430` lines. Artifact, git, scheduler, credentials, sources, and action execution helpers are split behind the old facade. | Keep HTTP routing/profile creation in the facade for now; only split further if route handling or profile creation starts changing. |
+| D4. `monitor_state.py` boundaries | Mostly reduced to a `411` line facade. DB/schema, common privacy guards, review cards, alerts, feedback, profile patches, and dashboard projection are split. | Profile runtime/settings helpers are the only meaningful remaining state responsibility; split only with focused tests if that area changes. |
 | D5. `report.py` coupling | Mostly reduced. `report.py` is now `503` lines; report behavior moved into `report_*` modules. | Treat `report_extraction.py`, `report_html.py`, and `report_sources.py` as the next review units rather than reopening the old monolith. |
-| D6. Dashboard root/settings state | Settings/hooks checkpoint is committed. `main.tsx` is `546` lines and `settings.tsx` is `308`, but `profiles.tsx`, `actions.tsx`, `inbox.tsx`, and `runs.tsx` remain large. | Split `actions.tsx` or `profiles.tsx` only with focused component tests and dashboard build coverage. |
-| D7. Runtime sanitizers | Still active. `sanitize/dashboard.ts`, `sanitize/desk.ts`, and `sanitize.test.ts` remain large. | Extract shared primitives only where fixture tests already prove the repeated behavior. |
+| D6. Dashboard root/settings state | Actions and Profiles are now composition entrypoints (`267` and `131` lines). `inbox.tsx`, `runs.tsx`, and the large runtime-settings control remain the next UI concentration points. | Split inbox/runs only with focused component tests and dashboard build coverage. |
+| D7. Runtime sanitizers | Dashboard sanitizer is now a `14` line facade. Dashboard state sanitizers are split by product area and Desk-owned helpers re-export `sanitize/desk.ts`. | Next useful test-debt slice is splitting the large legacy `sanitize.test.ts`; avoid adding a second sanitizer implementation. |
 | D8. Test concentration | Improved. Report, dashboard server, and monitor-state tests now live in focused directories, but several test files remain large. | Keep focused directories; next split targets are `tests/test_monitor.py`, `sanitize.test.ts`, and `tests/test_tgcs_cli.py`. |
-| D9. Packaging metadata | Mostly complete for local Python packaging. Build, staged wheel install, `pipx`, and `uvx` smokes passed. | Re-run Docker smoke once a daemon is available; keep `signal-desk` as a source-checkout launcher until resources are package-safe. |
+| D9. Packaging metadata | Mostly complete for local Python packaging. Build, staged wheel install, `pipx`, `uvx`, and Docker build/demo/doctor smokes passed. | Keep `signal-desk` as a source-checkout launcher until resources are package-safe; re-run Docker when Dockerfile/package-data/dependency metadata changes. |
 | D10. Documentation ownership | Current docs are aligned: this file is the debt authority, `docs/testing.md` is command authority, and quality logs are historical evidence. | Update this table and `docs/quality/task-state.md` whenever a new cleanup slice changes current status. |
 
 Large current files are still the main maintainability signal:
 
 | Area | File | Lines | Why It Matters |
 | --- | ---: | ---: | --- |
-| Python server | `scripts/dashboard_server.py` | 4320 | HTTP routing, local actions, credentials, sources, scheduler, artifacts, git, and bot gateway state are still coupled. |
-| Python state | `scripts/monitor_state.py` | 2773 | SQLite schema, migrations, projections, review cards, alerts, feedback, profile patches, source stats, and setup status share one file. |
-| Dashboard actions | `dashboard/src/components/actions.tsx` | 1119 | Start actions, progress, confirmations, and display mapping are concentrated. |
-| Dashboard sanitize | `dashboard/src/domain/sanitize/dashboard.ts` | 1109 | Large runtime boundary with overlap against `sanitize/desk.ts`. |
-| Dashboard profiles | `dashboard/src/components/profiles.tsx` | 1183 | Profile display, editing, draft patch state, and form controls are concentrated. |
+| Python server | `scripts/dashboard_server.py` | 1430 | HTTP routing and profile creation remain in the facade; product helpers are now split behind compatibility exports. |
+| Dashboard sanitize summary | `dashboard/src/domain/sanitize/dashboard-summary.ts` | 288 | Largest dashboard sanitizer submodule; owns optional summary/setup/source insight projections. |
 | Dashboard inbox | `dashboard/src/components/inbox.tsx` | 813 | Review buckets, setup checks, filters, source health, and review actions are concentrated. |
+| Dashboard projection | `scripts/dashboard_projection.py` | 910 | Focused projection module for dashboard snapshots, run/report artifacts, setup status, and opportunity summaries. |
 | Python monitor runner | `scripts/monitor_runner.py` | 879 | Repeated-run orchestration and manifest behavior are now a focused but still sizeable boundary. |
 | Report rendering | `scripts/report_html.py` | 610 | HTML rendering is separated from extraction but remains large enough to merit focused tests before visual/report changes. |
 
@@ -466,6 +499,8 @@ Evidence:
 - `requirements*.txt` still exist as compatibility/development inputs.
 - `signal-desk` remains a source-checkout launcher until dashboard/templates
   resources are fully package-safe.
+- Docker build/demo/doctor smoke passed locally on 2026-05-14 after Docker
+  Desktop became reachable.
 
 Risk:
 
@@ -723,9 +758,9 @@ The technical-debt cleanup is complete when:
 4. [⚠️ 需确认] What is the acceptable local Python test runtime after cleanup?
    Current observed runtime is about 95 seconds. Recommendation: keep full suite
    under two minutes, but create smaller focused gates under ten seconds.
-5. [⚠️ 需确认] Which remaining packaging target matters first: Docker or
-   desktop launcher polish? Recommendation: Docker next for release
-   reproducibility, because local build, staged wheel install, `pipx`, and
-   `uvx` already passed in the checkpoint run.
+5. [⚠️ 需确认] Which remaining packaging target matters first after the local
+   Docker smoke passed? Recommendation: desktop launcher polish and package-safe
+   dashboard resources, because local build, staged wheel install, `pipx`,
+   `uvx`, and Docker smoke have now passed in the checkpoint run.
 6. [⚠️ 需确认] When can old compatibility paths be removed? Recommendation:
    keep them until at least one release after a documented migration path.

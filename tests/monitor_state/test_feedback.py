@@ -6,10 +6,23 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts import monitor_state
+from scripts import monitor_feedback, monitor_state
 
 
 class MonitorStateFeedbackTests(unittest.TestCase):
+    def test_feedback_helpers_stay_available_from_monitor_state_facade(self):
+        self.assertIs(monitor_state.clear_feedback_decisions, monitor_feedback.clear_feedback_decisions)
+        self.assertIs(monitor_state.export_feedback_entries, monitor_feedback.export_feedback_entries)
+        self.assertIs(
+            monitor_state.create_feedback_profile_patch_suggestions,
+            monitor_feedback.create_feedback_profile_patch_suggestions,
+        )
+        self.assertIs(monitor_state.record_feedback_export, monitor_feedback.record_feedback_export)
+        self.assertIs(monitor_state.latest_feedback_export, monitor_feedback.latest_feedback_export)
+        self.assertIs(monitor_state.feedback_summary, monitor_feedback.feedback_summary)
+        self.assertIs(monitor_state.validation_summary, monitor_feedback.validation_summary)
+
+
     def test_validation_summary_counts_recent_actions_without_note_bodies(self):
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row

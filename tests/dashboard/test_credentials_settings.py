@@ -6,10 +6,19 @@ from http import HTTPStatus
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts import dashboard_server, monitor_state
+from scripts import dashboard_server, desk_credentials, monitor_state
 
 
 class DashboardCredentialsSettingsTests(unittest.TestCase):
+    def test_desk_credentials_helpers_stay_available_from_dashboard_server_facade(self):
+        self.assertIs(dashboard_server.telegram_status, desk_credentials.telegram_status)
+        self.assertIs(dashboard_server.save_telegram_credentials, desk_credentials.save_telegram_credentials)
+        self.assertIs(dashboard_server.detect_desk_delivery_chat_id, desk_credentials.detect_desk_delivery_chat_id)
+        self.assertIs(dashboard_server.desk_notification_token_status, desk_credentials.desk_notification_token_status)
+        self.assertIs(dashboard_server.desk_ai_settings_status, desk_credentials.desk_ai_settings_status)
+        self.assertIs(dashboard_server.desk_action_env, desk_credentials.desk_action_env)
+
+
     def test_telegram_credentials_are_saved_without_echoing_secret(self):
         with tempfile.TemporaryDirectory() as tmp:
             config_path = Path(tmp) / "config.toml"

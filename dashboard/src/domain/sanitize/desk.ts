@@ -20,14 +20,15 @@ import type {
   SourceImportResult,
 } from "../types";
 import {
-  assignOptionalNumbers,
   isRecord,
   nonNegativeInteger,
   nonNegativeIntegerOrDefault,
   numberOrDefault,
   optionalString,
   optionalStringOrNull,
-  sanitizeNumberRecord,
+  sanitizeLocalRelativePath,
+  sanitizeObjectArray,
+  sanitizeSourceAccessSummary,
   stringArray,
 } from "./shared";
 
@@ -83,24 +84,6 @@ export function sanitizeFeedbackExportResult(value: unknown): FeedbackExportResu
     result.exported_at = exportedAt;
   }
   return result;
-}
-
-function sanitizeLocalRelativePath(value: string): string | null {
-  const cleaned = value.trim().replace(/\\/g, "/");
-  if (
-    !cleaned ||
-    cleaned.startsWith("/") ||
-    /^[A-Za-z]:/.test(cleaned) ||
-    /^[a-z][a-z0-9+.-]*:\/\//i.test(cleaned) ||
-    /[\u0000-\u001F\u007F]/.test(cleaned)
-  ) {
-    return null;
-  }
-  const parts = cleaned.split("/").filter(Boolean);
-  if (!parts.length || parts.includes("..")) {
-    return null;
-  }
-  return cleaned;
 }
 
 export function sanitizeFeedbackProfileSuggestionsResult(value: unknown): FeedbackProfileSuggestionsResult | null {
@@ -224,7 +207,7 @@ export function sanitizeDeskActionResult(value: unknown): DeskActionResult | nul
     next_action: optionalString(value.next_action) ?? "",
     finished_at: optionalString(value.finished_at) ?? "",
   };
-  const sourceAccess = sanitizeSourceAccessActionSummary(value.source_access);
+  const sourceAccess = sanitizeSourceAccessSummary(value.source_access);
   if (sourceAccess) {
     result.source_access = sourceAccess;
   }
@@ -263,28 +246,6 @@ function isDashboardReportArtifactName(value: string): boolean {
   const stem = lower.slice(0, dotIndex);
   const suffix = lower.slice(dotIndex);
   return (suffix === ".html" || suffix === ".md") && stem.split("-").some((token) => token === "report" || token === "brief");
-}
-
-function sanitizeSourceAccessActionSummary(value: unknown): DeskActionResult["source_access"] {
-  if (!isRecord(value)) {
-    return undefined;
-  }
-  const summary: NonNullable<DeskActionResult["source_access"]> = {
-    schema_version: value.schema_version === "desk_source_access_health_v1" ? value.schema_version : undefined,
-    checked_at: optionalString(value.checked_at) ?? "",
-    source_count: nonNegativeIntegerOrDefault(value.source_count, 0),
-    checked_count: nonNegativeIntegerOrDefault(value.checked_count, 0),
-    accessible_count: nonNegativeIntegerOrDefault(value.accessible_count, 0),
-    quiet_count: nonNegativeIntegerOrDefault(value.quiet_count, 0),
-    inaccessible_count: nonNegativeIntegerOrDefault(value.inaccessible_count, 0),
-    truncated_count: nonNegativeIntegerOrDefault(value.truncated_count, 0),
-  };
-  assignOptionalNumbers(summary, value, ["probe_window_hours", "probe_window_hours_min", "probe_window_hours_max"]);
-  const reasonCounts = sanitizeNumberRecord(value.reason_counts);
-  if (reasonCounts) {
-    summary.reason_counts = reasonCounts;
-  }
-  return summary;
 }
 
 export function sanitizeDeskSchedulerStatus(value: unknown): DeskSchedulerStatus | null {
@@ -699,21 +660,5 @@ function sanitizeSourceImportPreviewSources(value: unknown): SourceImportResult[
     const label = optionalString(record.label);
     const sourceId = optionalString(record.source_id);
     return label && sourceId ? [{ label, source_id: sourceId }] : [];
-  });
-}
-
-function sanitizeObjectArray(value: unknown, scope: string): Record<string, unknown>[] {
-  if (!Array.isArray(value)) {
-    if (value !== undefined && value !== null) {
-      console.warn(`[tgcs dashboard schema] ${scope} expected array`, value);
-    }
-    return [];
-  }
-  return value.flatMap((item, index) => {
-    if (!isRecord(item)) {
-      console.warn(`[tgcs dashboard schema] ${scope}[${index}] expected object`, item);
-      return [];
-    }
-    return [item];
   });
 }

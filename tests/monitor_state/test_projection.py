@@ -5,10 +5,19 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts import monitor_state
+from scripts import dashboard_projection, monitor_state
 
 
 class MonitorStateProjectionTests(unittest.TestCase):
+    def test_dashboard_projection_helpers_stay_available_from_monitor_state_facade(self):
+        self.assertIs(monitor_state.dashboard_snapshot, dashboard_projection.dashboard_snapshot)
+        self.assertIs(monitor_state.dashboard_setup_status, dashboard_projection.dashboard_setup_status)
+        self.assertIs(monitor_state.dashboard_run_projection, dashboard_projection.dashboard_run_projection)
+        self.assertIs(monitor_state.dashboard_profile_projection, dashboard_projection.dashboard_profile_projection)
+        self.assertIs(monitor_state.delivery_target_from_row, dashboard_projection.delivery_target_from_row)
+        self.assertIs(monitor_state.display_profile_path, dashboard_projection.display_profile_path)
+
+
     def test_dashboard_snapshot_includes_first_run_setup_status(self):
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row

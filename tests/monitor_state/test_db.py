@@ -1,7 +1,7 @@
 import sqlite3
 import unittest
 
-from scripts import monitor_state
+from scripts import monitor_db, monitor_state
 
 
 class MonitorStateDbTests(unittest.TestCase):
@@ -23,14 +23,15 @@ class MonitorStateDbTests(unittest.TestCase):
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row
 
-        monitor_state.init_db(conn)
+        monitor_db.init_db(conn)
         monitor_state.init_db(conn)
 
         row = conn.execute(
             "SELECT version FROM schema_migrations WHERE version = ?",
-            (monitor_state.STATE_SCHEMA_VERSION,),
+            (monitor_db.STATE_SCHEMA_VERSION,),
         ).fetchone()
         self.assertIsNotNone(row)
+        self.assertEqual(monitor_state.STATE_SCHEMA_VERSION, monitor_db.STATE_SCHEMA_VERSION)
 
 
 

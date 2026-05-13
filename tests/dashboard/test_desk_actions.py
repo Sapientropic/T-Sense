@@ -6,10 +6,26 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts import dashboard_server
+from scripts import dashboard_server, desk_actions, desk_sources
 
 
 class DashboardDeskActionCatalogTests(unittest.TestCase):
+    def test_desk_source_helpers_stay_available_from_dashboard_server_facade(self):
+        self.assertIs(dashboard_server.SourceAccessProbeError, desk_sources.SourceAccessProbeError)
+        self.assertIs(dashboard_server.desk_sources, desk_sources.desk_sources)
+        self.assertIs(dashboard_server.probe_source_access, desk_sources.probe_source_access)
+        self.assertIs(dashboard_server.apply_source_access_repair, desk_sources.apply_source_access_repair)
+        self.assertIs(dashboard_server.run_source_assistant, desk_sources.run_source_assistant)
+
+
+    def test_desk_action_helpers_stay_available_from_dashboard_server_facade(self):
+        self.assertIs(dashboard_server.DESK_ACTIONS, desk_actions.DESK_ACTIONS)
+        self.assertIs(dashboard_server.desk_actions, desk_actions.desk_actions)
+        self.assertIs(dashboard_server.run_desk_action, desk_actions.run_desk_action)
+        self.assertIs(dashboard_server.desk_active_actions, desk_actions.desk_active_actions)
+        self.assertIs(dashboard_server._desk_safe_result_text, desk_actions._desk_safe_result_text)
+
+
     def test_desk_actions_exposes_allowlisted_actions_and_human_boundaries(self):
         payload = dashboard_server.desk_actions()
 
