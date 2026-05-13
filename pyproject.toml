@@ -1,3 +1,60 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tg-channel-scanner"
+version = "0.5.0a1"
+description = "Local-first Telegram signal scanner and Signal Desk dashboard."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "AGPL-3.0-or-later"
+license-files = ["LICENSE"]
+authors = [
+  { name = "Sapientropic" },
+]
+dependencies = [
+  "telethon==1.43.2",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Communications",
+]
+
+[project.optional-dependencies]
+llm = [
+  "openai==2.34.0",
+]
+desktop = [
+  "keyring==25.7.0",
+]
+dev = [
+  "build==1.3.0",
+  "pytest==9.0.3",
+  "ruff==0.15.12",
+]
+
+[project.scripts]
+tgcs = "scripts.tgcs:main"
+
+[tool.setuptools]
+include-package-data = false
+
+[tool.setuptools.packages.find]
+include = ["scripts*", "templates*", "profiles*", "channel_lists*"]
+exclude = ["tests*", "dashboard*", "docs*"]
+
+[tool.setuptools.package-data]
+channel_lists = ["*.md", "*.txt"]
+profiles = ["README.md", "example-airdrop.md", "example.md"]
+"profiles.templates" = ["*.md"]
+templates = ["*.css", "*.html", "*.js", "*.png"]
+"templates.demo.fixtures" = ["*.json", "*.jsonl", "*.md"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]

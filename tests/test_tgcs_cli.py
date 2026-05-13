@@ -23,6 +23,8 @@ class TgcsCliTests(unittest.TestCase):
             root = Path(tmp)
             (root / ".tgcs").mkdir()
             (root / ".tgcs" / "sources.json").write_text("{}", encoding="utf-8")
+            (root / "profiles" / "templates").mkdir(parents=True)
+            (root / "profiles" / "templates" / "market-news.md").write_text("# Market news\n", encoding="utf-8")
             calls = []
 
             def fake_run(cmd, check=False):
@@ -83,12 +85,30 @@ class TgcsCliTests(unittest.TestCase):
         cmd = [str(part) for part in run_mock.call_args.args[0]]
         self.assertIn("report.py", cmd[1])
         self.assertIn("--html-only", cmd)
-        self.assertIn(str(root / "templates" / "demo" / "fixtures" / "demo-report.md"), cmd)
+        self.assertIn(str(tgcs.PACKAGE_ROOT / "templates" / "demo" / "fixtures" / "demo-report.md"), cmd)
         self.assertIn(str(root / "output" / "demo-report.html"), cmd)
         output = stdout.getvalue()
         self.assertIn("Demo report ready", output)
         self.assertIn("output", output)
         self.assertIn("tgcs init", output)
+
+    def test_packaged_runtime_uses_packaged_scripts_even_from_source_checkout_cwd(self):
+        tgcs = load_tgcs_module(self)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            package_root = root / "site-packages"
+            package_script = package_root / "scripts" / "report.py"
+            package_script.parent.mkdir(parents=True)
+            package_script.write_text("# packaged report\n", encoding="utf-8")
+            source_root = root / "source-checkout"
+            local_script = source_root / "scripts" / "report.py"
+            local_script.parent.mkdir(parents=True)
+            local_script.write_text("# local report\n", encoding="utf-8")
+
+            with patch.object(tgcs, "PACKAGE_ROOT", package_root):
+                with patch.object(tgcs, "PROJECT_ROOT", source_root):
+                    self.assertEqual(tgcs._script("report.py"), package_script)
 
     def test_init_creates_local_config_and_source_registry(self):
         tgcs = load_tgcs_module(self)
@@ -305,6 +325,25 @@ class TgcsCliTests(unittest.TestCase):
         self.assertIn("doctor.py", cmd[1])
         self.assertIn("--channel-list", cmd)
         self.assertIn(str(root / "channel_lists" / "example.txt"), cmd)
+
+    def test_doctor_uses_packaged_default_channel_list_in_installed_workspace(self):
+        tgcs = load_tgcs_module(self)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+
+            def fake_run(cmd, check=False):
+                return subprocess.CompletedProcess(cmd, 0)
+
+            with patch.object(tgcs, "PROJECT_ROOT", root):
+                with patch.object(tgcs.subprocess, "run", side_effect=fake_run) as run_mock:
+                    exit_code = tgcs.main(["doctor", "--format", "json"])
+
+        self.assertEqual(exit_code, 0)
+        cmd = [str(part) for part in run_mock.call_args.args[0]]
+        self.assertIn("--channel-list", cmd)
+        self.assertIn(str(tgcs.PACKAGE_ROOT / "channel_lists" / "example.txt"), cmd)
+        self.assertIn(str(root / "output"), cmd)
 
     def test_monitor_run_delegates_to_monitor_script(self):
         tgcs = load_tgcs_module(self)

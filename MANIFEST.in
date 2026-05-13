@@ -1,0 +1,19 @@
+include LICENSE README.md pyproject.toml
+recursive-include scripts *.py
+recursive-include channel_lists *.py *.txt *.md
+include profiles/__init__.py
+include profiles/README.md
+include profiles/example-airdrop.md
+include profiles/example.md
+recursive-include profiles/templates *.py *.md
+recursive-include templates *.py *.css *.html *.js *.png
+recursive-include templates/demo/fixtures *.py *.json *.jsonl *.md
+prune .git
+prune .github
+prune .tgcs
+prune .venv
+prune dashboard
+prune docs
+prune output
+prune tests
+global-exclude __pycache__ *.py[cod]
