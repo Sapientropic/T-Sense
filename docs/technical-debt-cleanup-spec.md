@@ -25,11 +25,15 @@ and contract tests that prevent silent product regressions.
 Observed from the 2026-05-14 local workspace:
 
 - Current branch: `sapientropic/tech-debt-cleanup-20260513`.
-- Current worktree is still dirty. It includes packaging metadata, extracted
-  Python modules, split dashboard settings panels/hooks, focused test
-  directories, and deleted legacy monolithic test files.
-- The latest recorded clean `HEAD` gate is in the 2026-05-13 quality log; do
-  not treat the current dirty worktree as proven by that older clean gate.
+- The dirty checkpoint backlog from the documentation handoff has been split,
+  verified, and committed through packaging, report, scan, monitor, Bot Gateway,
+  dashboard server tests, and dashboard settings UI slices.
+- The worktree was clean after the implementation checkpoint commits. Future
+  cleanup should start from a fresh focused slice instead of treating the old
+  dirty handoff as still active.
+- Each implementation checkpoint used focused mixed-tree verification first and
+  staged snapshot verification before commit. Docker packaging smoke remains
+  unverified because the local Docker client could not reach a daemon.
 - CI still covers Python 3.12/3.13 on Linux, Windows, macOS; ruff; pytest;
   dashboard tests/build; shell syntax; POSIX launcher LF line endings.
 
@@ -60,6 +64,24 @@ The next cleanup phase should build on this baseline rather than re-litigating
 whether contract/privacy fixtures are worth keeping. New splits should either
 reuse these fixtures or add similarly shared fixtures before moving behavior.
 
+## Progress Update: 2026-05-14 Checkpoint Run
+
+The documentation-debt pass converted the old dirty-tree handoff into current
+authority docs, then the implementation work was committed one checkpoint at a
+time:
+
+- Packaging metadata and the `tgcs` facade now have package metadata tests,
+  local build/install smokes, `pipx`, and `uvx` coverage. Docker smoke is still
+  an operator/environment check until a daemon is available.
+- `report.py`, `scan.py`, `monitor.py`, `monitor_state.py`, and
+  `bot_gateway.py` now act as smaller facades or focused boundaries backed by
+  new modules and focused test directories.
+- `tests/test_dashboard_server.py` was split into `tests/dashboard/`, and
+  dashboard Markdown/HTML artifact rendering moved to `scripts/dashboard_markdown.py`.
+- Dashboard Settings state and panels moved out of `main.tsx` and
+  `settings.tsx` into focused settings components and hooks. Frontend Vitest
+  and production build passed from a staged snapshot.
+
 ## Current Debt Snapshot: 2026-05-14
 
 The debt register below remains the long-form reasoning. This table is the
@@ -67,25 +89,25 @@ current triage view for what is still real after the later splits:
 
 | Debt | Current Status | Next Useful Slice |
 | --- | --- | --- |
-| D1. WIP and branch hygiene | Still active. The worktree has many tracked and untracked implementation changes. Do not use mixed-worktree gates as commit proof. | Pick one coherent checkpoint, then verify it through the staged snapshot gate or detached clean worktree gate. |
+| D1. WIP and branch hygiene | Cleared for the known backlog. The dirty implementation slices from the handoff are now checkpoint commits. | Keep using staged snapshot or clean worktree gates for future slices; do not use mixed-worktree gates as commit proof. |
 | D2. Contract sprawl | Materially improved. Shared fixtures now cover the high-risk Python/TypeScript contracts, but `docs/agent-cli-contract.md` is still long. | Keep the contract doc as an index and move new guarantees into fixtures first, prose second. |
-| D3. `dashboard_server.py` boundaries | Still high risk at `4320` lines. | Extract one route boundary at a time, starting with modules that already exist in the dirty worktree. |
-| D4. `monitor_state.py` boundaries | Still high risk at `2773` lines. | Continue splitting DB, projection, review-card, feedback, and source-insight behavior behind existing focused tests. |
+| D3. `dashboard_server.py` boundaries | Still high risk at `4320` lines, but Markdown/artifact rendering and dashboard tests are now separated. | Extract one route/action boundary at a time behind `tests/dashboard` focused gates. |
+| D4. `monitor_state.py` boundaries | Still high risk at `2773` lines. Source insights moved out, and monitor-state tests are now focused under `tests/monitor_state`. | Continue splitting DB, projection, review-card, and feedback behavior behind existing focused tests. |
 | D5. `report.py` coupling | Mostly reduced. `report.py` is now `503` lines; report behavior moved into `report_*` modules. | Treat `report_extraction.py`, `report_html.py`, and `report_sources.py` as the next review units rather than reopening the old monolith. |
-| D6. Dashboard root/settings state | Partially reduced. `main.tsx` is `546` lines and `settings.tsx` is `308`, but `profiles.tsx`, `actions.tsx`, `inbox.tsx`, and `runs.tsx` remain large. | Finish the settings/hooks checkpoint, then split `actions.tsx` or `profiles.tsx` only with focused component tests. |
+| D6. Dashboard root/settings state | Settings/hooks checkpoint is committed. `main.tsx` is `546` lines and `settings.tsx` is `308`, but `profiles.tsx`, `actions.tsx`, `inbox.tsx`, and `runs.tsx` remain large. | Split `actions.tsx` or `profiles.tsx` only with focused component tests and dashboard build coverage. |
 | D7. Runtime sanitizers | Still active. `sanitize/dashboard.ts`, `sanitize/desk.ts`, and `sanitize.test.ts` remain large. | Extract shared primitives only where fixture tests already prove the repeated behavior. |
-| D8. Test concentration | Improved. The old monolithic dashboard/monitor/report tests are replaced in the dirty tree by focused directories, but several test files remain large. | Keep focused directories; next split targets are `tests/test_monitor.py`, `sanitize.test.ts`, and `tests/test_tgcs_cli.py`. |
-| D9. Packaging metadata | In progress. `pyproject.toml`, `MANIFEST.in`, `Dockerfile`, package data, and packaging tests exist in the dirty tree. | Run the packaging metadata smoke from `docs/testing.md` before claiming install support. |
-| D10. Documentation ownership | This pass. | Keep this file as the debt authority, `docs/testing.md` as command authority, and quality logs as historical evidence only. |
+| D8. Test concentration | Improved. Report, dashboard server, and monitor-state tests now live in focused directories, but several test files remain large. | Keep focused directories; next split targets are `tests/test_monitor.py`, `sanitize.test.ts`, and `tests/test_tgcs_cli.py`. |
+| D9. Packaging metadata | Mostly complete for local Python packaging. Build, staged wheel install, `pipx`, and `uvx` smokes passed. | Re-run Docker smoke once a daemon is available; keep `signal-desk` as a source-checkout launcher until resources are package-safe. |
+| D10. Documentation ownership | Current docs are aligned: this file is the debt authority, `docs/testing.md` is command authority, and quality logs are historical evidence. | Update this table and `docs/quality/task-state.md` whenever a new cleanup slice changes current status. |
 
 Large current files are still the main maintainability signal:
 
 | Area | File | Lines | Why It Matters |
 | --- | ---: | ---: | --- |
-| Python server | `scripts/dashboard_server.py` | 4320 | HTTP routing, local actions, credentials, sources, scheduler, artifacts, git, bot gateway state, and markdown rendering are coupled. |
+| Python server | `scripts/dashboard_server.py` | 4320 | HTTP routing, local actions, credentials, sources, scheduler, artifacts, git, and bot gateway state are still coupled. |
 | Python state | `scripts/monitor_state.py` | 2773 | SQLite schema, migrations, projections, review cards, alerts, feedback, profile patches, source stats, and setup status share one file. |
 | Dashboard actions | `dashboard/src/components/actions.tsx` | 1119 | Start actions, progress, confirmations, and display mapping are concentrated. |
-| Dashboard sanitize | `dashboard/src/domain/sanitize/dashboard.ts` | 1105 | Large runtime boundary with overlap against `sanitize/desk.ts`. |
+| Dashboard sanitize | `dashboard/src/domain/sanitize/dashboard.ts` | 1109 | Large runtime boundary with overlap against `sanitize/desk.ts`. |
 | Dashboard profiles | `dashboard/src/components/profiles.tsx` | 1183 | Profile display, editing, draft patch state, and form controls are concentrated. |
 | Dashboard inbox | `dashboard/src/components/inbox.tsx` | 813 | Review buckets, setup checks, filters, source health, and review actions are concentrated. |
 | Python monitor runner | `scripts/monitor_runner.py` | 879 | Repeated-run orchestration and manifest behavior are now a focused but still sizeable boundary. |
@@ -108,9 +130,9 @@ These constraints must survive every cleanup phase:
 5. Compatibility paths remain explicit. Legacy channel lists, deprecated scan
    flags, placeholder-title migration, and old report filenames can be removed
    only after a named migration or owner decision.
-6. Current WIP must not be reverted or normalized accidentally. This spec is
-   written against the current dirty branch but does not take ownership of the
-   active bot/dashboard implementation work.
+6. Future WIP must not be reverted or normalized accidentally. If a later
+   cleanup starts from a dirty tree, record ownership first and verify the
+   commit candidate from a staged snapshot or clean worktree.
 
 ## Non-Goals
 
@@ -143,30 +165,28 @@ report rendering, extraction providers, and dashboard API clients.
 
 ## Debt Register
 
-### D1. Active WIP And Branch Hygiene
+### D1. Checkpoint Hygiene
 
 Evidence:
 
 - Current branch is `sapientropic/tech-debt-cleanup-20260513`.
-- Current dirty tree includes tracked changes in `.gitignore`, packaging,
-  dashboard settings/root files, monitor/report/scan/TGCS Python modules, and
-  deleted legacy monolithic test files.
-- Untracked items include packaging files, extracted Python modules, focused
-  dashboard/monitor/report tests, dashboard settings panels/hooks, and package
-  resource `__init__.py` files.
-- `git diff --name-status` still reports line-ending warnings for some touched
-  files.
+- The previously dirty implementation backlog was committed as focused
+  checkpoints instead of one mixed cleanup commit.
+- Every checkpoint ran `git diff --cached --check` plus a staged snapshot or
+  equivalent clean candidate gate before commit.
+- Line-ending warnings may still appear on Windows when files are staged, but
+  `git diff --check` is the relevant whitespace gate.
 
 Risk:
 
-- A technical-debt branch could accidentally absorb unrelated packaging,
+- A future technical-debt branch could again absorb unrelated packaging,
   dashboard, source, or bot WIP.
 - Line-ending churn can hide real diffs.
 
 Cleanup:
 
-- Before any code refactor, decide whether the bot lifecycle WIP is the base or
-  should be finished/stashed/branched separately.
+- Before any code refactor in a dirty tree, decide whether the dirty work is
+  the base, should be staged as the next checkpoint, or should be left alone.
 - Run `git diff --check` before and after cleanup.
 - Keep spec/doc-only changes separate from behavior changes.
 
@@ -435,22 +455,22 @@ Done when:
   boundary gates.
 - CI still runs the full suite.
 
-### D9. Packaging And Dependency Metadata Are In Progress
+### D9. Packaging And Dependency Metadata
 
 Evidence:
 
-- `pyproject.toml` now contains package metadata, optional dependency groups,
-  package data, and the `tgcs` console script in the dirty tree.
+- `pyproject.toml` contains package metadata, optional dependency groups,
+  package data, and the `tgcs` console script.
 - `MANIFEST.in`, `Dockerfile`, package resource `__init__.py` files, and
-  `tests/test_packaging_metadata.py` exist in the dirty tree.
+  `tests/test_packaging_metadata.py` are committed.
 - `requirements*.txt` still exist as compatibility/development inputs.
 - `signal-desk` remains a source-checkout launcher until dashboard/templates
   resources are fully package-safe.
 
 Risk:
 
-- Install support can be overstated before `pipx`, `uvx`, Docker, and package
-  data smokes prove the dirty-tree packaging checkpoint.
+- Install support can be overstated if Docker or package-data smokes are not
+  kept in the release checklist.
 - CI can pass while launchers, package metadata, and bundled resources drift.
 
 Cleanup:
@@ -460,12 +480,14 @@ Cleanup:
 - Add smoke tests for facade commands that do not require credentials:
   `tgcs demo`, `tgcs quickstart jobs`, `tgcs doctor --format json` with a temp
   registry/profile where possible.
-- Treat the current package metadata as a checkpoint candidate until the
-  packaging metadata smoke in `docs/testing.md` passes.
+- Re-run the packaging metadata smoke in `docs/testing.md` after dependency,
+  launcher, package-data, or Dockerfile changes.
 
 Done when:
 
 - Launchers are thin wrappers around one Python facade.
+- Local build, staged wheel install, `pipx`, and `uvx` smokes pass.
+- Docker smoke passes in an environment with a reachable Docker daemon.
 - Install checks are tested without Telegram credentials.
 - Packaging decisions are explicit in roadmap/spec docs.
 
@@ -521,9 +543,12 @@ Done when:
 
 Purpose: avoid cleaning debt on top of ambiguous WIP.
 
+Status: completed for the 2026-05-14 checkpoint backlog. Repeat these tasks if
+future cleanup starts from another dirty tree.
+
 Tasks:
 
-1. Decide what to do with current bot/dashboard WIP.
+1. Decide what to do with current dirty WIP.
 2. Run and record the full local gate from `docs/testing.md`.
 3. Record the exact branch, dirty files, and untracked files in the first
    cleanup PR/commit notes.
@@ -688,7 +713,8 @@ The technical-debt cleanup is complete when:
 
 1. [⚠️ 需确认] Should the cleanup target v0.5 release hardening first, or
    developer velocity for post-v0.5 work? Recommendation: v0.5 hardening first,
-   because active WIP is already in bot/dashboard lifecycle.
+   because the remaining risks are still release-facing: sanitizer boundaries,
+   dashboard server routes, and local packaging smoke.
 2. [⚠️ 需确认] Should behavior-changing fixes be allowed during cleanup?
    Recommendation: only when a test exposes a real privacy, contract, or setup
    bug; otherwise keep refactor-only.
@@ -697,8 +723,9 @@ The technical-debt cleanup is complete when:
 4. [⚠️ 需确认] What is the acceptable local Python test runtime after cleanup?
    Current observed runtime is about 95 seconds. Recommendation: keep full suite
    under two minutes, but create smaller focused gates under ten seconds.
-5. [⚠️ 需确认] Which packaging target matters first: `pipx`, `uvx`, Docker, or
-   desktop launcher polish? Recommendation: desktop launcher polish first for
-   the current product surface; `pipx`/`uvx` next.
+5. [⚠️ 需确认] Which remaining packaging target matters first: Docker or
+   desktop launcher polish? Recommendation: Docker next for release
+   reproducibility, because local build, staged wheel install, `pipx`, and
+   `uvx` already passed in the checkpoint run.
 6. [⚠️ 需确认] When can old compatibility paths be removed? Recommendation:
    keep them until at least one release after a documented migration path.
