@@ -1,7 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import deskFixture from "../../../tests/fixtures/contracts/desk_boundary_v1.json";
+import settingsFixture from "../../../tests/fixtures/contracts/desk_settings_status_v1.json";
 
-import { loadDeskActions, loadDeskSources, runDeskAction } from "./client";
+import {
+  loadDeskActions,
+  loadDeskAiSettingsStatus,
+  loadDeskNotificationTokenStatus,
+  loadDeskSources,
+  runDeskAction,
+} from "./client";
 
 type DeskBoundaryFixture = {
   desk_actions: {
@@ -9,6 +16,10 @@ type DeskBoundaryFixture = {
   };
   desk_action_result: Record<string, unknown>;
   desk_sources: unknown;
+};
+type DeskSettingsFixture = {
+  notification_token: unknown;
+  ai_settings: unknown;
 };
 
 function mockJsonResponse(payload: unknown) {
@@ -59,5 +70,24 @@ describe("dashboard API client contract fixtures", () => {
     });
 
     await expect(runDeskAction("monitor_jobs_dry_run")).rejects.toThrow("Invalid Desk action response");
+  });
+
+  it("accepts fixture-backed Desk settings status responses", async () => {
+    const fixture = settingsFixture as DeskSettingsFixture;
+    mockJsonResponse({ token: fixture.notification_token });
+
+    await expect(loadDeskNotificationTokenStatus()).resolves.toEqual(fixture.notification_token);
+
+    mockJsonResponse({ ai: fixture.ai_settings });
+
+    await expect(loadDeskAiSettingsStatus()).resolves.toEqual(
+      expect.objectContaining({
+        schema_version: "desk_ai_settings_status_v1",
+        configured_count: 1,
+        providers: expect.arrayContaining([
+          expect.objectContaining({ provider: "deepseek", configured: true, source: "environment" }),
+        ]),
+      }),
+    );
   });
 });

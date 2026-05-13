@@ -1694,6 +1694,40 @@ Next:
 
 - Commit, then continue until the 14:00 stop condition.
 
+## Slice 43: Desk Settings API Client Fixture Gate
+
+Status: completed.
+
+Actions:
+
+- Extended `dashboard/src/api/client-contract-fixtures.test.ts` to reuse
+  `desk_settings_status_v1.json`.
+- Covered `loadDeskNotificationTokenStatus()` and
+  `loadDeskAiSettingsStatus()` at the fetch/client layer, so settings payload
+  envelope drift is caught before view code receives sanitized results.
+
+Verification:
+
+- `cd dashboard; npm test -- --run client-contract-fixtures client desk-settings-contract-fixtures`
+  passed `3` test files and `26` tests.
+- Staged snapshot verification passed after checking out the index to a temp
+  directory: the same frontend test set passed `3` test files and `26` tests.
+
+Reviewer Gate:
+
+- This follows the same client-layer fixture pattern as the Desk action/source
+  boundary. It keeps settings status privacy fixtures active beyond direct
+  sanitizer tests.
+
+Residual Risk:
+
+- Save/clear mutation responses still rely on existing client schema tests and
+  backend status tests; this slice covers status fetch responses only.
+
+Next:
+
+- Commit, then continue until the 14:00 stop condition.
+
 ## Slice 34: `agent_extraction_request_v1` Projection Helper Extraction
 
 Status: in progress.
