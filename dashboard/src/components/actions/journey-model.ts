@@ -94,7 +94,9 @@ export function buildJourneySteps(
     {
       key: "telegram",
       title: "Connect Telegram",
-      detail: "Connect Telegram first so Signal Desk can read your saved channels inside this local app.",
+      detail: telegramReady
+        ? "Telegram is connected for local scans. Check setup only if login changes."
+        : "Connect Telegram so Signal Desk can read your saved channels inside this local app.",
       state: telegramState(stage, telegramReady),
       stateLabel: telegramStateLabel(stage, telegramReady),
       buttons: availableButtons([

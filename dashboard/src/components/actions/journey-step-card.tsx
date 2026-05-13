@@ -30,6 +30,9 @@ export function JourneyStepCard({
 }) {
   const disabled = step.state === "blocked";
   const visibleButtons = step.buttons.filter((button) => actionMap.has(button.actionId));
+  const quickButtons = quickJourneyButtons(step, visibleButtons);
+  const quickActionIds = new Set(quickButtons.map((button) => button.actionId));
+  const extraButtons = visibleButtons.filter((button) => !quickActionIds.has(button.actionId));
   const visibleAdvanced = step.advancedActionIds.map((actionId) => actionMap.get(actionId)).filter(Boolean) as DeskAction[];
   const activeAction = step.advancedActionIds
     .map((actionId) => activeActions.find((item) => item.action_id === actionId))
@@ -66,29 +69,95 @@ export function JourneyStepCard({
       </div>
       <aside className="journey-controls">
         <JourneyIcon state={step.state} />
-        <div className="journey-buttons">
-          {visibleButtons.map((button) => {
-            const action = actionMap.get(button.actionId);
-            const busy = busyActionId === button.actionId;
-            const isNotificationShortcut = action?.action_id === "live_delivery_human";
-            const isHuman = action?.run_mode === "needs_human" && !isNotificationShortcut;
-            return (
-              <button
-                className={`journey-button ${button.variant === "secondary" || isHuman ? "secondary" : ""}`}
-                disabled={disabled || anyBusy}
-                key={button.actionId}
-                onClick={() => void onRun(button.actionId)}
-                title={button.label}
-                type="button"
-              >
-                {isHuman ? <ShieldAlert size={15} /> : isNotificationShortcut ? <Bell size={15} /> : <Play size={15} />}
-                <span>{busy ? "Working" : button.label}</span>
-              </button>
-            );
-          })}
+        <div className={extraButtons.length ? "journey-buttons has-extra-actions" : "journey-buttons"}>
+          {quickButtons.map((button) => (
+            <JourneyActionButton
+              actionMap={actionMap}
+              anyBusy={anyBusy}
+              busyActionId={busyActionId}
+              disabled={disabled}
+              key={button.actionId}
+              onRun={onRun}
+              button={button}
+            />
+          ))}
+          {extraButtons.length > 0 && (
+            <details className="journey-extra-actions">
+              <summary>{step.state === "done" ? "More checks" : "Other actions"}</summary>
+              <div>
+                {extraButtons.map((button) => (
+                  <JourneyActionButton
+                    actionMap={actionMap}
+                    anyBusy={anyBusy}
+                    busyActionId={busyActionId}
+                    disabled={disabled}
+                    key={button.actionId}
+                    onRun={onRun}
+                    button={button}
+                    compact
+                  />
+                ))}
+              </div>
+            </details>
+          )}
         </div>
       </aside>
     </article>
+  );
+}
+
+function quickJourneyButtons(step: JourneyStep, buttons: JourneyStep["buttons"]) {
+  if (buttons.length <= 2) {
+    return buttons;
+  }
+  const primaryButtons = buttons.filter((button) => button.variant === "primary");
+  if (primaryButtons.length > 0) {
+    return primaryButtons.slice(0, 2);
+  }
+  if (step.key === "workspace") {
+    const preferredOrder = ["sources_probe_access", "sources_keep_accessible", "sources_import_jobs", "init_jobs"];
+    const preferred = preferredOrder
+      .map((actionId) => buttons.find((button) => button.actionId === actionId))
+      .filter(Boolean) as JourneyStep["buttons"];
+    if (preferred.length > 0) {
+      return preferred.slice(0, 2);
+    }
+  }
+  return buttons.slice(0, 2);
+}
+
+function JourneyActionButton({
+  actionMap,
+  anyBusy,
+  busyActionId,
+  button,
+  compact = false,
+  disabled,
+  onRun,
+}: {
+  actionMap: Map<string, DeskAction>;
+  anyBusy: boolean;
+  busyActionId: string;
+  button: JourneyStep["buttons"][number];
+  compact?: boolean;
+  disabled: boolean;
+  onRun: (actionId: string) => Promise<void>;
+}) {
+  const action = actionMap.get(button.actionId);
+  const busy = busyActionId === button.actionId;
+  const isNotificationShortcut = action?.action_id === "live_delivery_human";
+  const isHuman = action?.run_mode === "needs_human" && !isNotificationShortcut;
+  return (
+    <button
+      className={`journey-button ${button.variant === "secondary" || isHuman ? "secondary" : ""} ${compact ? "compact" : ""}`}
+      disabled={disabled || anyBusy}
+      onClick={() => void onRun(button.actionId)}
+      title={button.label}
+      type="button"
+    >
+      {isHuman ? <ShieldAlert size={15} /> : isNotificationShortcut ? <Bell size={15} /> : <Play size={15} />}
+      <span>{busy ? "Working" : button.label}</span>
+    </button>
   );
 }
 

@@ -156,11 +156,15 @@ export function ActionsView({
           <div className="start-setup-drawer-head">
             <div>
               <span className="panel-kicker">Setup controls</span>
-              <strong>Edit login, sources, checks, and first-run setup</strong>
+              <strong>Fix only the setup area that needs attention</strong>
             </div>
             <button className="journey-button secondary" type="button" onClick={() => setShowSetupSteps(false)}>
               Close
             </button>
+          </div>
+          <div className="start-setup-guide">
+            <strong>Current repair path first.</strong>
+            <span>Completed steps stay available for recovery without crowding the main action.</span>
           </div>
           <div className="journey-list">
             {steps.map((step, index) => (

@@ -122,6 +122,7 @@ export function RunsView({
 
 function RunEvidenceGroupPanel({ group, scaleMax }: { group: RunEvidenceGroup; scaleMax: number }) {
   const [open, setOpen] = useState(() => shouldOpenRunEvidenceByDefault());
+  const historyOnly = group.key === "attention" && group.tone !== "danger";
   return (
     <details
       aria-label={group.title}
@@ -137,14 +138,14 @@ function RunEvidenceGroupPanel({ group, scaleMax }: { group: RunEvidenceGroup; s
       <div className="run-evidence-body">
         {group.key === "attention" && (
           <p className="run-evidence-next">
-            {group.title === "Failed scans to fix"
+            {group.tone === "danger"
               ? "Fix order: Fix channels, Check setup, then Run fresh scan."
-              : "Latest scan is OK. These older failures stay here only as scan history."}
+              : "Latest scan recovered. These older failures are kept only for troubleshooting history."}
           </p>
         )}
         <div className="table-list">
           {group.clusters.map((cluster) => (
-            <RunClusterRow key={cluster.key} cluster={cluster} scaleMax={scaleMax} />
+            <RunClusterRow key={cluster.key} cluster={cluster} scaleMax={scaleMax} historyOnly={historyOnly} />
           ))}
         </div>
       </div>
@@ -159,12 +160,12 @@ function shouldOpenRunEvidenceByDefault() {
   return window.innerWidth > 680;
 }
 
-function RunClusterRow({ cluster, scaleMax }: { cluster: RunEvidenceCluster; scaleMax: number }) {
+function RunClusterRow({ cluster, scaleMax, historyOnly = false }: { cluster: RunEvidenceCluster; scaleMax: number; historyOnly?: boolean }) {
   const run = cluster.sample;
   const artifact = run.report_artifact ?? null;
-  const outcome = cluster.outcome;
+  const outcome = historyOnly ? historicalRunOutcome(cluster.outcome, cluster.failed) : cluster.outcome;
   const runCountLabel = cluster.runs.length === 1 ? runDisplayDetail(run) : `${cluster.runs.length} runs · latest ${runDisplayDetail(run)}`;
-  const statusLabel = cluster.runs.length === 1 ? run.status : cluster.failed > 0 ? `${cluster.failed} failed` : `${cluster.runs.length} runs`;
+  const statusLabel = historyOnly ? "History" : cluster.runs.length === 1 ? run.status : cluster.failed > 0 ? `${cluster.failed} failed` : `${cluster.runs.length} runs`;
   const outcomeDetail = outcome.detail;
   return (
     <div className="table-row run-row" data-run-tone={outcome.tone}>
@@ -173,7 +174,7 @@ function RunClusterRow({ cluster, scaleMax }: { cluster: RunEvidenceCluster; sca
         <small>{[runDisplayTitle(run), runCountLabel].filter(Boolean).join(" · ")}</small>
         <span>{outcomeDetail}</span>
       </div>
-      <span className={`status ${toneClass(statusLabel)}`}>{statusLabel}</span>
+      <span className={`status ${historyOnly ? "unknown" : toneClass(statusLabel)}`}>{statusLabel}</span>
       <RunCountBars cards={cluster.cards} alerts={cluster.alerts} scaleMax={scaleMax} />
       <div className="run-health" title={runHealthDetail(run.quality)}>
         <span className={diagnosticTone(run.quality)}>{formatRunDiagnostics(run.quality)}</span>
@@ -196,6 +197,18 @@ function RunClusterRow({ cluster, scaleMax }: { cluster: RunEvidenceCluster; sca
       )}
     </div>
   );
+}
+
+function historicalRunOutcome(outcome: RunOutcome, failed: number): RunOutcome {
+  if (outcome.tone !== "danger" && outcome.tone !== "warn") {
+    return outcome;
+  }
+  const title = failed > 1 ? `${failed} past failed scans` : "Past failed scan";
+  return {
+    tone: "quiet",
+    title,
+    detail: "Recovered by a newer scan. No action needed unless this repeats.",
+  };
 }
 
 function RunCountBars({ cards, alerts, scaleMax }: { cards: number; alerts: number; scaleMax: number }) {
@@ -335,7 +348,7 @@ export function buildRunEvidenceGroups(runs: Run[]): RunEvidenceGroup[] {
   const groups = [
     {
       key: "attention",
-      tone: "danger",
+      tone: latestFailed ? "danger" : "quiet",
       title: latestFailed ? "Failed scans to fix" : "Earlier failed scans",
       detail: latestFailed ? "Use the repair buttons above first" : "History only after latest OK",
       runs: visibleRuns.filter((run) => evidenceBucket(run) === "attention"),

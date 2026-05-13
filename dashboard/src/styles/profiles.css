@@ -738,14 +738,20 @@
 .profile-runtime-settings {
   box-sizing: border-box;
   display: grid;
-  grid-template-columns: minmax(190px, 0.7fr) minmax(340px, 1.25fr) minmax(210px, 0.72fr) minmax(190px, 0.45fr);
-  align-items: stretch;
-  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-areas:
+    "head head"
+    "scope hours"
+    "alerts hours"
+    "matching matching"
+    "actions actions";
+  align-items: start;
+  gap: 10px;
   min-width: 0;
   width: 100%;
   max-width: 100%;
   overflow: hidden;
-  padding: 8px;
+  padding: 10px;
   border: 1px solid color-mix(in oklch, var(--signal-high) 18%, transparent);
   background: color-mix(in oklch, var(--signal-high) 5%, transparent);
 }
@@ -756,46 +762,127 @@
   box-sizing: border-box;
 }
 
-.profile-runtime-numbers {
+.profile-runtime-head {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  grid-area: head;
+  gap: 4px;
   min-width: 0;
 }
 
-.profile-runtime-schedule {
+.profile-runtime-head > div {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  gap: 4px;
   min-width: 0;
 }
 
-.profile-runtime-weekdays {
+.profile-runtime-head strong {
+  color: var(--paper);
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.profile-runtime-head span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.profile-runtime-group {
   display: grid;
-  align-content: start;
   gap: 8px;
   min-width: 0;
   margin: 0;
-  padding: 8px;
-  border: 1px solid color-mix(in oklch, var(--signal-high) 20%, transparent);
-  background: color-mix(in oklch, var(--ink) 28%, transparent);
+  padding: 10px;
+  border: 1px solid color-mix(in oklch, var(--signal-high) 18%, transparent);
+  background: color-mix(in oklch, var(--ink) 30%, transparent);
+}
+
+.profile-runtime-scope {
+  grid-area: scope;
+}
+
+.profile-runtime-work-hours {
+  grid-area: hours;
+}
+
+.profile-runtime-alerts {
+  grid-area: alerts;
+}
+
+.profile-runtime-matching {
+  grid-area: matching;
+}
+
+.profile-runtime-actions {
+  grid-area: actions;
+}
+
+.profile-runtime-group legend,
+.profile-runtime-group > .profile-field-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 0 2px;
+  color: var(--paper);
+  font-size: 12px;
+  font-weight: var(--badge-weight);
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.profile-runtime-group p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.profile-field-grid {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.profile-field-grid.two {
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+}
+
+.profile-field-grid.three {
+  grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+}
+
+.profile-field-grid.four {
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+}
+
+.profile-weekday-block {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
 }
 
 .profile-weekday-options {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(auto-fit, minmax(56px, 1fr));
+  gap: 5px;
   min-width: 0;
 }
 
 .profile-runtime-settings .profile-weekday-toggle {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 6px;
-  min-height: 34px;
-  padding: 0;
-  border: 0;
-  background: transparent;
+  min-height: 36px;
+  padding: 0 6px;
+  border: 1px solid color-mix(in oklch, var(--signal-high) 18%, transparent);
+  background: color-mix(in oklch, var(--paper) 5%, transparent);
+}
+
+.profile-runtime-settings .profile-weekday-toggle span {
+  white-space: nowrap;
 }
 
 .profile-runtime-settings .profile-weekday-toggle input {
@@ -812,19 +899,13 @@
   gap: 5px;
   min-width: 0;
   max-width: 100%;
-  padding: 7px;
+  padding: 8px;
   border: 1px solid color-mix(in oklch, var(--signal-high) 20%, transparent);
   background: color-mix(in oklch, var(--ink) 28%, transparent);
 }
 
 .profile-preference-note {
-  grid-column: 1 / span 3;
   overflow: hidden;
-}
-
-.profile-runtime-actions {
-  grid-column: 4;
-  grid-row: 1 / span 2;
 }
 
 .profile-field-title {
@@ -835,7 +916,7 @@
 }
 
 .profile-runtime-settings label span,
-.profile-runtime-weekdays legend,
+.profile-weekday-block > span,
 .profile-runtime-settings small {
   color: var(--muted);
   font-size: 11px;
@@ -892,7 +973,7 @@
   background: var(--field-bg);
   color: var(--ink);
   font: inherit;
-  font-size: 18px;
+  font-size: 14px;
   font-weight: var(--label-weight);
   min-height: 44px;
   padding: 0 10px;
@@ -956,7 +1037,7 @@
 
 .profile-runtime-actions {
   display: grid;
-  align-self: stretch;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
   min-width: 0;
 }

@@ -55,6 +55,54 @@ export function botIdentityResultLine(result: DeskBotIdentityResult | null) {
   return `${result.name} identity applied · ${result.profile_photo_updated ? "photo updated" : "photo pending"}`;
 }
 
+function botGatewayUserLine(status: DeskBotGatewayStatus | null) {
+  if (!status) {
+    return "Checking the local bot connection.";
+  }
+  if (!status.token_configured) {
+    return "Save a bot token before Signal Desk can send Telegram alerts.";
+  }
+  if (status.authorized_chat_count === 0) {
+    return "Token is saved. Add a chat ID below before live alerts can send.";
+  }
+  if (status.gateway_status === "running") {
+    return "Ready for local Telegram alerts while Signal Desk is running.";
+  }
+  if (status.background?.installed) {
+    return "Background mode is on; Telegram alerts can keep working after login.";
+  }
+  if (status.gateway_status === "stale") {
+    return "Bot was seen before. Turn on background mode or reopen Signal Desk to resume replies.";
+  }
+  return "Token and chat are saved. Turn on background mode if you want replies without keeping this window open.";
+}
+
+function botGatewayChatLabel(status: DeskBotGatewayStatus | null) {
+  if (!status) {
+    return "Checking";
+  }
+  if (status.authorized_chat_count <= 0) {
+    return "Needs chat";
+  }
+  return `${status.authorized_chat_count} chat${status.authorized_chat_count === 1 ? "" : "s"}`;
+}
+
+function botGatewayBackgroundUserLabel(status: DeskBotGatewayStatus | null) {
+  if (!status) {
+    return "Checking";
+  }
+  if (!status.token_configured) {
+    return "Needs token";
+  }
+  if (status.background?.installed) {
+    return "On";
+  }
+  if (status.background?.available) {
+    return "Off";
+  }
+  return "Manual";
+}
+
 export function BotGatewayPanel({
   status,
   error,
@@ -82,27 +130,27 @@ export function BotGatewayPanel({
       <div className="notification-token-head">
         <RadioTower size={16} />
         <div>
-          <strong>Bot Gateway</strong>
-          <small>{botGatewayStatusLine(status)}</small>
+          <strong>Telegram bot alerts</strong>
+          <small>{botGatewayUserLine(status)}</small>
         </div>
         <span className={`status ${gatewayTone}`}>{status?.gateway_status === "running" ? "Live" : "Local"}</span>
       </div>
       <div className="bot-gateway-readout" aria-label="Bot Gateway readiness">
         <span>
-          <strong>{status?.commands_installed ? "Installed" : "Menu"}</strong>
-          <small>commands</small>
+          <strong>{status?.token_configured ? "Ready" : "Needed"}</strong>
+          <small>bot token</small>
         </span>
         <span>
-          <strong>{status?.supported_commands?.join(" ") || "/status /latest /scan"}</strong>
-          <small>supported</small>
+          <strong>{botGatewayChatLabel(status)}</strong>
+          <small>alert chat</small>
         </span>
         <span>
-          <strong>{status?.start_command || "./tgcs bot run"}</strong>
-          <small>start</small>
-        </span>
-        <span>
-          <strong>{botGatewayBackgroundLine(status)}</strong>
+          <strong>{botGatewayBackgroundUserLabel(status)}</strong>
           <small>background</small>
+        </span>
+        <span>
+          <strong>{status?.commands_installed ? "Ready" : "Update"}</strong>
+          <small>bot menu</small>
         </span>
       </div>
       <div className="bot-gateway-actions">
@@ -113,7 +161,7 @@ export function BotGatewayPanel({
           type="button"
         >
           <CirclePlay size={15} />
-          <span>{busy ? "Working" : "Turn on background"}</span>
+          <span>{busy ? "Working" : "Run in background"}</span>
         </button>
         <button
           className="text-button secondary"
@@ -122,7 +170,7 @@ export function BotGatewayPanel({
           type="button"
         >
           <CirclePause size={15} />
-          <span>{busy ? "Working" : "Turn off background"}</span>
+          <span>{busy ? "Working" : "Stop background"}</span>
         </button>
         <button
           className="text-button secondary"
@@ -131,10 +179,31 @@ export function BotGatewayPanel({
           type="button"
         >
           <ShieldCheck size={15} />
-          <span>{busy ? "Applying" : "Apply identity"}</span>
+          <span>{busy ? "Applying" : "Update bot menu"}</span>
         </button>
-        <span>{identityLine || "Name, descriptions, commands; photo pending JPG validation."}</span>
+        <span>{identityLine || "Updates the bot name, menu, and description when a token is saved."}</span>
       </div>
+      <details className="bot-gateway-technical">
+        <summary>Technical details</summary>
+        <div>
+          <span>
+            <strong>{botGatewayStatusLine(status)}</strong>
+            <small>local status</small>
+          </span>
+          <span>
+            <strong>{status?.supported_commands?.join(" ") || "/status /latest /scan"}</strong>
+            <small>commands</small>
+          </span>
+          <span>
+            <strong>{status?.start_command || "./tgcs bot run"}</strong>
+            <small>manual start</small>
+          </span>
+          <span>
+            <strong>{botGatewayBackgroundLine(status)}</strong>
+            <small>scheduler</small>
+          </span>
+        </div>
+      </details>
       <p className={error ? "delivery-token-warning" : "delivery-note"} role={error ? "alert" : undefined}>
         {error || status?.background?.detail || status?.local_first_note || "Bot replies only while the local gateway is running."}
       </p>

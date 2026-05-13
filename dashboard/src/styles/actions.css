@@ -297,6 +297,24 @@
   overflow-wrap: anywhere;
 }
 
+.start-setup-guide {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--wash-paper-14);
+  background: color-mix(in oklch, var(--ink-2) 70%, transparent);
+  color: color-mix(in oklch, var(--paper) 76%, var(--muted));
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.start-setup-guide strong {
+  color: var(--paper);
+  font-size: 12px;
+  line-height: 1.2;
+}
+
 .start-setup-drawer-head .journey-button {
   width: auto;
   min-width: 88px;
@@ -485,6 +503,10 @@
   min-width: 0;
 }
 
+.journey-buttons.has-extra-actions {
+  align-content: start;
+}
+
 .journey-button {
   display: inline-flex;
   align-items: center;
@@ -513,6 +535,46 @@
 .journey-button.secondary {
   background: transparent;
   color: var(--ink-warm);
+}
+
+.journey-button.compact {
+  justify-content: start;
+  min-height: 40px;
+  padding-inline: 10px;
+  font-size: 12px;
+}
+
+.journey-extra-actions {
+  min-width: 0;
+}
+
+.journey-extra-actions summary {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 34px;
+  align-items: center;
+  color: var(--ink-link);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: var(--badge-weight);
+  line-height: 1;
+  list-style: none;
+  text-transform: uppercase;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.journey-extra-actions summary::-webkit-details-marker {
+  display: none;
+}
+
+.journey-extra-actions > div {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  padding-top: 6px;
 }
 
 .start-setup-drawer .journey-step {
@@ -559,6 +621,14 @@
   border-color: var(--wash-paper-18);
   background: transparent;
   color: var(--paper);
+}
+
+.start-setup-drawer .journey-extra-actions summary {
+  color: var(--amber);
+}
+
+.start-setup-drawer .journey-extra-actions .journey-button.secondary {
+  color: color-mix(in oklch, var(--paper) 78%, var(--muted));
 }
 
 .desk-confirm-backdrop {
@@ -704,6 +774,34 @@
 .telegram-status-grid strong {
   color: var(--ink);
   font-size: 13px;
+}
+
+.start-setup-drawer .telegram-panel {
+  border-color: color-mix(in oklch, var(--signal-high) 24%, var(--wash-paper-18));
+  background:
+    linear-gradient(90deg, color-mix(in oklch, var(--signal-high) 4%, transparent) 1px, transparent 1px),
+    color-mix(in oklch, var(--ink-2) 76%, transparent);
+  background-size: 14px 100%;
+}
+
+.start-setup-drawer .telegram-status-grid span {
+  border-color: var(--wash-paper-14);
+  background: color-mix(in oklch, var(--paper) 6%, transparent);
+  color: color-mix(in oklch, var(--paper) 66%, var(--muted));
+}
+
+.start-setup-drawer .telegram-status-grid span.ready {
+  border-color: color-mix(in oklch, var(--signal-high) 36%, var(--wash-paper-18));
+  background: color-mix(in oklch, var(--signal-high) 9%, transparent);
+}
+
+.start-setup-drawer .telegram-status-grid strong,
+.start-setup-drawer .telegram-status-note {
+  color: var(--paper);
+}
+
+.start-setup-drawer .telegram-status-note {
+  color: color-mix(in oklch, var(--paper) 70%, var(--muted));
 }
 
 .telegram-status-note,

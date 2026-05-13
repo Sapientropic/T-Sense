@@ -100,6 +100,7 @@ describe("run health decision", () => {
     ]);
     expect(groups.map((group) => group.key)).toEqual(["attention", "review", "clean"]);
     expect(groups[0].title).toBe("Earlier failed scans");
+    expect(groups[0].tone).toBe("quiet");
     expect(groups[1].detail).toBe("2 cards / 0 alerts");
   });
 

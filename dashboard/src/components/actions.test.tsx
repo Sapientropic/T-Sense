@@ -149,6 +149,8 @@ describe("Signal Desk journey", () => {
     expect(steps.find((step) => step.key === "feedback")?.buttons[0]).toMatchObject({
       label: "Generate profile suggestions",
     });
+    expect(steps.find((step) => step.key === "telegram")?.detail).toContain("Telegram is connected");
+    expect(steps.find((step) => step.key === "telegram")?.detail).not.toContain("Connect Telegram first");
   });
 
   it("separates source syntax checks from real Telegram access checks", () => {
