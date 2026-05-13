@@ -61,6 +61,13 @@ DESK_SOURCE_ACCESS_HEALTH_SCHEMA_VERSION = "desk_source_access_health_v1"
 DESK_SOURCE_ACCESS_PROBE_MAX_SOURCES = _positive_int_env("TGCS_SOURCE_ACCESS_PROBE_MAX_SOURCES", 80)
 DESK_SOURCE_ACCESS_HEALTH_MAX_AGE_HOURS = 24
 LOOPBACK_DASHBOARD_HOSTS = {"127.0.0.1", "localhost", "::1"}
+SECRET_TOKEN_RE = re.compile(r"\b\d{5,12}:[A-Za-z0-9_-]{10,}\b")
+PROVIDER_KEY_RE = re.compile(r"\b(?:sk|sk-proj|sk-ant|ak)-[A-Za-z0-9_-]{12,}\b", re.IGNORECASE)
+BEARER_SECRET_RE = re.compile(r"(?i)\bAuthorization\s*:\s*Bearer\s+[A-Za-z0-9._~+/=-]{8,}")
+ENV_SECRET_RE = re.compile(r"(?i)\b[A-Z0-9_]*(?:API[_-]?KEY|TOKEN|SECRET|PASSWORD)\b\s*=\s*[^\s'\"]+")
+KEY_VALUE_SECRET_RE = re.compile(r"(?i)\b(?:api[_-]?key|token|secret|password)\b\s*[:=]\s*[^\s'\"]+")
+ARGV_DUMP_RE = re.compile(r"(?i)\bargv\s*[:=]\s*(?:\[[^\]]*\]|[^\r\n]+)")
+CHAT_ID_FIELD_RE = re.compile(r"\bchat[_ -]?id\b\s*[:=]?\s*-?\d{5,20}\b", re.IGNORECASE)
 TELEGRAM_CONFIG_DIR = Path(
     os.environ.get("TG_SCANNER_CONFIG_DIR")
     or os.environ.get("TGCLI_CONFIG_DIR")
@@ -528,11 +535,19 @@ def _git_value(args: list[str]) -> str | None:
 def _repo_web_url(remote_url: str | None) -> str | None:
     if not remote_url:
         return None
+    remote_url = remote_url.strip()
     if remote_url.startswith("git@github.com:"):
         remote_url = "https://github.com/" + remote_url.removeprefix("git@github.com:")
+    parsed = urlparse(remote_url)
+    if parsed.hostname and parsed.scheme in {"http", "https", "ssh"}:
+        path = parsed.path or ""
+        if path.endswith(".git"):
+            path = path[:-4]
+        scheme = "https" if parsed.scheme == "ssh" else parsed.scheme
+        return f"{scheme}://{parsed.hostname}{path}"
     if remote_url.endswith(".git"):
         remote_url = remote_url[:-4]
-    return remote_url
+    return remote_url if "@" not in remote_url and ":" not in remote_url else None
 
 
 def _git_update_status(*, fetch: bool) -> dict:
@@ -546,7 +561,7 @@ def _git_update_status(*, fetch: bool) -> dict:
     if fetch:
         completed = _run_git(["fetch", "--prune", "origin"], timeout=45)
         if completed.returncode != 0:
-            fetch_error = (completed.stderr or completed.stdout or "git fetch failed").strip()
+            fetch_error = _desk_safe_result_text(completed.stderr, completed.stdout) or "git fetch failed"
 
     head = _git_value(["rev-parse", "--short", "HEAD"])
     remote_head = _git_value(["rev-parse", "--short", upstream]) if upstream else None
@@ -591,7 +606,6 @@ def _git_update_status(*, fetch: bool) -> dict:
         "branch": branch,
         "upstream": upstream,
         "repo_url": _repo_web_url(remote_url),
-        "remote_url": remote_url,
         "head": head,
         "remote_head": remote_head,
         "ahead": ahead,
@@ -2914,14 +2928,14 @@ def _desk_success_detail(action: dict, payload: dict | None, stdout: str) -> tup
             action["next_action"],
         )
     if isinstance(next_step, str) and next_step.strip():
-        detail = next_step.strip()
+        detail = _desk_safe_result_text(next_step)
     elif isinstance(status, str) and status.strip():
         detail = f"{action['title']} finished with status: {status.strip()}."
     elif stdout.strip() and not stdout.lstrip().startswith("{"):
-        detail = stdout.strip().splitlines()[0][:500]
+        detail = _desk_safe_result_text(stdout)
     else:
         detail = _desk_action_success_copy(str(action.get("action_id") or ""), str(action.get("detail") or action["title"]))
-    return detail, artifact_path, str(next_step or action["next_action"])
+    return detail, artifact_path, _desk_safe_result_text(next_step or action["next_action"])
 
 
 def _desk_action_success_copy(action_id: str, fallback: str) -> str:
@@ -2937,11 +2951,11 @@ def _desk_action_success_copy(action_id: str, fallback: str) -> str:
 def _desk_failure_detail(payload: dict | None, stdout: str, stderr: str) -> tuple[str, str]:
     error = payload.get("error") if isinstance(payload, dict) else None
     if isinstance(error, dict):
-        message = str(error.get("message") or "Desk action failed.")
-        next_step = str(error.get("next_step") or "Inspect the command output and fix the reported issue.")
+        message = _desk_safe_result_text(error.get("message") or "Desk action failed.")
+        next_step = _desk_safe_result_text(error.get("next_step") or "Inspect the command output and fix the reported issue.")
         return message, next_step
     text = (stderr or stdout or "Desk action failed.").strip()
-    return text.splitlines()[0][:500], "Inspect the command output and rerun the action when ready."
+    return _desk_safe_result_text(text), "Inspect the command output and rerun the action when ready."
 
 
 def _desk_safe_result_text(*parts: object) -> str:
@@ -2949,6 +2963,13 @@ def _desk_safe_result_text(*parts: object) -> str:
     if not text:
         return ""
     sanitized = text
+    sanitized = SECRET_TOKEN_RE.sub("[redacted-token]", sanitized)
+    sanitized = PROVIDER_KEY_RE.sub("[redacted-key]", sanitized)
+    sanitized = BEARER_SECRET_RE.sub("Authorization: Bearer [redacted-key]", sanitized)
+    sanitized = ENV_SECRET_RE.sub(lambda match: f"{match.group(0).split('=')[0].strip()}=[redacted-secret]", sanitized)
+    sanitized = KEY_VALUE_SECRET_RE.sub(lambda match: re.split(r"[:=]", match.group(0), maxsplit=1)[0].strip() + "=[redacted-secret]", sanitized)
+    sanitized = ARGV_DUMP_RE.sub("argv=[redacted-argv]", sanitized)
+    sanitized = CHAT_ID_FIELD_RE.sub("chat_id [redacted-chat-id]", sanitized)
     for root in {PROJECT_ROOT, PROJECT_ROOT.resolve()}:
         raw = str(root)
         if not raw:
@@ -4064,6 +4085,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._json(HTTPStatus.OK, {"ok": True, "sources": remove_desk_source(source_id, body)})
                 return
             if parsed.path == "/api/git/check-updates":
+                DashboardHandler._require_loopback_access(self, "Git update")
                 self._json(HTTPStatus.OK, {"ok": True, "git": _git_update_status(fetch=True)})
                 return
             if parsed.path == "/api/git/pull-latest":

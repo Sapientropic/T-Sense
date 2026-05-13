@@ -73,6 +73,43 @@ class DashboardServerGitTests(unittest.TestCase):
         self.assertEqual(status["repo_url"], "https://github.com/Sapientropic/T-Sense")
         self.assertIn("Commit or stash", status["message"])
 
+    def test_git_update_status_redacts_remote_and_fetch_error(self):
+        secret_token = "123456:ABCDEF_secret"
+        outputs = {
+            ("rev-parse", "--abbrev-ref", "HEAD"): "main\n",
+            ("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"): "origin/main\n",
+            ("config", "--get", "remote.origin.url"): "https://ghp_private@github.com/Sapientropic/T-Sense.git\n",
+            ("status", "--porcelain"): "",
+            ("rev-parse", "--short", "HEAD"): "abc123\n",
+            ("rev-parse", "--short", "origin/main"): "def456\n",
+        }
+
+        def fake_run(args, *, timeout=dashboard_server.GIT_TIMEOUT_SECONDS):
+            if args == ["fetch", "--prune", "origin"]:
+                return subprocess.CompletedProcess(
+                    args,
+                    1,
+                    stdout="",
+                    stderr=(
+                        f"fatal token {secret_token} OPENAI_API_KEY=sk-localSecret12345 "
+                        "argv=['git','fetch'] C:\\Users\\Administrator\\private\\repo"
+                    ),
+                )
+            return subprocess.CompletedProcess(args, 0, stdout=outputs[tuple(args)])
+
+        with patch.object(dashboard_server, "_run_git", side_effect=fake_run):
+            status = dashboard_server._git_update_status(fetch=True)
+
+        rendered = json.dumps(status, ensure_ascii=False)
+        self.assertEqual(status["status"], "fetch_failed")
+        self.assertEqual(status["repo_url"], "https://github.com/Sapientropic/T-Sense")
+        self.assertNotIn("remote_url", status)
+        self.assertNotIn("ghp_private", rendered)
+        self.assertNotIn(secret_token, rendered)
+        self.assertNotIn("sk-localSecret12345", rendered)
+        self.assertNotIn("C:\\Users\\Administrator", rendered)
+        self.assertNotIn("['git','fetch']", rendered)
+
     def test_pull_latest_uses_fast_forward_only_after_clean_check(self):
         before = {
             "dirty": False,
@@ -98,6 +135,29 @@ class DashboardServerGitTests(unittest.TestCase):
         run_mock.assert_called_once_with(["pull", "--ff-only"], timeout=60)
         self.assertEqual(result["status"], "up_to_date")
         self.assertEqual(result["pull_output"], "Fast-forward")
+
+    def test_run_desk_action_redacts_stdout_and_stderr_fallback_details(self):
+        secret_token = "123456:ABCDEF_secret"
+        secret_line = (
+            f"OPENAI_API_KEY=sk-localSecret12345 token={secret_token} "
+            "argv=['tgcs','doctor'] C:\\Users\\Administrator\\private\\state"
+        )
+
+        cases = [
+            subprocess.CompletedProcess(["tgcs"], 0, stdout=secret_line, stderr=""),
+            subprocess.CompletedProcess(["tgcs"], 1, stdout="", stderr=secret_line),
+        ]
+        for completed in cases:
+            with self.subTest(returncode=completed.returncode):
+                with patch.object(dashboard_server.subprocess, "run", return_value=completed):
+                    result = dashboard_server.run_desk_action("doctor_jobs")
+
+                rendered = json.dumps(result, ensure_ascii=False)
+                self.assertNotIn(secret_token, rendered)
+                self.assertNotIn("sk-localSecret12345", rendered)
+                self.assertNotIn("C:\\Users\\Administrator", rendered)
+                self.assertNotIn("['tgcs','doctor']", rendered)
+                self.assertIn("[redacted", result["detail"])
 
     def test_resolve_run_artifact_allows_encoded_output_runs_file(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -2469,6 +2529,7 @@ class DashboardServerGitTests(unittest.TestCase):
                 self.payload = payload
 
         endpoint_functions = {
+            "/api/git/check-updates": (dashboard_server, "_git_update_status"),
             "/api/git/pull-latest": (dashboard_server, "_git_pull_latest"),
             "/api/feedback/export": (dashboard_server, "write_feedback_export"),
             "/api/feedback/clear": (dashboard_server.monitor_state, "clear_feedback_decisions"),

@@ -934,3 +934,49 @@ Next:
 
 - Commit this checkpoint after staged-snapshot verification, then triage the
   parallel privacy audit and continue with the next broad high-value item.
+
+## Slice 24: Desk Action And Git Redaction Boundaries
+
+Status: completed.
+
+Actions:
+
+- Applied the parallel privacy audit's highest-priority findings for Desk
+  action fallback output and Git update status.
+- Routed Desk action non-JSON stdout success fallback, failure stderr/stdout
+  fallback, and JSON error message/next-step fields through the local redactor.
+- Expanded that redactor to cover Telegram bot tokens, provider/API keys,
+  bearer authorization headers, secret-like env assignments, argv dumps,
+  chat-id fields, and local paths.
+- Changed Git update status to redact fetch errors, return only scrubbed
+  `repo_url`, omit raw `remote_url`, and require loopback access for
+  `/api/git/check-updates`.
+
+Verification:
+
+- `python -m pytest tests/test_dashboard_server.py::DashboardServerGitTests::test_git_update_status_redacts_remote_and_fetch_error tests/test_dashboard_server.py::DashboardServerGitTests::test_run_desk_action_redacts_stdout_and_stderr_fallback_details tests/test_dashboard_server.py::DashboardServerGitTests::test_local_state_mutation_endpoints_require_loopback_client -q`
+  passed: `3` tests, `12` subtests.
+- `python -m pytest tests/test_dashboard_server.py -q` passed: `142` tests,
+  `66` subtests.
+- Exported the staged index to a temporary tree to verify this checkpoint
+  without unrelated working-tree WIP: targeted dashboard tests passed (`3`
+  tests, `12` subtests), and staged `tests/test_dashboard_server.py` passed
+  (`131` tests, `66` subtests).
+
+Reviewer Gate:
+
+- Triage accepted Ptolemy's top two quick-landable findings:
+  Desk action fallback output leakage and Git update leakage/loopback gap.
+
+Residual Risk:
+
+- Report artifacts intentionally still contain raw original text in local
+  report HTML/Markdown; Ptolemy marked that as a product decision, not a safe
+  unilateral change.
+- Profile draft/profile preference text still needs a secret/path rejection or
+  redaction pass before retained docs are considered hardened.
+
+Next:
+
+- Commit this checkpoint after staged-snapshot verification, then continue with
+  profile draft/preference input redaction or bot reply redaction expansion.
