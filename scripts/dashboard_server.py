@@ -67,8 +67,8 @@ LOOPBACK_DASHBOARD_HOSTS = {"127.0.0.1", "localhost", "::1"}
 SECRET_TOKEN_RE = re.compile(r"\b\d{5,12}:[A-Za-z0-9_-]{10,}\b")
 PROVIDER_KEY_RE = re.compile(r"\b(?:sk|sk-proj|sk-ant|ak)-[A-Za-z0-9_-]{12,}\b", re.IGNORECASE)
 BEARER_SECRET_RE = re.compile(r"(?i)\bAuthorization\s*:\s*Bearer\s+[A-Za-z0-9._~+/=-]{8,}")
-ENV_SECRET_RE = re.compile(r"(?i)\b[A-Z0-9_]*(?:API[_-]?KEY|TOKEN|SECRET|PASSWORD)\b\s*=\s*[^\s'\"]+")
-KEY_VALUE_SECRET_RE = re.compile(r"(?i)\b(?:api[_-]?key|token|secret|password)\b\s*[:=]\s*[^\s'\"]+")
+ENV_SECRET_RE = re.compile(r"(?i)\b[A-Z0-9_]*(?:API[_-]?KEY|TOKEN|SECRET|PASSWORD)\b\s*=\s*[^\s`'\"]+")
+KEY_VALUE_SECRET_RE = re.compile(r"(?i)\b(?:api[_-]?key|token|secret|password)\b\s*[:=]\s*[^\s`'\"]+")
 ARGV_DUMP_RE = re.compile(r"(?i)\bargv\s*[:=]\s*(?:\[[^\]]*\]|[^\r\n]+)")
 CHAT_ID_FIELD_RE = re.compile(r"\bchat[_ -]?id\b\s*[:=]?\s*-?\d{5,20}\b", re.IGNORECASE)
 TELEGRAM_CONFIG_DIR = Path(
@@ -469,6 +469,14 @@ def fetch_compatible_desk_health(host: str, port: int, *, timeout_seconds: float
     return payload
 
 
+def is_tcp_port_listening(host: str, port: int, *, timeout_seconds: float = 0.15) -> bool:
+    try:
+        with socket.create_connection((_browser_host(host), port), timeout=timeout_seconds):
+            return True
+    except OSError:
+        return False
+
+
 def select_dashboard_server(
     *,
     host: str,
@@ -492,6 +500,14 @@ def select_dashboard_server(
                     server=None,
                     reused_existing=True,
                 )
+            if is_tcp_port_listening(host, candidate):
+                # Windows can allow a second bind when an older local tool did
+                # not claim the port exclusively. Skip that URL so the browser
+                # cannot land on an unrelated directory listing or test server.
+                last_error = OSError(f"Port {candidate} is already used by another local service.")
+                continue
+        elif is_tcp_port_listening(host, candidate):
+            raise OSError(f"Port {candidate} is already used by another local service.")
         try:
             server = ThreadingHTTPServer((host, candidate), handler_cls)
             return DashboardServerSelection(
@@ -2400,6 +2416,23 @@ def _source_assistant_has_plan(plan: dict[str, list[str]]) -> bool:
     return any(bool(values) for values in plan.values())
 
 
+def _source_assistant_requested_existing_actions(instruction: str) -> set[str]:
+    requested: set[str] = set()
+    segments = [segment.strip() for segment in re.split(r"[\n;；。]+", instruction) if segment.strip()]
+    for segment in segments or [instruction]:
+        action = _source_assistant_action(segment)
+        if action in {"remove", "disable", "enable"}:
+            requested.add(action)
+    return requested
+
+
+def _source_assistant_should_use_llm_plan(instruction: str, plan: dict[str, list[str]]) -> bool:
+    if not _source_assistant_has_plan(plan):
+        return True
+    requested_existing_actions = _source_assistant_requested_existing_actions(instruction)
+    return any(not plan[action] for action in requested_existing_actions)
+
+
 def _dedupe_source_ids(source_ids: list[str]) -> list[str]:
     deduped: list[str] = []
     seen: set[str] = set()
@@ -2560,7 +2593,10 @@ def run_source_assistant(body: dict) -> dict:
     payload = source_registry.load_registry(registry_path, missing_ok=True)
     existing = {str(source.get("source_id")): source for source in payload.get("sources", []) if isinstance(source, dict)}
     llm_plan = {"remove": [], "disable": [], "enable": []}
-    if not _source_assistant_has_plan(plan) and confirm_external_ai:
+    if confirm_external_ai and _source_assistant_should_use_llm_plan(instruction, plan):
+        # Explicit confirmation is required because this sends the existing local
+        # source list to the configured model. We only do it when local parsing
+        # missed an existing-source operation, including mixed "add + pause" text.
         llm_plan = _source_assistant_llm_plan(instruction, topic, existing)
         llm_used = True
 

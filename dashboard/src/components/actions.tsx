@@ -29,6 +29,7 @@ type JourneyStep = {
   key: string;
   title: string;
   detail: string;
+  detailTitle?: string;
   state: JourneyState;
   stateLabel: string;
   buttons: JourneyButton[];
@@ -479,6 +480,7 @@ export function buildJourneySteps(
   const sourceAccessHasInaccessible = Boolean(sourceAccessResult && sourceAccessResult.inaccessible_count > 0);
   const sourceAccessHasQuiet = Boolean(sourceAccessResult && sourceAccessResult.quiet_count > 0);
   const sourceStepDetail = results.sources_probe_access?.detail || sourceAccessDetail;
+  const sourceNeedsCleanup = sourceAttention || sourceAccessHasInaccessible || sourceAccessHasQuiet;
 
   const hasSuccess = (actionId: string) => results[actionId]?.status === "success";
   const dryRunScheduleOn = scheduler?.installed || (hasSuccess("schedule_install_dry_run") && results.schedule_remove_dry_run?.status !== "success");
@@ -523,25 +525,27 @@ export function buildJourneySteps(
     },
     {
       key: "workspace",
-      title: sourceAttention ? "Repair source list" : "Prepare Signal Desk files",
-      detail: sourceAttention
-        ? sourceStepDetail || "Check real Telegram source access, then pause sources that cannot be read."
-        : sourceStepDetail
-          ? sourceStepDetail
-          : "Create the private settings and saved-channel files Signal Desk needs after Telegram is connected.",
+      title: sourceNeedsCleanup ? "Fix saved channels" : "Set up local files",
+      detail: sourceSetupDetail({
+        workspaceDone,
+        sourceAttention,
+        sourceAccessHasInaccessible,
+        sourceAccessHasQuiet,
+      }),
+      detailTitle: sourceStepDetail || undefined,
       state: workspaceState(stage, workspaceDone, sourceAttention),
       stateLabel: workspaceStateLabel(stage, workspaceDone, sourceAttention),
       buttons: availableButtons([
         { actionId: "init_jobs", label: workspaceDone ? "Refresh files" : "Prepare files", variant: workspaceDone ? "secondary" : "primary" },
-        { actionId: "sources_import_jobs", label: "Repair source list", variant: sourceAttention ? "primary" : "secondary" },
-        { actionId: "sources_probe_access", label: "Check source access", variant: sourceAttention ? "primary" : "secondary" },
+        { actionId: "sources_import_jobs", label: "Fix channels", variant: sourceAttention ? "primary" : "secondary" },
+        { actionId: "sources_probe_access", label: "Check channels", variant: sourceAttention ? "primary" : "secondary" },
         ...(sourceAccessHasInaccessible
-          ? [{ actionId: "sources_pause_inaccessible", label: "Pause inaccessible", variant: "secondary" as const }]
+          ? [{ actionId: "sources_pause_inaccessible", label: "Pause unreadable", variant: "secondary" as const }]
           : []),
         ...(sourceAccessHasQuiet
-          ? [{ actionId: "sources_keep_accessible", label: "Keep recently active", variant: "secondary" as const }]
+          ? [{ actionId: "sources_keep_accessible", label: "Keep active only", variant: "secondary" as const }]
           : []),
-        { actionId: "sources_validate", label: "Check syntax", variant: "secondary" },
+        { actionId: "sources_validate", label: "Check file format", variant: "secondary" },
       ]),
       advancedActionIds: availableAdvanced([
         "init_jobs",
@@ -590,6 +594,32 @@ export function buildJourneySteps(
       advancedActionIds: availableAdvanced(["feedback_export"]),
     },
   ];
+}
+
+function sourceSetupDetail({
+  workspaceDone,
+  sourceAttention,
+  sourceAccessHasInaccessible,
+  sourceAccessHasQuiet,
+}: {
+  workspaceDone: boolean;
+  sourceAttention: boolean;
+  sourceAccessHasInaccessible: boolean;
+  sourceAccessHasQuiet: boolean;
+}) {
+  if (sourceAccessHasInaccessible) {
+    return "Some saved channels cannot be read. Check channels, then pause unreadable ones.";
+  }
+  if (sourceAccessHasQuiet) {
+    return "Some saved channels are quiet. Keep active channels only if you want a cleaner list.";
+  }
+  if (sourceAttention) {
+    return "Check saved-channel access before the next scan.";
+  }
+  if (workspaceDone) {
+    return "Local files are ready. Refresh only if your saved channels changed.";
+  }
+  return "Create the local files Signal Desk needs after Telegram is connected.";
 }
 
 export function buildStartSummary(
@@ -796,7 +826,7 @@ function firstRunStateLabel(stage: string, hasRuns: boolean, sourceAttention: bo
     return "Connect Telegram first";
   }
   if (sourceAttention) {
-    return "Repair source list first";
+    return "Fix channels first";
   }
   if (stage === "needs_first_run") {
     return "Next";
@@ -850,7 +880,7 @@ function JourneyStepCard({
           <span className={`status ${statusClassFor(step.state)}`}>{step.stateLabel}</span>
           <h3>{step.title}</h3>
         </div>
-        <p>{step.detail}</p>
+        <p title={step.detailTitle || step.detail}>{step.detail}</p>
         {activeAction && <ActiveActionProgress action={activeAction} />}
         <JourneyResults actionIds={step.advancedActionIds} results={results} />
         {step.key === "telegram" && <TelegramLoginPanel telegram={telegram} />}

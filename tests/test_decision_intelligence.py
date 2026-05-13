@@ -119,6 +119,34 @@ class DecisionIntelligenceTests(unittest.TestCase):
         self.assertNotIn("score", decision_state)
         self.assertEqual(summary["expired"], 1)
 
+    def test_changed_items_expose_material_change_fields_without_raw_text(self):
+        decision_intelligence, state_store = load_decision_module(self)
+        state = state_store.default_item_memory()
+        config = profile_config()
+
+        _, state, _ = decision_intelligence.enrich_items(
+            [market_item()],
+            profile="# Market Watch",
+            profile_config=config,
+            state=state,
+            observed_at="2026-05-08T09:00:00Z",
+        )
+        changed, state, _ = decision_intelligence.enrich_items(
+            [market_item(market_impact="Trading access restored", rating="medium")],
+            profile="# Market Watch",
+            profile_config=config,
+            state=state,
+            observed_at="2026-05-09T09:00:00Z",
+        )
+
+        decision_state = changed[0]["decision_state"]
+        self.assertEqual(decision_state["status"], "changed")
+        self.assertEqual(decision_state["material_change_fields"], ["market_impact", "rating"])
+        stored = next(iter(state["items"].values()))
+        self.assertIn("fingerprint_fields", stored)
+        self.assertNotIn("source_message_refs", stored["fingerprint_fields"])
+        self.assertNotIn("raw Telegram", str(stored))
+
     def test_feedback_entries_update_counts_without_persisting_notes(self):
         decision_intelligence, state_store = load_decision_module(self)
         state = state_store.default_item_memory()

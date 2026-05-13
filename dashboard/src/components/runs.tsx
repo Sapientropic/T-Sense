@@ -138,7 +138,7 @@ function RunEvidenceGroupPanel({ group, scaleMax }: { group: RunEvidenceGroup; s
         {group.key === "attention" && (
           <p className="run-evidence-next">
             {group.title === "Failed scans to fix"
-              ? "Fix order: Repair source list, Check setup, then Run fresh scan."
+              ? "Fix order: Fix channels, Check setup, then Run fresh scan."
               : "Latest scan is OK. These older failures stay here only as scan history."}
           </p>
         )}
@@ -252,7 +252,7 @@ function RunHealthChart({
         </div>
         <div className={`run-health-decision is-${decision.tone}`}>
           <b>{decision.headline}</b>
-          <span>{decision.detail}</span>
+          <span title={decision.detail}>{runHealthDecisionVisibleDetail(decision)}</span>
           <RunHealthDecisionActions
             decision={decision}
             onOpenReview={onOpenReview}
@@ -263,7 +263,7 @@ function RunHealthChart({
       <div className="run-health-week" aria-label="Past 7 days scan health">
         {buckets.map((bucket) => (
           <div
-            className={`run-health-day ${bucket.failed ? "is-danger" : bucket.runs ? "is-ok" : "is-quiet"}`}
+            className={`run-health-day ${bucket.failed ? "is-warn" : bucket.runs ? "is-ok" : "is-quiet"}`}
             key={bucket.key}
             title={`${bucket.label} · ${bucket.complete} complete · ${bucket.failed} failed · ${bucket.cards} cards · ${bucket.alerts} alerts`}
           >
@@ -293,7 +293,7 @@ function RunHealthDecisionActions({
     return (
       <div className="run-health-actions">
         <button type="button" onClick={() => onRunDeskAction?.("sources_import_jobs")} disabled={!onRunDeskAction}>
-          Repair source list
+          Fix channels
         </button>
         <button type="button" onClick={() => onRunDeskAction?.("doctor_jobs")} disabled={!onRunDeskAction}>
           Check setup
@@ -467,7 +467,7 @@ export function buildCompactRunTimeline(buckets: RunDayBucket[]): CompactTimelin
     const runs = bucket.runs;
     const cards = bucket.cards;
     const alerts = bucket.alerts;
-    const tone: RunTone = failed > 0 ? "danger" : cards > 0 || alerts > 0 ? "info" : runs > 0 ? "ok" : "quiet";
+    const tone: RunTone = failed > 0 ? "warn" : cards > 0 || alerts > 0 ? "info" : runs > 0 ? "ok" : "quiet";
     return {
       key: bucket.key,
       tone,
@@ -495,7 +495,7 @@ export function buildRunHealthDecision(runs: Run[]): RunHealthDecision {
     return {
       tone: "danger",
       headline: "Fix failed scans",
-      detail: "Use Repair source list to restore saved channels, Check setup to verify login/API/profile, then Run fresh scan. No live alert is sent.",
+      detail: "Use Fix channels to restore saved channels, Check setup to verify login/API/profile, then Run fresh scan. No live alert is sent.",
     };
   }
   if (latestDiagnosticFailures > 0 || latestDiagnosticWarnings > 0) {
@@ -511,7 +511,7 @@ export function buildRunHealthDecision(runs: Run[]): RunHealthDecision {
     return {
       tone: "info",
       headline: `Review ${alerts} alert candidate${alerts === 1 ? "" : "s"}`,
-      detail: `${cards} review card${cards === 1 ? "" : "s"} appeared in recent runs. ${failedRuns > 0 ? "Latest scan recovered; older failures are history. " : ""}Clear Review before enabling live alerts.`,
+      detail: `${cards} review card${cards === 1 ? "" : "s"} appeared in recent runs. ${failedRuns > 0 ? "Latest scan recovered; older failures are history. " : ""}Open Review before enabling live alerts.`,
     };
   }
   if (cards > 0) {
@@ -533,6 +533,19 @@ export function buildRunHealthDecision(runs: Run[]): RunHealthDecision {
     headline: totalRuns ? "No urgent run issue" : "Run history is empty",
     detail: totalRuns ? "Recent scans completed without cards, alerts, or diagnostics." : "Run a local scan before judging source quality.",
   };
+}
+
+function runHealthDecisionVisibleDetail(decision: RunHealthDecision) {
+  if (decision.headline.startsWith("Review ") && decision.headline.includes("alert candidate")) {
+    return "Open Review before live alerts.";
+  }
+  if (decision.headline.startsWith("Review ")) {
+    return "Open Review to triage signals.";
+  }
+  if (decision.headline === "Fix failed scans") {
+    return "Fix channels, check setup, then scan again.";
+  }
+  return decision.detail;
 }
 
 function isOptionalOcrDiagnostic(run: Run) {

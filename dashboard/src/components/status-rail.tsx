@@ -45,8 +45,8 @@ export function StatusRail({
   onPullLatest: () => void;
 }) {
   return (
-    <section className="table-section repository-panel" aria-label="Repository update controls">
-      <PanelHeader icon={<GitBranch size={18} />} title="Repository" />
+    <section className="table-section repository-panel" aria-label="App update controls">
+      <PanelHeader icon={<GitBranch size={18} />} title="Updates" />
       <details className="repository-details">
         <summary>
           <span>{repositorySummary(gitStatus)}</span>

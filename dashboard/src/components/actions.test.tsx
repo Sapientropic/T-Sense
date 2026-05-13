@@ -172,14 +172,15 @@ describe("Signal Desk journey", () => {
 
     const workspace = steps.find((step) => step.key === "workspace");
 
-    expect(workspace?.detail).toContain("2 recently active");
+    expect(workspace?.detail).toBe("Some saved channels cannot be read. Check channels, then pause unreadable ones.");
+    expect(workspace?.detailTitle).toContain("2 recently active");
     expect(workspace?.buttons.map((button) => button.label)).toEqual([
       "Refresh files",
-      "Repair source list",
-      "Check source access",
-      "Pause inaccessible",
-      "Keep recently active",
-      "Check syntax",
+      "Fix channels",
+      "Check channels",
+      "Pause unreadable",
+      "Keep active only",
+      "Check file format",
     ]);
   });
 
@@ -207,9 +208,10 @@ describe("Signal Desk journey", () => {
 
     const workspace = steps.find((step) => step.key === "workspace");
 
-    expect(workspace?.detail).toContain("2 inaccessible");
-    expect(workspace?.buttons.map((button) => button.label)).toContain("Pause inaccessible");
-    expect(workspace?.buttons.map((button) => button.label)).toContain("Keep recently active");
+    expect(workspace?.detail).toBe("Some saved channels cannot be read. Check channels, then pause unreadable ones.");
+    expect(workspace?.detailTitle).toContain("2 inaccessible");
+    expect(workspace?.buttons.map((button) => button.label)).toContain("Pause unreadable");
+    expect(workspace?.buttons.map((button) => button.label)).toContain("Keep active only");
   });
 
   it("keeps commands as advanced fallback data instead of primary controls", () => {

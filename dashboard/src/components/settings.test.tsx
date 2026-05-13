@@ -2,13 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import {
   SOURCE_LIBRARY_PAGE_SIZE,
+  botIdentityResultLine,
+  botGatewayBackgroundLine,
+  botGatewayStatusLine,
   filterDeskSourcesByQuery,
   paginatedDeskSources,
   sourceLibraryActivityLabel,
   sourceLibraryCountLabel,
   sourceTopicsEditState,
 } from "./settings";
-import type { DeskSource, SourceStat } from "../domain/types";
+import type { DeskBotIdentityResult, DeskBotGatewayStatus, DeskSource, SourceStat } from "../domain/types";
 
 function source(overrides: Partial<DeskSource>): DeskSource {
   return {
@@ -114,5 +117,53 @@ describe("Settings source topic editor", () => {
       sourceStat({ channel: "risk", scan_incomplete: true }),
     ])).toBe("2 latest cards · 1 alert · 3 tracked · 1 risk");
     expect(sourceLibraryActivityLabel([])).toBe("");
+  });
+
+  it("summarizes Bot Gateway readiness without exposing identifiers", () => {
+    const status: DeskBotGatewayStatus = {
+      schema_version: "desk_bot_gateway_status_v1",
+      token_configured: true,
+      authorized_chat_count: 1,
+      gateway_status: "running",
+      commands_installed: true,
+      supported_commands: ["/status", "/latest", "/scan"],
+      local_first_note: "Bot replies only while tgcs bot run is running locally.",
+      start_command: "./tgcs bot run",
+      background: {
+        schema_version: "desk_bot_gateway_background_status_v1",
+        backend: "windows_schtasks",
+        available: true,
+        installed: true,
+        status: "installed",
+        can_install: false,
+        can_remove: true,
+        detail: "Background mode is on.",
+        next_action: "Leave Signal Desk closed.",
+      },
+    };
+
+    expect(botGatewayStatusLine(status)).toBe("Running · token ready · 1 chat");
+    expect(botGatewayStatusLine({ ...status, authorized_chat_count: 0, gateway_status: "not_detected" })).toBe(
+      "Not detected · token ready · no chats",
+    );
+    expect(botGatewayBackgroundLine(status)).toBe("Background on · Windows Task Scheduler");
+    expect(botGatewayBackgroundLine({ ...status, token_configured: false })).toBe("Save token before background mode");
+    expect(botGatewayBackgroundLine({ ...status, background: { ...status.background, installed: false } })).toBe(
+      "Background off · Windows Task Scheduler",
+    );
+  });
+
+  it("summarizes bot identity apply result with photo boundary", () => {
+    const result: DeskBotIdentityResult = {
+      schema_version: "bot_identity_apply_result_v1",
+      name: "T-Sense",
+      description_updated: true,
+      short_description_updated: true,
+      commands_installed: true,
+      profile_photo_updated: false,
+    };
+
+    expect(botIdentityResultLine(result)).toBe("T-Sense identity applied · photo pending");
+    expect(botIdentityResultLine({ ...result, profile_photo_updated: true })).toBe("T-Sense identity applied · photo updated");
   });
 });

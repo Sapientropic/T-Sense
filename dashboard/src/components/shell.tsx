@@ -4,22 +4,27 @@ import { RefreshCw, ShieldCheck } from "lucide-react";
 import signalIcon from "../assets/tgcs-signal-icon.png";
 import type { Tab } from "../domain/types";
 
-const projectRepoUrl = "https://github.com/Sapientropic/T-Sense";
-
-export function ConsoleHeader({ busy, onRefresh }: { busy: boolean; onRefresh: () => void }) {
+export function ConsoleHeader({
+  busy,
+  onOpenUpdates,
+  onRefresh,
+}: {
+  busy: boolean;
+  onOpenUpdates: () => void;
+  onRefresh: () => void;
+}) {
   return (
     <header className="console-header">
       <div className="brand-station">
-        <a
+        <button
           className="pixel-mark"
-          href={projectRepoUrl}
-          target="_blank"
-          rel="noreferrer"
-          aria-label="Open T-Sense Git repository"
-          title="Open Git repository"
+          aria-label="Open updates"
+          onClick={onOpenUpdates}
+          title="Open updates"
+          type="button"
         >
           <img src={signalIcon} alt="" />
-        </a>
+        </button>
         <div className="brand-copy">
           <p className="eyebrow">T-Sense</p>
           <h1>Signal Desk</h1>

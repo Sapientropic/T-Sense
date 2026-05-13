@@ -9,6 +9,7 @@ import {
   Eye,
   KeyRound,
   PlugZap,
+  RadioTower,
   Save,
   ShieldCheck,
   Trash2,
@@ -16,6 +17,7 @@ import {
 } from "lucide-react";
 
 import { InlineEmpty, PanelHeader } from "./common";
+import { StatusRail } from "./status-rail";
 import {
   deliveryTargetDetail,
   deliveryTargetName,
@@ -29,6 +31,8 @@ import { LearningPanel } from "./settings/learning-panel";
 import type {
   DashboardState,
   DeskAiSettingsStatus,
+  DeskBotIdentityResult,
+  DeskBotGatewayStatus,
   DeskNotificationTokenStatus,
   DeskSource,
   DeskSourcesResult,
@@ -37,6 +41,7 @@ import type {
   DeliveryTarget,
   FeedbackExportResult,
   FeedbackProfileSuggestionsResult,
+  GitUpdateStatus,
   SourceImportResult,
   SourceInsight,
   SourceStat,
@@ -47,7 +52,7 @@ const SOURCE_HEAT_LIMIT = 72;
 const SOURCE_ACTION_LIMIT = 6;
 export const SOURCE_LIBRARY_PAGE_SIZE = 8;
 
-export type SettingsTask = "sources" | "ai" | "notifications" | "learning" | "evidence";
+export type SettingsTask = "sources" | "ai" | "notifications" | "learning" | "evidence" | "updates";
 
 export function SettingsView({
   targets,
@@ -69,6 +74,11 @@ export function SettingsView({
   deliveryChatDetection,
   notificationTokenStatus,
   notificationTokenError,
+  botGatewayStatus,
+  botGatewayError,
+  botIdentityResult,
+  gitStatus,
+  gitBusy,
   sourceLibrary,
   sourceLibraryError,
   sourceImportResult,
@@ -76,6 +86,11 @@ export function SettingsView({
   detectDeliveryChatId,
   saveNotificationToken,
   clearNotificationToken,
+  applyBotIdentity,
+  installBotGatewayAutostart,
+  removeBotGatewayAutostart,
+  checkUpdates,
+  pullLatest,
   saveAiApiKey,
   clearAiApiKey,
   testDeliveryTarget,
@@ -110,6 +125,11 @@ export function SettingsView({
   deliveryChatDetection: DeliveryChatDetectionResult | null;
   notificationTokenStatus: DeskNotificationTokenStatus | null;
   notificationTokenError: string | null;
+  botGatewayStatus: DeskBotGatewayStatus | null;
+  botGatewayError: string | null;
+  botIdentityResult: DeskBotIdentityResult | null;
+  gitStatus: GitUpdateStatus | null;
+  gitBusy: boolean;
   sourceLibrary: DeskSourcesResult | null;
   sourceLibraryError: string | null;
   sourceImportResult: SourceImportResult | null;
@@ -117,6 +137,11 @@ export function SettingsView({
   detectDeliveryChatId: (targetId: string) => Promise<DeliveryChatDetectionResult>;
   saveNotificationToken: (token: string) => Promise<void>;
   clearNotificationToken: () => Promise<void>;
+  applyBotIdentity: () => Promise<void>;
+  installBotGatewayAutostart: () => Promise<void>;
+  removeBotGatewayAutostart: () => Promise<void>;
+  checkUpdates: () => void;
+  pullLatest: () => void;
   saveAiApiKey: (provider: string, apiKey: string) => Promise<void>;
   clearAiApiKey: (provider: string) => Promise<void>;
   testDeliveryTarget: (targetId: string, chatId: string) => Promise<void>;
@@ -164,6 +189,7 @@ export function SettingsView({
         activeTask={activeTask}
         feedbackCount={(feedbackSummary?.exportable_count ?? 0) + (feedbackSummary?.pending_profile_diff_count ?? 0)}
         evidenceCount={sourceStats.length}
+        updateCount={settingsUpdateCount(gitStatus)}
         aiCount={aiSettingsStatus?.configured_count ?? 0}
         notificationCount={targets.length}
         onSelect={setActiveTask}
@@ -226,6 +252,15 @@ export function SettingsView({
             saveNotificationToken={saveNotificationToken}
             status={notificationTokenStatus}
           />
+          <BotGatewayPanel
+            applyBotIdentity={applyBotIdentity}
+            busy={busy}
+            error={botGatewayError}
+            identityResult={botIdentityResult}
+            installBotGatewayAutostart={installBotGatewayAutostart}
+            removeBotGatewayAutostart={removeBotGatewayAutostart}
+            status={botGatewayStatus}
+          />
           {targets.length ? (
             <div className="delivery-target-list">
               {targets.map((target) => (
@@ -283,8 +318,22 @@ export function SettingsView({
           </div>
         </div>
       </section>
+      <section
+        className="settings-section settings-section-updates"
+        aria-label="Updates settings"
+        data-active={activeTask === "updates" ? "true" : "false"}
+      >
+        <StatusRail gitBusy={gitBusy} gitStatus={gitStatus} onCheckUpdates={checkUpdates} onPullLatest={pullLatest} />
+      </section>
     </section>
   );
+}
+
+function settingsUpdateCount(status: GitUpdateStatus | null) {
+  if (!status) {
+    return 0;
+  }
+  return Math.max(0, status.behind) + Math.max(0, status.ahead) + (status.dirty ? Math.max(0, status.dirty_count) : 0);
 }
 
 function SettingsTaskSwitch({
@@ -294,6 +343,7 @@ function SettingsTaskSwitch({
   notificationCount,
   feedbackCount,
   evidenceCount,
+  updateCount,
   onSelect,
 }: {
   activeTask: SettingsTask;
@@ -302,6 +352,7 @@ function SettingsTaskSwitch({
   notificationCount: number;
   feedbackCount: number;
   evidenceCount: number;
+  updateCount: number;
   onSelect: (task: SettingsTask) => void;
 }) {
   const tasks: Array<{ id: SettingsTask; label: string; count: number; detail: string }> = [
@@ -315,6 +366,7 @@ function SettingsTaskSwitch({
       detail: feedbackCount > 0 ? "Profile tuning" : "Review cards to teach preferences",
     },
     { id: "evidence", label: "Yield", count: evidenceCount, detail: "Which sources found posts" },
+    { id: "updates", label: "Updates", count: updateCount, detail: "App and local changes" },
   ];
   return (
     <div className="settings-task-switch" aria-label="Settings task switcher">
@@ -506,8 +558,11 @@ function NotificationTokenPanel({
           value={token}
         />
       </label>
-      <p className="delivery-note">
-        Token text is never shown again. Environment variables still take priority; test checks do not send Telegram messages.
+      <p
+        className="delivery-note"
+        title="Token text is never shown again. Environment variables still take priority; test checks do not send Telegram messages."
+      >
+        Stored locally. Never shown again.
       </p>
       {(status?.detail || error) && (
         <p className={error ? "delivery-token-warning" : "delivery-note"} role={error ? "alert" : undefined}>
@@ -544,6 +599,146 @@ function notificationTokenSourceLabel(source?: string, localStoreLabel?: string)
     return "credential store error";
   }
   return "not configured";
+}
+
+export function botGatewayStatusLine(status: DeskBotGatewayStatus | null) {
+  if (!status) {
+    return "Checking · token unknown · chats unknown";
+  }
+  const gatewayLabel = status.gateway_status === "running"
+    ? "Running"
+    : status.gateway_status === "stale"
+      ? "Stale"
+      : "Not detected";
+  const tokenLabel = status.token_configured ? "token ready" : "token missing";
+  const chatLabel = status.authorized_chat_count === 0
+    ? "no chats"
+    : `${status.authorized_chat_count} chat${status.authorized_chat_count === 1 ? "" : "s"}`;
+  return `${gatewayLabel} · ${tokenLabel} · ${chatLabel}`;
+}
+
+function botGatewayBackendLabel(backend?: string) {
+  if (backend === "windows_schtasks") {
+    return "Windows Task Scheduler";
+  }
+  if (backend === "macos_launchd") {
+    return "launchd";
+  }
+  if (backend === "linux_systemd_user") {
+    return "systemd user";
+  }
+  return "local scheduler";
+}
+
+export function botGatewayBackgroundLine(status: DeskBotGatewayStatus | null) {
+  if (!status) {
+    return "Background mode unknown";
+  }
+  if (!status.token_configured) {
+    return "Save token before background mode";
+  }
+  const backendLabel = botGatewayBackendLabel(status.background?.backend);
+  if (status.background?.installed) {
+    return `Background on · ${backendLabel}`;
+  }
+  if (status.background?.available) {
+    return `Background off · ${backendLabel}`;
+  }
+  return `Background unavailable · ${backendLabel}`;
+}
+
+export function botIdentityResultLine(result: DeskBotIdentityResult | null) {
+  if (!result) {
+    return "";
+  }
+  return `${result.name} identity applied · ${result.profile_photo_updated ? "photo updated" : "photo pending"}`;
+}
+
+function BotGatewayPanel({
+  status,
+  error,
+  identityResult,
+  busy,
+  applyBotIdentity,
+  installBotGatewayAutostart,
+  removeBotGatewayAutostart,
+}: {
+  status: DeskBotGatewayStatus | null;
+  error: string | null;
+  identityResult: DeskBotIdentityResult | null;
+  busy: boolean;
+  applyBotIdentity: () => Promise<void>;
+  installBotGatewayAutostart: () => Promise<void>;
+  removeBotGatewayAutostart: () => Promise<void>;
+}) {
+  const gatewayTone = status?.gateway_status === "running" ? "enabled" : status?.gateway_status === "stale" ? "pending" : "disabled";
+  const canApplyIdentity = status?.token_configured === true;
+  const canInstallBackground = status?.background?.can_install === true && !status.background.installed;
+  const canRemoveBackground = status?.background?.can_remove === true;
+  const identityLine = botIdentityResultLine(identityResult);
+  return (
+    <section className="bot-gateway-panel" aria-label="Bot Gateway status">
+      <div className="notification-token-head">
+        <RadioTower size={16} />
+        <div>
+          <strong>Bot Gateway</strong>
+          <small>{botGatewayStatusLine(status)}</small>
+        </div>
+        <span className={`status ${gatewayTone}`}>{status?.gateway_status === "running" ? "Live" : "Local"}</span>
+      </div>
+      <div className="bot-gateway-readout" aria-label="Bot Gateway readiness">
+        <span>
+          <strong>{status?.commands_installed ? "Installed" : "Menu"}</strong>
+          <small>commands</small>
+        </span>
+        <span>
+          <strong>{status?.supported_commands?.join(" ") || "/status /latest /scan"}</strong>
+          <small>supported</small>
+        </span>
+        <span>
+          <strong>{status?.start_command || "./tgcs bot run"}</strong>
+          <small>start</small>
+        </span>
+        <span>
+          <strong>{botGatewayBackgroundLine(status)}</strong>
+          <small>background</small>
+        </span>
+      </div>
+      <div className="bot-gateway-actions">
+        <button
+          className="text-button"
+          disabled={busy || !canInstallBackground}
+          onClick={() => void installBotGatewayAutostart()}
+          type="button"
+        >
+          <CirclePlay size={15} />
+          <span>{busy ? "Working" : "Turn on background"}</span>
+        </button>
+        <button
+          className="text-button secondary"
+          disabled={busy || !canRemoveBackground}
+          onClick={() => void removeBotGatewayAutostart()}
+          type="button"
+        >
+          <CirclePause size={15} />
+          <span>{busy ? "Working" : "Turn off background"}</span>
+        </button>
+        <button
+          className="text-button secondary"
+          disabled={busy || !canApplyIdentity}
+          onClick={() => void applyBotIdentity()}
+          type="button"
+        >
+          <ShieldCheck size={15} />
+          <span>{busy ? "Applying" : "Apply identity"}</span>
+        </button>
+        <span>{identityLine || "Name, descriptions, commands; photo pending JPG validation."}</span>
+      </div>
+      <p className={error ? "delivery-token-warning" : "delivery-note"} role={error ? "alert" : undefined}>
+        {error || status?.background?.detail || status?.local_first_note || "Bot replies only while the local gateway is running."}
+      </p>
+    </section>
+  );
 }
 
 function SourceLibraryPanel({

@@ -13,6 +13,8 @@ function card(overrides: Partial<ReviewCard> = {}): ReviewCard {
     title: "Frontend Developer",
     rating: "high",
     decision_status: "new",
+    opportunity_status: "open",
+    opportunity_updated_at: "",
     source_refs: [{ channel: "javascript_jobs", id: 42 }],
     item: { why: "Remote React role with a clear salary range." },
     status: "pending",
@@ -39,8 +41,42 @@ describe("InboxView", () => {
     expect(html).toContain('aria-label="Review filter: Latest action (1)"');
     expect(html).toContain("Latest");
     expect(html).toContain("Frontend Developer");
-    expect(html).toContain("Keep");
+    expect(html).toContain("Applied");
     expect(html).toContain("Tune profile");
+    expect(html).not.toContain("Prefer similar");
+  });
+
+  it("labels handled lifecycle cards without making them latest-action cards", () => {
+    const filters = inboxFilterOptions(
+      [
+        card({
+          card_id: "applied-role",
+          opportunity_status: "applied",
+          opportunity_updated_at: "2026-05-11T02:00:00Z",
+        }),
+      ],
+      "run-1",
+    );
+    const html = renderToStaticMarkup(
+      <InboxView
+        cards={[
+          card({
+            card_id: "applied-role",
+            opportunity_status: "applied",
+            opportunity_updated_at: "2026-05-11T02:00:00Z",
+          }),
+        ]}
+        latestRunId="run-1"
+        profileReportNames={{ "jobs-fast": "Jobs Report" }}
+        act={vi.fn()}
+        busy={false}
+      />,
+    );
+
+    expect(filters.find((item) => item.id === "actionable")?.count).toBe(0);
+    expect(filters.find((item) => item.id === "handled")?.count).toBe(1);
+    expect(html).toContain("Applied");
+    expect(html).toContain("Show Handled 1");
   });
 
   it("moves from an empty latest-action filter to a visible backlog bucket", () => {

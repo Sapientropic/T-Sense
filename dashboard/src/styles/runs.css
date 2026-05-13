@@ -155,9 +155,9 @@
   overflow-wrap: anywhere;
 }
 
-.run-health-day.is-danger {
-  border-color: color-mix(in oklch, var(--signal-danger) 44%, transparent);
-  background: color-mix(in oklch, var(--signal-danger) 10%, transparent);
+.run-health-day.is-warn {
+  border-color: color-mix(in oklch, var(--signal-medium) 38%, transparent);
+  background: color-mix(in oklch, var(--signal-medium) 7%, transparent);
 }
 
 .run-health-day.is-ok {
@@ -183,8 +183,8 @@
   background: linear-gradient(90deg, var(--teal), var(--amber));
 }
 
-.run-health-day.is-danger .run-health-day-meter i {
-  background: var(--signal-danger);
+.run-health-day.is-warn .run-health-day-meter i {
+  background: color-mix(in oklch, var(--signal-medium) 82%, var(--muted));
 }
 
 .run-list-head {

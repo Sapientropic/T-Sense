@@ -8,6 +8,7 @@ import {
   UserRoundCog,
 } from "lucide-react";
 import {
+  applyDeskBotIdentity,
   applyProfilePatch,
   checkGitUpdates as checkGitUpdatesRequest,
   clearFeedbackDecisions as clearFeedbackDecisionsRequest,
@@ -23,6 +24,7 @@ import {
   generateFeedbackProfileSuggestions as generateFeedbackProfileSuggestionsRequest,
   importDeskSources,
   importStarterSources as importStarterSourcesRequest,
+  loadDeskBotGatewayStatus,
   loadDeskNotificationTokenStatus,
   loadDeskAiSettingsStatus,
   loadDeskSources,
@@ -51,7 +53,6 @@ import { ProfilesView } from "./components/profiles";
 import { RunsView } from "./components/runs";
 import { SettingsView, type SettingsTask } from "./components/settings";
 import { ConsoleHeader, NavigationRail, WorkbenchHeader } from "./components/shell";
-import { StatusRail } from "./components/status-rail";
 import { buildProfileReportNames } from "./domain/display";
 import { isActionableInboxCard } from "./domain/inbox";
 import {
@@ -66,6 +67,8 @@ import { useDeskTelegram } from "./hooks/use-desk-telegram";
 import type {
   DeliveryChatDetectionResult,
   DeliveryTestResult,
+  DeskBotIdentityResult,
+  DeskBotGatewayStatus,
   DeskNotificationTokenStatus,
   DeskAiSettingsStatus,
   DeskSchedulerStatus,
@@ -117,6 +120,9 @@ function App() {
   const [deliveryChatDetection, setDeliveryChatDetection] = useState<DeliveryChatDetectionResult | null>(null);
   const [notificationTokenStatus, setNotificationTokenStatus] = useState<DeskNotificationTokenStatus | null>(null);
   const [notificationTokenError, setNotificationTokenError] = useState<string | null>(null);
+  const [botGatewayStatus, setBotGatewayStatus] = useState<DeskBotGatewayStatus | null>(null);
+  const [botGatewayError, setBotGatewayError] = useState<string | null>(null);
+  const [botIdentityResult, setBotIdentityResult] = useState<DeskBotIdentityResult | null>(null);
   const [aiSettingsStatus, setAiSettingsStatus] = useState<DeskAiSettingsStatus | null>(null);
   const [aiSettingsError, setAiSettingsError] = useState<string | null>(null);
   const [sourceImportResult, setSourceImportResult] = useState<SourceImportResult | null>(null);
@@ -194,6 +200,21 @@ function App() {
 
   useEffect(() => {
     const controller = new AbortController();
+    loadDeskBotGatewayStatus(controller.signal)
+      .then((status) => {
+        setBotGatewayStatus(status);
+        setBotGatewayError(null);
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) {
+          setBotGatewayError(errorMessage(error));
+        }
+      });
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
     loadDeskAiSettingsStatus(controller.signal)
       .then((status) => {
         setAiSettingsStatus(status);
@@ -228,6 +249,13 @@ function App() {
     return token;
   }
 
+  async function refreshBotGatewayStatus() {
+    const status = await loadDeskBotGatewayStatus();
+    setBotGatewayStatus(status);
+    setBotGatewayError(null);
+    return status;
+  }
+
   async function refreshAiSettingsStatus() {
     const status = await loadDeskAiSettingsStatus();
     setAiSettingsStatus(status);
@@ -241,6 +269,7 @@ function App() {
       await refresh();
       await refreshDeskSchedulerStatus().catch((error) => setDeskSchedulerError(errorMessage(error)));
       await refreshNotificationTokenStatus().catch((error) => setNotificationTokenError(errorMessage(error)));
+      await refreshBotGatewayStatus().catch((error) => setBotGatewayError(errorMessage(error)));
       await refreshAiSettingsStatus().catch((error) => setAiSettingsError(errorMessage(error)));
       setNotice({ tone: "success", text: "State refreshed" });
     } catch (error) {
@@ -510,6 +539,7 @@ function App() {
     try {
       await saveDeskDeliveryTarget(targetId, chatId, enabled);
       await refresh();
+      await refreshBotGatewayStatus().catch((error) => setBotGatewayError(errorMessage(error)));
       setNotice({ tone: "success", text: enabled ? "Notifications enabled" : "Notification target saved muted" });
     } catch (error) {
       setNotice({ tone: "error", text: errorMessage(error) });
@@ -555,6 +585,7 @@ function App() {
       const status = await saveDeskNotificationTokenRequest(token);
       setNotificationTokenStatus(status);
       setNotificationTokenError(null);
+      await refreshBotGatewayStatus().catch((error) => setBotGatewayError(errorMessage(error)));
       setNotice({ tone: "success", text: "Notification token saved" });
     } catch (error) {
       const message = errorMessage(error);
@@ -573,10 +604,53 @@ function App() {
       const status = await clearDeskNotificationTokenRequest();
       setNotificationTokenStatus(status);
       setNotificationTokenError(null);
+      await refreshBotGatewayStatus().catch((error) => setBotGatewayError(errorMessage(error)));
       setNotice({ tone: "success", text: "Saved notification token cleared" });
     } catch (error) {
       const message = errorMessage(error);
       setNotificationTokenError(message);
+      setNotice({ tone: "error", text: message });
+      throw error;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function applyBotIdentity() {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const result = await applyDeskBotIdentity();
+      setBotIdentityResult(result);
+      setBotGatewayError(null);
+      await refreshBotGatewayStatus().catch((error) => setBotGatewayError(errorMessage(error)));
+      setNotice({ tone: "success", text: "Bot identity applied" });
+    } catch (error) {
+      const message = errorMessage(error);
+      setBotGatewayError(message);
+      setNotice({ tone: "error", text: message });
+      throw error;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function setBotGatewayAutostart(enabled: boolean) {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const actionId = enabled ? "bot_gateway_install_autostart" : "bot_gateway_remove_autostart";
+      const result = await runAction(actionId, { confirm: true });
+      await refreshBotGatewayStatus().catch((error) => setBotGatewayError(errorMessage(error)));
+      setNotice({ tone: result.status === "success" ? "success" : "error", text: result.title });
+      if (result.status !== "success") {
+        setBotGatewayError(result.detail || result.next_action || result.title);
+      } else {
+        setBotGatewayError(null);
+      }
+    } catch (error) {
+      const message = errorMessage(error);
+      setBotGatewayError(message);
       setNotice({ tone: "error", text: message });
       throw error;
     } finally {
@@ -871,7 +945,11 @@ function App() {
         Skip to active board
       </a>
       <div className="pixel-grid" aria-hidden="true" />
-      <ConsoleHeader busy={busy || Boolean(busyActionId) || Boolean(deskTelegram.busy)} onRefresh={refreshNow} />
+      <ConsoleHeader
+        busy={busy || Boolean(busyActionId) || Boolean(deskTelegram.busy)}
+        onOpenUpdates={() => openSettings("updates")}
+        onRefresh={refreshNow}
+      />
 
       {(notice || loadError) && (
         <div className={`notice ${notice?.tone === "error" || loadError ? "error" : "success"}`} role="status">
@@ -977,6 +1055,11 @@ function App() {
                   deliveryChatDetection={deliveryChatDetection}
                   notificationTokenStatus={notificationTokenStatus}
                   notificationTokenError={notificationTokenError}
+                  botGatewayStatus={botGatewayStatus}
+                  botGatewayError={botGatewayError}
+                  botIdentityResult={botIdentityResult}
+                  gitStatus={gitStatus}
+                  gitBusy={gitBusy}
                   sourceLibrary={deskSources}
                   sourceLibraryError={deskSourcesError}
                   sourceImportResult={sourceImportResult}
@@ -984,6 +1067,11 @@ function App() {
                   detectDeliveryChatId={detectDeliveryChatId}
                   saveNotificationToken={saveNotificationToken}
                   clearNotificationToken={clearNotificationToken}
+                  applyBotIdentity={applyBotIdentity}
+                  installBotGatewayAutostart={() => setBotGatewayAutostart(true)}
+                  removeBotGatewayAutostart={() => setBotGatewayAutostart(false)}
+                  checkUpdates={checkUpdates}
+                  pullLatest={pullLatest}
                   saveAiApiKey={saveAiApiKey}
                   clearAiApiKey={clearAiApiKey}
                   testDeliveryTarget={testDeliveryTarget}
@@ -998,12 +1086,6 @@ function App() {
                   busy={busy}
                   focusTarget={settingsFocusTarget}
                   onFocusHandled={clearSettingsFocusTarget}
-                />
-                <StatusRail
-                  gitStatus={gitStatus}
-                  gitBusy={gitBusy}
-                  onCheckUpdates={checkUpdates}
-                  onPullLatest={pullLatest}
                 />
               </>
             )}
@@ -1043,17 +1125,17 @@ function deskActionConfirmation(actionId: string): DeskActionConfirmation | null
   if (actionId === "sources_pause_inaccessible") {
     return {
       actionId,
-      title: "Pause inaccessible sources?",
-      detail: "Signal Desk will disable only the sources that the latest access check could not resolve or read. It will not delete them.",
-      confirmLabel: "Pause sources",
+      title: "Pause unreadable channels?",
+      detail: "Signal Desk will disable only saved channels that the latest check could not open. It will not delete them.",
+      confirmLabel: "Pause unreadable",
     };
   }
   if (actionId === "sources_keep_accessible") {
     return {
       actionId,
-      title: "Keep only recently active sources?",
-      detail: "Signal Desk will disable inaccessible sources and quiet sources from the latest access check. Quiet sources are readable; they just had no recent messages in the probe window.",
-      confirmLabel: "Keep recently active",
+      title: "Keep only active channels?",
+      detail: "Signal Desk will disable unreadable and quiet saved channels from the latest check. Quiet channels are readable; they just had no recent messages.",
+      confirmLabel: "Keep active only",
     };
   }
   return null;

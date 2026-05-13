@@ -126,13 +126,29 @@ def source_ref_memory_key(item: dict, state_items: dict) -> str | None:
 
 
 def fingerprint_item(item: dict) -> str:
-    stable = {
+    stable = fingerprint_fields(item)
+    encoded = json.dumps(stable, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def fingerprint_fields(item: dict) -> dict:
+    return {
         key: value
         for key, value in item.items()
         if key not in VOLATILE_FINGERPRINT_FIELDS
     }
-    encoded = json.dumps(stable, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def material_change_fields(previous_fields: object, current_fields: dict) -> list[str]:
+    previous = previous_fields if isinstance(previous_fields, dict) else {}
+    changed: list[str] = []
+    for key, value in current_fields.items():
+        if previous.get(key) != value:
+            changed.append(str(key))
+    for key in previous:
+        if key not in current_fields:
+            changed.append(str(key))
+    return changed
 
 
 def parse_observed_at(value: str | None) -> datetime:
@@ -261,6 +277,7 @@ def enrich_items(
         current = dict(item)
         key = item_key(current, profile_config, profile)
         title = item_title(current, profile_config.mode.dedup_fields or [])
+        current_fingerprint_fields = fingerprint_fields(current)
         fingerprint = fingerprint_item(current)
         previous = state["items"].get(key)
         legacy_key = None
@@ -273,6 +290,10 @@ def enrich_items(
             if legacy_key and legacy_key != key:
                 previous = state["items"].get(legacy_key)
         changed = bool(previous and previous.get("fingerprint") != fingerprint)
+        changed_fields = material_change_fields(
+            previous.get("fingerprint_fields") if previous else {},
+            current_fingerprint_fields,
+        ) if changed else []
         expired = is_expired(current, observed)
 
         if previous is None:
@@ -310,6 +331,8 @@ def enrich_items(
                 source_priority=priority,
             ),
         }
+        if changed_fields:
+            current["decision_state"]["material_change_fields"] = changed_fields
 
         existing_feedback = dict(previous.get("feedback_counts") or {}) if previous else {}
         for feedback, count in feedback_counts.items():
@@ -326,6 +349,7 @@ def enrich_items(
             "seen_count": current["decision_state"]["seen_count"],
             "rating_history": rating_history[-20:],
             "fingerprint": fingerprint,
+            "fingerprint_fields": current_fingerprint_fields,
             "feedback_counts": existing_feedback,
         }
         if legacy_key and legacy_key != key:

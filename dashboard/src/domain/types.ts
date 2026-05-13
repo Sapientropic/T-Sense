@@ -8,6 +8,10 @@ export type DecisionState = {
   status?: string;
   signals?: string[];
   explanations?: Record<string, string>;
+  seen_count?: number;
+  first_seen_at?: string;
+  last_seen_at?: string;
+  material_change_fields?: string[];
 };
 
 export type ReviewCard = {
@@ -23,6 +27,9 @@ export type ReviewCard = {
     decision_state?: DecisionState;
   };
   status: string;
+  opportunity_status: "open" | "saved" | "applied" | "contacted" | "dismissed" | "duplicate" | string;
+  opportunity_updated_at: string;
+  duplicate_of_card_id?: string | null;
   first_run_id?: string;
   last_run_id?: string;
   report_path?: string;

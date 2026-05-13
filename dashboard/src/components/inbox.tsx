@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { AlertTriangle, Ban, Check, Clock3, ExternalLink, FileDiff, Inbox, ListFilter, Play, X } from "lucide-react";
+import { AlertTriangle, Archive, Ban, Bookmark, Check, Clock3, ExternalLink, FileDiff, Inbox, ListFilter, Play, Send, X } from "lucide-react";
 
 import { CopyableCommand, EmptyStateShell, InlineEmpty } from "./common";
 import { artifactFormatFromPath, artifactHref, percentWidth, reportProfileName, toneClass } from "../domain/display";
@@ -108,9 +108,6 @@ export function InboxView({
           </div>
         </div>
       </div>
-      <p className="inbox-action-guide">
-        Keep = teach similar; Skip = lower priority; Avoid = block repeats.
-      </p>
       {filteredCards.length ? (
         <>
           {filteredCards.map((card) => (
@@ -153,7 +150,7 @@ function ReviewFilterEmptyState({
   return (
     <InlineEmpty
       title={activeFilter === "actionable" ? "No latest action cards" : "No cards in this view"}
-      detail={next ? `There is still work in ${next.label}.` : "This filter is clear."}
+      detail={next ? reviewFilterEmptyDetail(next.label) : "This filter is clear."}
       action={
         next ? (
           <button type="button" onClick={() => onSelectFilter(next.id)}>
@@ -165,17 +162,31 @@ function ReviewFilterEmptyState({
   );
 }
 
+function reviewFilterEmptyDetail(nextLabel: string) {
+  if (nextLabel === "Handled") {
+    return "Applied, Contacted, and Dismissed cards are in Handled.";
+  }
+  if (nextLabel === "Saved") {
+    return "Saved cards are parked outside Latest action.";
+  }
+  if (nextLabel === "Duplicate") {
+    return "Duplicate cards are kept out of the main queue.";
+  }
+  return `There is still work in ${nextLabel}.`;
+}
+
 function compactFilterLabel(label: string) {
   if (label === "Latest action") return "Latest";
   if (label === "New/Changed") return "New";
   if (label === "Low/Medium") return "Low/Med";
+  if (label === "Duplicate") return "Dupes";
   return label;
 }
 
 export function nextNonEmptyReviewFilter(filters: ReturnType<typeof inboxFilterOptions>, current: InboxFilter): InboxFilter | null {
   const preferred: InboxFilter[] = current === "actionable"
-    ? ["high", "new_changed", "low_medium", "all"]
-    : ["actionable", "high", "new_changed", "low_medium", "all"];
+    ? ["handled", "saved", "duplicate", "high", "new_changed", "low_medium", "all"]
+    : ["actionable", "high", "new_changed", "low_medium", "saved", "handled", "duplicate", "all"];
   return preferred.find((id) => id !== current && (filters.find((item) => item.id === id)?.count ?? 0) > 0) ?? null;
 }
 
@@ -236,6 +247,16 @@ function backlogFilterForCard(card: ReviewCard, latestRunId?: string): InboxFilt
   if (isActionableInboxCard(card, latestRunId)) {
     return "actionable";
   }
+  const opportunityStatus = String(card.opportunity_status || "open").toLowerCase();
+  if (opportunityStatus === "saved") {
+    return "saved";
+  }
+  if (opportunityStatus === "duplicate") {
+    return "duplicate";
+  }
+  if (["applied", "contacted", "dismissed"].includes(opportunityStatus)) {
+    return "handled";
+  }
   const rating = String(card.rating || "").toLowerCase();
   const decisionStatus = String(card.decision_status || "").toLowerCase();
   if (rating === "high") {
@@ -248,6 +269,40 @@ function backlogFilterForCard(card: ReviewCard, latestRunId?: string): InboxFilt
     return "low_medium";
   }
   return "all";
+}
+
+function opportunityStatusLabel(status: string) {
+  const normalized = String(status || "open").toLowerCase();
+  const labels: Record<string, string> = {
+    open: "Open",
+    saved: "Saved",
+    applied: "Applied",
+    contacted: "Contacted",
+    dismissed: "Dismissed",
+    duplicate: "Duplicate",
+  };
+  return labels[normalized] || "Open";
+}
+
+function opportunityStatusTone(status: string) {
+  const normalized = String(status || "open").toLowerCase();
+  if (["applied", "contacted"].includes(normalized)) {
+    return "done";
+  }
+  if (normalized === "duplicate") {
+    return "duplicate";
+  }
+  if (normalized === "dismissed") {
+    return "dismissed";
+  }
+  if (normalized === "saved") {
+    return "saved";
+  }
+  return "open";
+}
+
+function isOpenOpportunity(card: ReviewCard) {
+  return String(card.opportunity_status || "open").toLowerCase() === "open";
 }
 
 function ReviewCardArticle({
@@ -286,6 +341,9 @@ function ReviewCardArticle({
         <div className="meta-row">
           <span>{reportProfileName(card.profile_id, profileReportNames)}</span>
           <span>{decisionStatusLabel(card.decision_status)}</span>
+          <span className={`opportunity-badge status-${opportunityStatusTone(card.opportunity_status)}`}>
+            {opportunityStatusLabel(card.opportunity_status)}
+          </span>
           <span>{formatDate(card.updated_at)}</span>
         </div>
         <SourceRefs refs={card.source_refs} />
@@ -318,51 +376,66 @@ function MobileActionStrip({
 }) {
   return (
     <div className="mobile-action-strip" aria-label="Quick review actions">
+      {isOpenOpportunity(card) ? (
+        <>
+          <button
+            aria-label="Mark opportunity applied"
+            title="Mark opportunity applied"
+            type="button"
+            data-review-action="applied"
+            onClick={() => act(card.card_id, "applied")}
+            disabled={busy}
+          >
+            <Check size={16} />
+            <span>Applied</span>
+          </button>
+          <button
+            aria-label="Save opportunity for later"
+            title="Save opportunity for later"
+            type="button"
+            data-review-action="saved"
+            onClick={() => act(card.card_id, "saved")}
+            disabled={busy}
+          >
+            <Bookmark size={16} />
+            <span>Save</span>
+          </button>
+          <button
+            aria-label="Mark opportunity contacted"
+            title="Mark opportunity contacted"
+            type="button"
+            data-review-action="contacted"
+            onClick={() => act(card.card_id, "contacted")}
+            disabled={busy}
+          >
+            <Send size={16} />
+            <span>Contacted</span>
+          </button>
+        </>
+      ) : (
+        <button
+          aria-label="Reopen opportunity"
+          title="Reopen opportunity"
+          type="button"
+          data-review-action="reopen"
+          onClick={() => act(card.card_id, "reopen")}
+          disabled={busy}
+        >
+          <Play size={16} />
+          <span>Reopen</span>
+        </button>
+      )}
       <button
-        aria-label="Keep and prefer similar future matches"
-        title="Keep and prefer similar future matches"
-        type="button"
-        data-review-action="keep"
-        onClick={() => act(card.card_id, "keep")}
-        disabled={busy}
-      >
-        <Check size={16} />
-        <span>Keep similar</span>
-      </button>
-      <button
-        aria-label="Skip and de-prioritize similar future matches"
-        title="Skip and de-prioritize similar future matches"
-        type="button"
-        data-review-action="skip"
-        onClick={() => act(card.card_id, "skip")}
-        disabled={busy}
-      >
-        <X size={16} />
-        <span>Skip similar</span>
-      </button>
-      <button
-        aria-label="Mark as wrong match and avoid similar future matches"
-        className="secondary-action"
-        data-review-action="avoid"
-        title="Mark as wrong match and avoid similar future matches"
-        type="button"
-        onClick={() => act(card.card_id, "false_positive")}
-        disabled={busy}
-      >
-        <Ban size={16} />
-        <span>Avoid match</span>
-      </button>
-      <button
-        aria-label={showFollowUp ? "Hide profile tuning note" : "Tune profile from this card"}
+        aria-label={showFollowUp ? "Hide match tuning tools" : "Tune profile or mark wrong match"}
         className="secondary-action"
         data-review-action="tune"
-        title={showFollowUp ? "Hide profile tuning note" : "Tune profile from this card"}
+        title={showFollowUp ? "Hide match tuning tools" : "Tune profile or mark wrong match"}
         type="button"
         onClick={() => setShowFollowUp((value) => !value)}
         disabled={busy}
       >
         <FileDiff size={16} />
-        <span>{showFollowUp ? "Hide" : "Tune profile"}</span>
+        <span>{showFollowUp ? "Hide tools" : "Tune profile"}</span>
       </button>
     </div>
   );
@@ -492,53 +565,54 @@ function CardActions({
 
   return (
     <div className="card-actions">
-      <div className="action-cluster" aria-label="Review actions">
-        <span className="action-cluster-label">Review action</span>
-        <button
-          title="Keep and prefer similar future matches"
-          type="button"
-          data-review-action="keep"
-          onClick={() => act(card.card_id, "keep")}
-          disabled={busy}
-        >
-          <Check size={16} />
-          <span>Keep</span>
-        </button>
-        <button
-          title="Skip and de-prioritize similar future matches"
-          type="button"
-          data-review-action="skip"
-          onClick={() => act(card.card_id, "skip")}
-          disabled={busy}
-        >
-          <X size={16} />
-          <span>Skip</span>
-        </button>
-        <button
-          className="secondary-action"
-          data-review-action="avoid"
-          title="Mark as wrong match and avoid similar future matches"
-          type="button"
-          onClick={() => act(card.card_id, "false_positive")}
-          disabled={busy}
-        >
-          <Ban size={16} />
-          <span>Wrong match</span>
-        </button>
-        {!showFollowUp && (
+      <div className="action-cluster lifecycle-cluster" aria-label="Opportunity lifecycle actions">
+        <span className="action-cluster-label">Opportunity</span>
+        {isOpenOpportunity(card) ? (
+          <>
+            <button title="Mark opportunity applied" type="button" data-review-action="applied" onClick={() => act(card.card_id, "applied")} disabled={busy}>
+              <Check size={16} />
+              <span>Applied</span>
+            </button>
+            <button title="Save opportunity for later" type="button" data-review-action="saved" onClick={() => act(card.card_id, "saved")} disabled={busy}>
+              <Bookmark size={16} />
+              <span>Saved</span>
+            </button>
+            <button title="Mark opportunity contacted" type="button" data-review-action="contacted" onClick={() => act(card.card_id, "contacted")} disabled={busy}>
+              <Send size={16} />
+              <span>Contacted</span>
+            </button>
+            <button className="secondary-action" title="Dismiss opportunity" type="button" data-review-action="dismissed" onClick={() => act(card.card_id, "dismissed")} disabled={busy}>
+              <X size={16} />
+              <span>Dismiss</span>
+            </button>
+            <button className="secondary-action" title="Mark duplicate opportunity" type="button" data-review-action="duplicate" onClick={() => act(card.card_id, "duplicate")} disabled={busy}>
+              <Archive size={16} />
+              <span>Duplicate</span>
+            </button>
+          </>
+        ) : (
+          <button title="Reopen opportunity" type="button" data-review-action="reopen" onClick={() => act(card.card_id, "reopen")} disabled={busy}>
+            <Play size={16} />
+            <span>Reopen</span>
+          </button>
+        )}
+      </div>
+      {!showFollowUp && (
+        <div className="tune-profile-entry" aria-label="Profile tuning entry">
           <button
-            className="secondary-action"
+            className="tune-profile-trigger"
             data-review-action="tune"
             title="Tune profile from this card"
             type="button"
             onClick={() => setShowFollowUp(true)}
             disabled={busy}
           >
-            <FileDiff size={16} />
+            <FileDiff size={17} />
             <span>Tune profile</span>
+            <small>Signals + note</small>
           </button>
-        )}
-      </div>
+        </div>
+      )}
       {showFollowUp && (
         <div className="follow-up">
           <div className="follow-up-head">
@@ -552,6 +626,41 @@ function CardActions({
             >
               <X size={14} />
               <span>Hide</span>
+            </button>
+          </div>
+          <div className="follow-up-signal-grid" aria-label="Preference training actions">
+            <button
+              className="follow-up-signal"
+              title="Prefer similar future matches"
+              type="button"
+              data-review-action="keep"
+              onClick={() => act(card.card_id, "keep")}
+              disabled={busy}
+            >
+              <Check size={16} />
+              <span>Prefer similar</span>
+            </button>
+            <button
+              className="follow-up-signal"
+              title="Deprioritize similar future matches"
+              type="button"
+              data-review-action="skip"
+              onClick={() => act(card.card_id, "skip")}
+              disabled={busy}
+            >
+              <X size={16} />
+              <span>Deprioritize</span>
+            </button>
+            <button
+              className="follow-up-signal"
+              data-review-action="avoid"
+              title="Mark as wrong match and avoid similar future matches"
+              type="button"
+              onClick={() => act(card.card_id, "false_positive")}
+              disabled={busy}
+            >
+              <Ban size={16} />
+              <span>Wrong match</span>
             </button>
           </div>
           <div className="follow-up-control">

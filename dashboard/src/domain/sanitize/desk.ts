@@ -48,12 +48,7 @@ export function sanitizeGitUpdateStatus(value: unknown): GitUpdateStatus | null 
 }
 
 export function sanitizeFeedbackExportResult(value: unknown): FeedbackExportResult | null {
-  if (
-    !isRecord(value) ||
-    value.schema_version !== "feedback_export_result_v1" ||
-    typeof value.output_path !== "string" ||
-    !value.output_path.trim()
-  ) {
+  if (!isRecord(value) || value.schema_version !== "feedback_export_result_v1" || typeof value.output_path !== "string" || !value.output_path.trim()) {
     return null;
   }
   const outputPath = sanitizeLocalRelativePath(value.output_path);

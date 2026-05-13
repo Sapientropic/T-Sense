@@ -713,6 +713,8 @@ function sanitizeInboxCard(record: Record<string, unknown>, index: number): Revi
   }
   warnUnexpectedInboxField(index, "rating", record.rating);
   warnUnexpectedInboxField(index, "decision_status", record.decision_status);
+  warnUnexpectedInboxField(index, "opportunity_status", record.opportunity_status);
+  warnUnexpectedInboxField(index, "opportunity_updated_at", record.opportunity_updated_at);
   const sanitized: ReviewCard = {
     schema_version: "review_card_v1",
     card_id: cardId,
@@ -723,12 +725,15 @@ function sanitizeInboxCard(record: Record<string, unknown>, index: number): Revi
     source_refs: sanitizeSourceRefs(record.source_refs),
     item: sanitizeReviewItem(record.item),
     status: stringOrDefault(record.status, "pending"),
+    opportunity_status: stringOrDefault(record.opportunity_status, "open"),
+    opportunity_updated_at: stringOrDefault(record.opportunity_updated_at, ""),
     updated_at: stringOrDefault(record.updated_at, ""),
   };
   const firstRunId = optionalString(record.first_run_id);
   const lastRunId = optionalString(record.last_run_id);
   const reportPath = optionalString(record.report_path);
   const dashboardUrl = optionalString(record.dashboard_url);
+  const duplicateOfCardId = optionalStringOrNull(record.duplicate_of_card_id);
   if (firstRunId) {
     sanitized.first_run_id = firstRunId;
   }
@@ -740,6 +745,9 @@ function sanitizeInboxCard(record: Record<string, unknown>, index: number): Revi
   }
   if (dashboardUrl) {
     sanitized.dashboard_url = dashboardUrl;
+  }
+  if (duplicateOfCardId !== undefined) {
+    sanitized.duplicate_of_card_id = duplicateOfCardId;
   }
   return sanitized;
 }
@@ -1114,10 +1122,15 @@ function sanitizeDecisionState(value: unknown): ReviewCard["item"]["decision_sta
     return undefined;
   }
   const decisionState: NonNullable<ReviewCard["item"]["decision_state"]> = {};
-  assignOptionalStrings(decisionState, value, ["status"]);
+  assignOptionalStrings(decisionState, value, ["status", "first_seen_at", "last_seen_at"]);
+  assignOptionalNumbers(decisionState, value, ["seen_count"]);
   const signals = stringArray(value.signals);
   if (signals.length) {
     decisionState.signals = signals;
+  }
+  const materialChangeFields = stringArray(value.material_change_fields);
+  if (materialChangeFields.length) {
+    decisionState.material_change_fields = materialChangeFields;
   }
   const explanations = sanitizeStringRecord(value.explanations);
   if (explanations) {

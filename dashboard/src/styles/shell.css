@@ -1,9 +1,9 @@
 .app-shell {
   position: relative;
-  width: min(1720px, calc(100vw - 40px));
+  width: min(1760px, calc(100vw - 64px));
   min-height: 100vh;
   margin: 0 auto;
-  padding: 20px 8px 0;
+  padding: 16px 0 0;
 }
 
 .skip-link {
@@ -34,7 +34,7 @@
   position: fixed;
   inset: 0;
   pointer-events: none;
-  opacity: 0.16;
+  opacity: 0.09;
   background:
     repeating-linear-gradient(0deg, transparent 0 11px, var(--wash-paper-3) 11px 12px),
     repeating-linear-gradient(90deg, transparent 0 11px, var(--wash-paper-3) 11px 12px);
@@ -118,6 +118,7 @@
   overflow: hidden;
   image-rendering: pixelated;
   text-decoration: none;
+  font: inherit;
   cursor: pointer;
   animation: icon-awake 850ms steps(7) both 160ms;
   transition:
@@ -745,8 +746,8 @@
 
 .workbench {
   display: grid;
-  grid-template-columns: 190px minmax(0, 1fr);
-  gap: 16px;
+  grid-template-columns: 188px minmax(0, 1fr);
+  gap: 18px;
   align-items: start;
   padding: 0 0 10px;
   animation: boot-in 540ms cubic-bezier(0.22, 1, 0.36, 1) both 170ms;
@@ -898,7 +899,7 @@
 }
 
 .board-body {
-  padding: 12px 12px 0;
+  padding: 12px;
 }
 
 .board-status-stack {

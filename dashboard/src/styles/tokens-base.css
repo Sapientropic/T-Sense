@@ -11,9 +11,9 @@
   --ink-2: oklch(0.215 0.031 247);
   --ink-3: oklch(0.265 0.029 244);
   --ink-4: oklch(0.315 0.028 238);
-  --paper: oklch(0.91 0.026 92);
-  --paper-2: oklch(0.97 0.018 91);
-  --paper-3: oklch(0.82 0.031 92);
+  --paper: oklch(0.91 0.022 92);
+  --paper-2: oklch(0.955 0.014 91);
+  --paper-3: oklch(0.79 0.025 92);
   --line: oklch(0.40 0.028 230);
   --line-strong: oklch(0.62 0.047 190);
   --signal-high: oklch(0.74 0.12 170);
@@ -39,14 +39,14 @@
   --tone-neutral-text: oklch(0.42 0.018 92);
   --surface-warm: color-mix(in oklch, var(--paper-3) 52%, var(--paper-2));
   --surface-warm-strong: color-mix(in oklch, var(--paper-3) 30%, var(--paper-2));
-  --surface-action: color-mix(in oklch, var(--signal-medium) 16%, var(--paper-2));
-  --surface-link: color-mix(in oklch, var(--signal-high) 17%, var(--paper-2));
+  --surface-action: color-mix(in oklch, var(--signal-medium) 8%, var(--paper-2));
+  --surface-link: color-mix(in oklch, var(--signal-high) 13%, var(--paper-2));
   --ink-warm: oklch(0.32 0.028 92);
   --ink-link: oklch(0.36 0.065 188);
   --label-weight: 700;
   --badge-weight: 800;
-  --shadow-hard: 4px 4px 0 var(--shadow);
-  --shadow-hard-strong: 6px 6px 0 var(--shadow);
+  --shadow-hard: 2px 2px 0 var(--shadow);
+  --shadow-hard-strong: 3px 3px 0 var(--shadow);
   --panel-shadow: var(--shadow-hard);
   --field-border: color-mix(in oklch, var(--paper-3) 58%, var(--ink-4));
   --field-bg: var(--paper-2);
@@ -153,8 +153,8 @@ body {
   font-family: var(--font-body);
   font-variant-numeric: tabular-nums;
   background:
-    linear-gradient(90deg, color-mix(in oklch, var(--signal-medium) 4.5%, transparent) 1px, transparent 1px),
-    linear-gradient(color-mix(in oklch, var(--signal-high) 3.5%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in oklch, var(--signal-medium) 2.4%, transparent) 1px, transparent 1px),
+    linear-gradient(color-mix(in oklch, var(--signal-high) 2.2%, transparent) 1px, transparent 1px),
     linear-gradient(180deg, oklch(0.20 0.03 246), var(--ink));
   background-size: 32px 32px, 32px 32px, auto;
 }

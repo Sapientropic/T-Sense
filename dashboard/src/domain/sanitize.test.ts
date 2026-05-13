@@ -5,6 +5,8 @@ import {
   sanitizeDeskActions,
   sanitizeDeskActionResult,
   sanitizeDeskAiSettingsStatus,
+  sanitizeDeskBotIdentityResult,
+  sanitizeDeskBotGatewayStatus,
   sanitizeDeskNotificationTokenStatus,
   sanitizeDeskSchedulerStatus,
   sanitizeDeskSourcesResult,
@@ -39,6 +41,8 @@ const validCard = {
   title: "Frontend role",
   rating: "high",
   decision_status: "new",
+  opportunity_status: "open",
+  opportunity_updated_at: "",
   source_refs: [],
   item: {},
   status: "pending",
@@ -122,6 +126,81 @@ describe("dashboard state sanitizers", () => {
         detail: "Source access check running; checked 17/68 sources.",
       },
     ]);
+  });
+
+  it("sanitizes Bot Gateway status without accepting sensitive fields", () => {
+    expect(
+      sanitizeDeskBotGatewayStatus({
+        schema_version: "desk_bot_gateway_status_v1",
+        token_configured: true,
+        authorized_chat_count: 2,
+        gateway_status: "running",
+        commands_installed: true,
+        supported_commands: ["/status", "/latest", "/scan", 7],
+        local_first_note: "Replies only while local gateway is running.",
+        start_command: "./tgcs bot run",
+        background: {
+          schema_version: "desk_bot_gateway_background_status_v1",
+          backend: "windows_schtasks",
+          available: true,
+          installed: true,
+          status: "installed",
+          can_install: false,
+          can_remove: true,
+          detail: "Background mode is on.",
+          next_action: "Turn it off from Settings.",
+          checked_at: "2026-05-12T15:00:00Z",
+          token: "secret",
+        },
+        token: "secret",
+        chat_id: "123456",
+      }),
+    ).toEqual({
+      schema_version: "desk_bot_gateway_status_v1",
+      token_configured: true,
+      authorized_chat_count: 2,
+      gateway_status: "running",
+      commands_installed: true,
+      supported_commands: ["/status", "/latest", "/scan"],
+      local_first_note: "Replies only while local gateway is running.",
+      start_command: "./tgcs bot run",
+      background: {
+        schema_version: "desk_bot_gateway_background_status_v1",
+        backend: "windows_schtasks",
+        available: true,
+        installed: true,
+        status: "installed",
+        can_install: false,
+        can_remove: true,
+        detail: "Background mode is on.",
+        next_action: "Turn it off from Settings.",
+        checked_at: "2026-05-12T15:00:00Z",
+      },
+    });
+    expect(sanitizeDeskBotGatewayStatus({ token_configured: true })).toBeNull();
+  });
+
+  it("sanitizes Bot identity apply result without accepting transport fields", () => {
+    expect(
+      sanitizeDeskBotIdentityResult({
+        schema_version: "bot_identity_apply_result_v1",
+        name: "T-Sense",
+        description_updated: true,
+        short_description_updated: true,
+        commands_installed: true,
+        profile_photo_updated: false,
+        token: "secret",
+        chat_id: "123456",
+      }),
+    ).toEqual({
+      schema_version: "bot_identity_apply_result_v1",
+      name: "T-Sense",
+      description_updated: true,
+      short_description_updated: true,
+      commands_installed: true,
+      profile_photo_updated: false,
+    });
+    expect(sanitizeDeskBotIdentityResult({ schema_version: "bot_identity_apply_result_v1" })).toBeNull();
   });
 
   it("keeps structured source access summaries on setup checks", () => {
@@ -781,9 +860,7 @@ describe("dashboard state sanitizers", () => {
       changed_since_last_export: true,
       exported_at: "2026-05-10T00:00:00Z",
     });
-    expect(
-      sanitizeFeedbackExportResult({ schema_version: "feedback_export_result_v1", feedback_count: 0, output_path: "out.jsonl" }),
-    ).toEqual({
+    expect(sanitizeFeedbackExportResult({ schema_version: "feedback_export_result_v1", feedback_count: 0, output_path: "out.jsonl" })).toEqual({
       schema_version: "feedback_export_result_v1",
       feedback_count: 0,
       output_path: "out.jsonl",
@@ -811,9 +888,7 @@ describe("dashboard state sanitizers", () => {
         output_path: "output/feedback/review-feedback.jsonl",
       }),
     ).toBeNull();
-    expect(
-      sanitizeFeedbackExportResult({ schema_version: "feedback_export_result_v1", feedback_count: 1, output_path: "   " }),
-    ).toBeNull();
+    expect(sanitizeFeedbackExportResult({ schema_version: "feedback_export_result_v1", feedback_count: 1, output_path: "   " })).toBeNull();
     for (const output_path of [
       "C:/Users/Administrator/private/review-feedback.jsonl",
       "C:\\Users\\Administrator\\private\\review-feedback.jsonl",
@@ -823,12 +898,8 @@ describe("dashboard state sanitizers", () => {
       "output/feedback/review\nfeedback.jsonl",
     ]) {
       expect(sanitizeFeedbackExportResult({ schema_version: "feedback_export_result_v1", feedback_count: 1, output_path })).toBeNull();
-      expect(
-        sanitizeDeskModuleFeedbackExportResult({ schema_version: "feedback_export_result_v1", feedback_count: 1, output_path }),
-      ).toBeNull();
-      expect(
-        sanitizeDashboardModuleFeedbackExportResult({ schema_version: "feedback_export_result_v1", feedback_count: 1, output_path }),
-      ).toBeNull();
+      expect(sanitizeDeskModuleFeedbackExportResult({ schema_version: "feedback_export_result_v1", feedback_count: 1, output_path })).toBeNull();
+      expect(sanitizeDashboardModuleFeedbackExportResult({ schema_version: "feedback_export_result_v1", feedback_count: 1, output_path })).toBeNull();
     }
     expect(
       sanitizeDashboardModuleFeedbackExportResult({

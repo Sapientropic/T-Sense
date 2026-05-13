@@ -1,34 +1,38 @@
 @media (max-width: 1500px) {
   .review-card {
-    grid-template-columns: 12px minmax(0, 1fr);
+    grid-template-columns: 6px minmax(0, 1fr);
   }
 
   .card-actions {
-    grid-column: 1 / -1;
+    grid-column: 2 / -1;
+    grid-template-columns: 1fr;
     align-items: start;
     border-left: 0;
     border-top: 1px solid var(--paper-3);
   }
 
-  .review-card:not([data-actions-expanded="true"]) .action-cluster {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+  .review-card:not([data-actions-expanded="true"]) .lifecycle-cluster {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .review-card:not([data-actions-expanded="true"]) .tune-profile-entry {
+    padding-top: 8px;
+    padding-left: 0;
+    border-top: 1px solid color-mix(in oklch, var(--paper-3) 42%, transparent);
+    border-left: 0;
   }
 }
 @media (min-width: 1180px) and (max-width: 1500px) {
   .review-card {
-    grid-template-columns: 10px minmax(0, 1fr) minmax(176px, 196px);
-    gap: 12px;
+    grid-template-columns: 6px minmax(0, 1fr);
+    gap: 0;
   }
 
   .card-actions {
-    grid-column: auto;
-    border-top: 0;
-    border-left: 1px solid var(--paper-3);
-    padding: 12px;
-  }
-
-  .review-card:not([data-actions-expanded="true"]) .action-cluster {
-    grid-template-columns: 1fr;
+    grid-column: 2 / -1;
+    border-top: 1px solid var(--paper-3);
+    border-left: 0;
+    padding: 10px 12px 12px;
   }
 }
 
@@ -39,7 +43,7 @@
     without asking CSS to infer parent layout from child selectors.
   */
   .review-card[data-actions-expanded="true"] {
-    grid-template-columns: 12px minmax(0, 1fr);
+    grid-template-columns: 6px minmax(0, 1fr);
     gap: 0 16px;
   }
 
@@ -294,7 +298,15 @@
     display: none;
   }
 
-  .card-main {
+  .review-card .card-main {
+    grid-template-areas:
+      "title"
+      "actions"
+      "reason"
+      "meta"
+      "sources"
+      "report";
+    grid-template-columns: 1fr;
     gap: 8px;
     padding: 12px;
   }
@@ -342,8 +354,15 @@
   }
 
   .review-card .card-actions {
+    grid-column: 1 / -1;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 10px 12px 12px;
     border-top-color: var(--wash-paper-18);
-    background: color-mix(in oklch, var(--ink) 76%, transparent);
+    background:
+      linear-gradient(90deg, color-mix(in oklch, var(--teal) 5%, transparent) 1px, transparent 1px),
+      color-mix(in oklch, var(--ink-2) 82%, transparent);
+    background-size: 14px 100%;
   }
 
   .action-cluster {
@@ -746,8 +765,91 @@
     display: none;
   }
 
+  .review-card[data-actions-expanded="true"] .mobile-action-strip {
+    display: none;
+  }
+
   .review-card[data-actions-expanded="true"] .card-actions .action-cluster {
     display: none;
+  }
+
+  .review-card[data-actions-expanded="true"] .card-actions {
+    display: grid;
+    grid-column: 1 / -1;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .review-card[data-actions-expanded="true"] .follow-up {
+    gap: 8px;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px;
+    border: 1px solid color-mix(in oklch, var(--teal) 30%, var(--wash-paper-18));
+    background: color-mix(in oklch, var(--teal) 7%, transparent);
+  }
+
+  .review-card[data-actions-expanded="true"] .follow-up-head {
+    align-items: center;
+  }
+
+  .review-card[data-actions-expanded="true"] .follow-up-head > label {
+    color: var(--teal);
+  }
+
+  .review-card[data-actions-expanded="true"] .follow-up-close {
+    min-height: 34px;
+    min-width: 0;
+    padding: 0 8px;
+    border-color: color-mix(in oklch, var(--teal) 34%, var(--wash-paper-18));
+    background: color-mix(in oklch, var(--ink-2) 64%, transparent);
+    color: var(--teal);
+  }
+
+  .follow-up-footer {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .follow-up-footer small {
+    grid-column: 1 / -1;
+    max-width: none;
+  }
+
+  .follow-up-signal-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+  }
+
+  .review-card[data-actions-expanded="true"] .follow-up-signal,
+  .review-card[data-actions-expanded="true"] .follow-up-submit {
+    min-height: 40px;
+    border-color: color-mix(in oklch, var(--teal) 28%, var(--wash-paper-18));
+    background: color-mix(in oklch, var(--paper) 9%, transparent);
+    color: color-mix(in oklch, var(--paper) 82%, var(--teal));
+    box-shadow: none;
+  }
+
+  .review-card[data-actions-expanded="true"] .follow-up-signal {
+    gap: 4px;
+    padding: 0 5px;
+    font-size: 10px;
+  }
+
+  .review-card[data-actions-expanded="true"] .follow-up-signal svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .review-card[data-actions-expanded="true"] .follow-up-control textarea {
+    min-height: 96px;
+    border-color: color-mix(in oklch, var(--teal) 30%, var(--wash-paper-18));
+    background: color-mix(in oklch, var(--ink) 74%, transparent);
+    color: var(--paper);
+  }
+
+  .review-card[data-actions-expanded="true"] .follow-up-footer small {
+    color: color-mix(in oklch, var(--paper) 58%, var(--muted));
   }
 
   .review-card[data-actions-expanded="true"] .action-cluster {

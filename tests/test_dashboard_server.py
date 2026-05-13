@@ -367,15 +367,37 @@ class DashboardServerGitTests(unittest.TestCase):
             return object()
 
         with patch.object(dashboard_server, "fetch_compatible_desk_health", return_value=None):
-            with patch.object(dashboard_server, "ThreadingHTTPServer", side_effect=fake_server):
-                selection = dashboard_server.select_dashboard_server(
-                    host="127.0.0.1",
-                    port=8765,
-                    auto_port=True,
-                    handler_cls=dashboard_server.BaseHTTPRequestHandler,
-                )
+            with patch.object(dashboard_server, "is_tcp_port_listening", return_value=False):
+                with patch.object(dashboard_server, "ThreadingHTTPServer", side_effect=fake_server):
+                    selection = dashboard_server.select_dashboard_server(
+                        host="127.0.0.1",
+                        port=8765,
+                        auto_port=True,
+                        handler_cls=dashboard_server.BaseHTTPRequestHandler,
+                    )
 
         self.assertEqual(calls, [8765, 8766])
+        self.assertFalse(selection.reused_existing)
+        self.assertEqual(selection.port, 8766)
+
+    def test_select_dashboard_server_auto_port_does_not_bind_incompatible_listener(self):
+        calls = []
+
+        def fake_server(address, handler_cls):
+            calls.append(address[1])
+            return object()
+
+        with patch.object(dashboard_server, "fetch_compatible_desk_health", return_value=None):
+            with patch.object(dashboard_server, "is_tcp_port_listening", side_effect=[True, False]):
+                with patch.object(dashboard_server, "ThreadingHTTPServer", side_effect=fake_server):
+                    selection = dashboard_server.select_dashboard_server(
+                        host="127.0.0.1",
+                        port=8765,
+                        auto_port=True,
+                        handler_cls=dashboard_server.BaseHTTPRequestHandler,
+                    )
+
+        self.assertEqual(calls, [8766])
         self.assertFalse(selection.reused_existing)
         self.assertEqual(selection.port, 8766)
 
@@ -391,6 +413,19 @@ class DashboardServerGitTests(unittest.TestCase):
                     )
 
         health_mock.assert_not_called()
+
+    def test_select_dashboard_server_explicit_port_rejects_incompatible_listener_before_bind(self):
+        with patch.object(dashboard_server, "is_tcp_port_listening", return_value=True):
+            with patch.object(dashboard_server, "ThreadingHTTPServer") as server_mock:
+                with self.assertRaises(OSError):
+                    dashboard_server.select_dashboard_server(
+                        host="127.0.0.1",
+                        port=8765,
+                        auto_port=False,
+                        handler_cls=dashboard_server.BaseHTTPRequestHandler,
+                    )
+
+        server_mock.assert_not_called()
 
     def test_sensitive_desk_setup_endpoint_requires_loopback_client(self):
         class FakeHandler:
@@ -2175,6 +2210,34 @@ class DashboardServerGitTests(unittest.TestCase):
         self.assertTrue(applied["written"])
         self.assertEqual(listed["source_count"], 1)
         self.assertFalse(listed["sources"][0]["enabled"])
+
+    def test_source_assistant_uses_confirmed_ai_for_mixed_add_and_existing_source_mentions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                dashboard_server.import_desk_sources({"sources": "old_jobs\nweb3_jobs", "topic": "jobs"})
+                with patch.object(
+                    dashboard_server,
+                    "_source_assistant_llm_plan",
+                    return_value={"remove": ["telegram:old_jobs"], "disable": ["telegram:web3_jobs"], "enable": []},
+                ) as planner:
+                    preview = dashboard_server.run_source_assistant(
+                        {
+                            "instruction": "add @remote_jobs; remove stale sources and pause web3",
+                            "topic": "jobs",
+                            "dry_run": True,
+                            "confirm_external_ai": True,
+                        }
+                    )
+
+        planner.assert_called_once()
+        self.assertTrue(preview["llm_used"])
+        self.assertEqual(preview["added_count"], 1)
+        self.assertEqual(preview["removed_count"], 1)
+        self.assertEqual(preview["disabled_count"], 1)
+        self.assertEqual(preview["resolved_plan"]["add"], ["remote_jobs"])
+        self.assertEqual(preview["resolved_plan"]["remove"], ["telegram:old_jobs"])
+        self.assertEqual(preview["resolved_plan"]["disable"], ["telegram:web3_jobs"])
 
     def test_desk_source_topics_updates_default_registry_without_accepting_paths_or_commands(self):
         with tempfile.TemporaryDirectory() as tmp:
