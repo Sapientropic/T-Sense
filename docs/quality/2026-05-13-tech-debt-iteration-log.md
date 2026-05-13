@@ -1658,6 +1658,42 @@ Next:
 - Commit this evidence checkpoint, then continue until the 14:00 stop
   condition.
 
+## Slice 42: Testing Guide Worktree Gate Correction
+
+Status: completed.
+
+Actions:
+
+- Updated `docs/testing.md` after the clean verification failure showed that a
+  checkout-index or archive snapshot cannot run the full Python suite because
+  launcher tests require `.git` metadata.
+- Scoped the checkout-index recipe to targeted staged checkpoint checks.
+- Added a detached `git worktree` recipe as the authoritative full clean HEAD
+  gate for dirty-worktree situations.
+
+Verification:
+
+- `git diff --check -- docs/testing.md docs/quality/task-state.md docs/quality/2026-05-13-tech-debt-iteration-log.md`
+  passed.
+- Staged snapshot documentation verification passed after checking out the
+  index to a temp directory: `docs/testing.md` contained the detached worktree
+  gate and no unsafe angle-bracket command placeholders remained.
+
+Reviewer Gate:
+
+- This converts the verification failure from Slice 40 into durable process
+  guidance, so future agents do not repeat the archive/checkout-index full-suite
+  mistake.
+
+Residual Risk:
+
+- The documented scripts are Windows/PowerShell-first because this repo task is
+  running on Windows. CI remains the authority for Linux/macOS behavior.
+
+Next:
+
+- Commit, then continue until the 14:00 stop condition.
+
 ## Slice 34: `agent_extraction_request_v1` Projection Helper Extraction
 
 Status: in progress.

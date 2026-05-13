@@ -57,6 +57,11 @@ git diff --check
 Use this when the worktree has unrelated WIP. It checks only files currently in
 the git index, so the result is valid evidence for the next commit.
 
+This checkout-index recipe is for targeted checkpoint checks. Do not use it for
+the full Python suite because `tests/test_posix_launchers.py` needs `.git`
+metadata to inspect launcher executable modes. Use the clean HEAD worktree gate
+for full branch health.
+
 ```powershell
 $ErrorActionPreference = 'Stop'
 $repo = (Get-Location).Path
@@ -65,16 +70,15 @@ New-Item -ItemType Directory -Path $temp | Out-Null
 try {
   git checkout-index -a -f --prefix="$temp\"
   Push-Location $temp
-  python -m ruff check .
-  python -m pytest -q
+  python -m ruff check tests/test_contract_fixtures.py
+  python -m pytest tests/test_contract_fixtures.py -q
   Pop-Location
   $nodeModules = Join-Path $repo 'dashboard\node_modules'
   if (Test-Path $nodeModules) {
     New-Item -ItemType Junction -Path (Join-Path $temp 'dashboard\node_modules') -Target $nodeModules | Out-Null
   }
   Push-Location (Join-Path $temp 'dashboard')
-  npm test -- --run
-  npm run build
+  npm test -- --run contract-privacy-fixtures
   Pop-Location
 } finally {
   while ((Get-Location).Path -ne $repo) { Pop-Location }
@@ -86,9 +90,42 @@ try {
 }
 ```
 
-For a narrow checkpoint, replace the full `ruff`, `pytest`, and `npm test`
-commands in the snapshot with the targeted commands that match the staged
-files. Record that scope in the commit note or iteration log.
+Replace the example paths and Vitest pattern with the targeted commands that
+match the staged files. Record that scope in the commit note or iteration log.
+
+## Clean HEAD Worktree Gate
+
+Use this for full branch health while the main worktree is dirty. It checks a
+detached worktree at `HEAD`, so git metadata is available and unrelated WIP is
+excluded.
+
+```powershell
+$ErrorActionPreference = 'Stop'
+$repo = (Get-Location).Path
+$tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('tgcs-worktree-' + [guid]::NewGuid().ToString('N'))
+try {
+  git worktree add --detach $tempRoot HEAD
+  Push-Location $tempRoot
+  python -m ruff check .
+  python -m pytest -q
+  Pop-Location
+  $nodeModules = Join-Path $repo 'dashboard\node_modules'
+  if (Test-Path $nodeModules) {
+    New-Item -ItemType Junction -Path (Join-Path $tempRoot 'dashboard\node_modules') -Target $nodeModules | Out-Null
+  }
+  Push-Location (Join-Path $tempRoot 'dashboard')
+  npm test -- --run
+  npm run build
+  Pop-Location
+} finally {
+  while ((Get-Location).Path -ne $repo) { Pop-Location }
+  $junction = Join-Path $tempRoot 'dashboard\node_modules'
+  if (Test-Path $junction) { Remove-Item -LiteralPath $junction -Force }
+  if (Test-Path $tempRoot) {
+    git worktree remove --force $tempRoot
+  }
+}
+```
 
 ## Extra Gates
 
