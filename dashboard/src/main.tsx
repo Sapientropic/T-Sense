@@ -368,6 +368,7 @@ function App() {
             {activeTab === "runs" && (
               <RunsView
                 runs={state.runs}
+                onOpenProfiles={() => setActiveTab("profiles")}
                 onOpenReview={() => setActiveTab("inbox")}
                 onRunDeskAction={(actionId) => void runDeskAction(actionId)}
               />

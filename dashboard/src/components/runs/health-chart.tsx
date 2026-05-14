@@ -8,10 +8,12 @@ export function RunHealthChart({
   runs,
   onRunDeskAction,
   onOpenReview,
+  onOpenProfiles,
 }: {
   runs: Run[];
   onRunDeskAction?: (actionId: string) => void;
   onOpenReview?: () => void;
+  onOpenProfiles?: () => void;
 }) {
   const recentRuns = runs.slice(0, 80);
   const buckets = runDayWindowBuckets(recentRuns, 7);
@@ -38,7 +40,12 @@ export function RunHealthChart({
         <div className={`run-health-decision is-${decision.tone}`}>
           <b>{decision.headline}</b>
           <span title={decision.detail}>{runHealthDecisionVisibleDetail(decision)}</span>
-          <RunHealthDecisionActions decision={decision} onOpenReview={onOpenReview} onRunDeskAction={onRunDeskAction} />
+          <RunHealthDecisionActions
+            decision={decision}
+            onOpenProfiles={onOpenProfiles}
+            onOpenReview={onOpenReview}
+            onRunDeskAction={onRunDeskAction}
+          />
         </div>
       </div>
       <div className="run-health-week" aria-label="Past 7 days scan health">
@@ -65,17 +72,36 @@ function RunHealthDecisionActions({
   decision,
   onRunDeskAction,
   onOpenReview,
+  onOpenProfiles,
 }: {
   decision: RunHealthDecision;
   onRunDeskAction?: (actionId: string) => void;
   onOpenReview?: () => void;
+  onOpenProfiles?: () => void;
 }) {
   if (decision.tone === "danger") {
+    if (decision.repairKind === "profile_scope") {
+      return (
+        <div className="run-health-actions">
+          <button type="button" onClick={onOpenProfiles} disabled={!onOpenProfiles}>
+            Tune profile
+          </button>
+          <button type="button" onClick={() => onRunDeskAction?.("doctor_jobs")} disabled={!onRunDeskAction}>
+            Check setup
+          </button>
+          <button type="button" onClick={() => onRunDeskAction?.("monitor_jobs_dry_run")} disabled={!onRunDeskAction}>
+            Run fresh scan
+          </button>
+        </div>
+      );
+    }
     return (
       <div className="run-health-actions">
-        <button type="button" onClick={() => onRunDeskAction?.("sources_import_jobs")} disabled={!onRunDeskAction}>
-          Fix channels
-        </button>
+        {decision.repairKind === "source_access" && (
+          <button type="button" onClick={() => onRunDeskAction?.("sources_import_jobs")} disabled={!onRunDeskAction}>
+            Fix channels
+          </button>
+        )}
         <button type="button" onClick={() => onRunDeskAction?.("doctor_jobs")} disabled={!onRunDeskAction}>
           Check setup
         </button>
@@ -118,6 +144,9 @@ function runHealthDecisionVisibleDetail(decision: RunHealthDecision) {
   }
   if (decision.headline === "Fix failed scans") {
     return "Fix channels, check setup, then scan again.";
+  }
+  if (decision.headline === "Fix semantic extraction") {
+    return "Tune profile, check setup, then scan again.";
   }
   return decision.detail;
 }

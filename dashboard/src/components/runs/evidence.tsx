@@ -34,7 +34,7 @@ export function RunEvidenceGroupPanel({ group, scaleMax }: { group: RunEvidenceG
         {group.key === "attention" && (
           <p className="run-evidence-next">
             {group.tone === "danger"
-              ? "Fix order: Fix channels, Check setup, then Run fresh scan."
+              ? runEvidenceRepairPrompt(group.repairKind)
               : "Latest scan recovered. These older failures are kept only for troubleshooting history."}
           </p>
         )}
@@ -46,6 +46,16 @@ export function RunEvidenceGroupPanel({ group, scaleMax }: { group: RunEvidenceG
       </div>
     </details>
   );
+}
+
+function runEvidenceRepairPrompt(kind: RunEvidenceGroup["repairKind"]) {
+  if (kind === "profile_scope") {
+    return "Fix order: Tune profile, Check setup, then Run fresh scan.";
+  }
+  if (kind === "source_access") {
+    return "Fix order: Fix channels, Check setup, then Run fresh scan.";
+  }
+  return "Fix order: Check setup, then Run fresh scan.";
 }
 
 function shouldOpenRunEvidenceByDefault() {

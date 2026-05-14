@@ -7,6 +7,7 @@ export type RunHealthDecision = {
   tone: "ok" | "info" | "warn" | "danger";
   headline: string;
   detail: string;
+  repairKind?: "source_access" | "profile_scope" | "setup";
 };
 
 export type RunTone = "ok" | "info" | "warn" | "danger" | "quiet";
@@ -22,6 +23,7 @@ export type RunEvidenceGroup = {
   tone: RunTone;
   title: string;
   detail: string;
+  repairKind?: RunHealthDecision["repairKind"];
   runs: Run[];
   clusters: RunEvidenceCluster[];
 };
@@ -52,12 +54,14 @@ export function buildRunEvidenceGroups(runs: Run[]): RunEvidenceGroup[] {
   const visibleRuns = runs.slice(0, RECENT_RUN_LIMIT);
   const latest = latestRun(runs);
   const latestFailed = latest?.status.toLowerCase() === "failed";
+  const latestRepairKind = latestFailed ? runFailureRepairKind(latest?.quality?.top_diagnostic_code) : undefined;
   const groups = [
     {
       key: "attention",
       tone: latestFailed ? "danger" : "quiet",
       title: latestFailed ? "Failed scans to fix" : "Earlier failed scans",
       detail: latestFailed ? "Use the repair buttons above first" : "History only after latest OK",
+      repairKind: latestRepairKind,
       runs: visibleRuns.filter((run) => evidenceBucket(run) === "attention"),
     },
     {
@@ -117,10 +121,11 @@ export function buildRunOutcome(run: Run): RunOutcome {
   const optionalOcr = isOptionalOcrDiagnostic(run);
 
   if (status === "failed") {
+    const repairKind = runFailureRepairKind(run.quality?.top_diagnostic_code);
     return {
       tone: "danger",
-      title: "Failed scan",
-      detail: "Use the repair buttons above, then run a fresh practice scan.",
+      title: repairKind === "profile_scope" ? "Semantic extraction failed" : "Failed scan",
+      detail: failedRunRepairDetail(repairKind, run.quality?.top_diagnostic_code),
     };
   }
   if (diagnosticFailures > 0 || diagnosticWarnings > 0 || diagnosticCount > 0) {
@@ -213,10 +218,12 @@ export function buildRunHealthDecision(runs: Run[]): RunHealthDecision {
       : undefined;
 
   if (latestFailed) {
+    const repairKind = runFailureRepairKind(latestIssueCode);
     return {
       tone: "danger",
-      headline: "Fix failed scans",
-      detail: "Use Fix channels to restore saved channels, Check setup to verify login/API/profile, then Run fresh scan. No live alert is sent.",
+      headline: repairKind === "profile_scope" ? "Fix semantic extraction" : "Fix failed scans",
+      detail: failedRunRepairDetail(repairKind, latestIssueCode),
+      repairKind,
     };
   }
   if (latestDiagnosticFailures > 0 || latestDiagnosticWarnings > 0) {
@@ -254,6 +261,29 @@ export function buildRunHealthDecision(runs: Run[]): RunHealthDecision {
     headline: totalRuns ? "No urgent run issue" : "Run history is empty",
     detail: totalRuns ? "Recent scans completed without cards, alerts, or diagnostics." : "Run a local scan before judging source quality.",
   };
+}
+
+function runFailureRepairKind(code?: string): NonNullable<RunHealthDecision["repairKind"]> {
+  if (code === "llm_output_truncated" || code === "semantic_json_invalid" || code === "all_filtered_out") {
+    return "profile_scope";
+  }
+  if (code === "channel_failures" || code === "no_messages_fetched" || code === "source_access_failed" || code === "scan_failed") {
+    return "source_access";
+  }
+  return "setup";
+}
+
+function failedRunRepairDetail(kind: NonNullable<RunHealthDecision["repairKind"]>, code?: string) {
+  if (kind === "profile_scope") {
+    if (code === "all_filtered_out") {
+      return "Open Profiles to loosen matching rules or prefilter keywords, then run a fresh practice scan.";
+    }
+    return "Open Profiles to raise semantic limits, narrow source scope, or reduce messages per run, then scan again.";
+  }
+  if (kind === "source_access") {
+    return "Use Fix channels to restore saved channels, Check setup to verify login/API/profile, then Run fresh scan. No live alert is sent.";
+  }
+  return "Check setup for the failed stage, then run a fresh practice scan. No live alert is sent.";
 }
 
 export function historicalRunOutcome(outcome: RunOutcome, failed: number): RunOutcome {

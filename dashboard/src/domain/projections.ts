@@ -152,7 +152,7 @@ export function formatRunDiagnosticAction(quality?: Run["quality"]) {
   if (!code || (quality?.diagnostic_count ?? 0) === 0) {
     return "";
   }
-  if (code === "scan_failed" || code === "channel_failures") {
+  if (code === "scan_failed" || code === "channel_failures" || code === "source_access_failed") {
     return "Next: fix source access";
   }
   if (code === "scan_incomplete") {
@@ -164,8 +164,11 @@ export function formatRunDiagnosticAction(quality?: Run["quality"]) {
   if (code === "llm_unavailable") {
     return "Next: check LLM key";
   }
+  if (code === "llm_output_truncated" || code === "semantic_json_invalid") {
+    return "Next: raise semantic limits or narrow scope";
+  }
   if (code === "all_filtered_out") {
-    return "Next: preview prompt or loosen profile";
+    return "Next: loosen profile or prefilter";
   }
   if (code === "ocr_disabled_media_present") {
     return "Optional: enable OCR if media matters";

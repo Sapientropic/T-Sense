@@ -30,7 +30,38 @@ describe("run health decision", () => {
     ])).toMatchObject({
       tone: "danger",
       headline: "Fix failed scans",
+      repairKind: "setup",
     });
+  });
+
+  it("routes semantic failed scans to profile repair instead of source repair", () => {
+    const failedRun = run({
+      status: "failed",
+      quality: {
+        diagnostic_count: 1,
+        diagnostic_failure_count: 1,
+        top_diagnostic_code: "llm_output_truncated",
+      },
+    });
+
+    expect(buildRunHealthDecision([failedRun])).toMatchObject({
+      tone: "danger",
+      headline: "Fix semantic extraction",
+      repairKind: "profile_scope",
+    });
+
+    const html = renderToStaticMarkup(
+      <RunsView
+        runs={[failedRun]}
+        onOpenProfiles={() => undefined}
+        onRunDeskAction={() => undefined}
+      />,
+    );
+    expect(html).toContain("Tune profile");
+    expect(html).toContain("Semantic extraction failed");
+    expect(html).toContain("Fix order: Tune profile, Check setup, then Run fresh scan.");
+    expect(html).toContain("Run fresh scan");
+    expect(html).not.toContain("Fix channels");
   });
 
   it("does not keep the main health card red after a newer successful scan", () => {

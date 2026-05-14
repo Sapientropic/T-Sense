@@ -25,10 +25,12 @@ export function RunsView({
   runs,
   onRunDeskAction,
   onOpenReview,
+  onOpenProfiles,
 }: {
   runs: Run[];
   onRunDeskAction?: (actionId: string) => void;
   onOpenReview?: () => void;
+  onOpenProfiles?: () => void;
 }) {
   if (!runs.length) {
     return (
@@ -49,7 +51,12 @@ export function RunsView({
   return (
     <section className="table-section" aria-label="Run history">
       <PanelHeader icon={<Activity size={18} />} title="Runs" />
-      <RunHealthChart runs={runs} onOpenReview={onOpenReview} onRunDeskAction={onRunDeskAction} />
+      <RunHealthChart
+        runs={runs}
+        onOpenProfiles={onOpenProfiles}
+        onOpenReview={onOpenReview}
+        onRunDeskAction={onRunDeskAction}
+      />
       <div className="run-list-head">
         <strong>Recent Evidence</strong>
         <span>
