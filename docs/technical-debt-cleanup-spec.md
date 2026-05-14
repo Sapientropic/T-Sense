@@ -573,6 +573,27 @@ boundaries without changing API payload shape or source-management behavior:
   remaining risk is limited to structural module import/re-export behavior,
   covered by Vitest and TypeScript build.
 
+## Progress Update: 2026-05-14 Runtime Settings UI Split
+
+The Dashboard Profiles runtime settings editor shed its fieldset/action
+rendering boundary while keeping state, save-state calculation, reset, and
+submit behavior in the control component:
+
+- `dashboard/src/components/profiles/runtime-settings-sections.tsx` now owns
+  scan scope fields, work-hours fields, alert cadence fields, matching-rule
+  text area, and action buttons.
+- `dashboard/src/components/profiles/runtime-settings-control.tsx` remains the
+  state owner for current-profile values, draft values, `runtimeSettingsSaveState`,
+  editor open/close, preference draft eligibility, and reset-to-current logic.
+- No route/API or profile model shape changed. The existing
+  `runtimeSettingsSaveState` public re-export remains unchanged.
+- Focused and full dashboard gates passed: `cd dashboard; npm test -- --run
+  profiles`, `cd dashboard; npm test -- --run`, `cd dashboard; npm run build`,
+  and `git diff --check`.
+- Browser/DOM interaction smoke is not covered by the current dashboard test
+  stack; this split intentionally avoided changing rendered text, CSS classes,
+  input limits, or save/reset ownership.
+
 ## Current Debt Snapshot: 2026-05-14
 
 The debt register below remains the long-form reasoning. This table is the
@@ -585,7 +606,7 @@ current triage view for what is still real after the later splits:
 | D3. `dashboard_server.py` boundaries | Artifact, git, scheduler, credentials, sources, source access, source assistant, action execution, profile creation, server selection, HTTP security, and profile route mutation helpers are split behind the old facade. The facade is currently `1276` lines and mainly owns route dispatch, state payload assembly, pre-state-access guards, and compatibility re-exports. | Keep remaining route dispatch in the facade until a group has focused tests; next backend leverage is test concentration or state payload routing, not low-value line shaving. |
 | D4. `monitor_state.py` boundaries | Mostly reduced to a `411` line facade. DB/schema, common privacy guards, review cards, alerts, feedback, profile patches, and dashboard projection are split. | Profile runtime/settings helpers are the only meaningful remaining state responsibility; split only with focused tests if that area changes. |
 | D5. `report.py` coupling | Mostly reduced. `report.py` is now `503` lines; report behavior moved into `report_*` modules, and report HTML link/source rendering now lives in a focused helper module. | Treat `report_extraction.py`, `report_html.py`, and `report_sources.py` as review units; next report work should be behavior or visual-output driven, not line-count driven. |
-| D6. Dashboard root/settings state | Actions, Profiles, Inbox, Runs, and the Settings source library are now composition entrypoints. `inbox.tsx` is down to `137` lines, `runs.tsx` to `76` lines, and `source-library-panel.tsx` to `204` lines, each backed by focused submodules. Runtime settings remain the next UI concentration point. | Touch runtime settings only when that area changes; otherwise shift to backend facade growth or large backend test concentration. |
+| D6. Dashboard root/settings state | Actions, Profiles, Inbox, Runs, the Settings source library, and the profile runtime settings editor are now composition entrypoints. `inbox.tsx` is down to `137` lines, `runs.tsx` to `76` lines, `source-library-panel.tsx` to `204` lines, and `runtime-settings-control.tsx` to `200` lines, each backed by focused submodules. | The next UI slice should be driven by a real UX/test gap rather than more line-count cleanup. |
 | D7. Runtime sanitizers | Dashboard sanitizer is now a `14` line facade. Dashboard state sanitizers are split by product area and Desk-owned helpers re-export `sanitize/desk.ts`. The former `1368` line legacy `sanitize.test.ts` is split into focused dashboard-state, Desk action/feedback, Desk bot/settings, Desk source/delivery, and entrypoint-compat files. | Keep these tests close to existing sanitizer modules; avoid adding a second sanitizer implementation. |
 | D8. Test concentration | Improved. Report, dashboard server, monitor-state, monitor CLI/runtime, tgcs CLI, and dashboard sanitizer tests now live in focused files/directories. | Keep focused directories; use focused Desk helper tests when shrinking large backend modules, and consider splitting the remaining large focused files only when their behavior boundaries are clear. |
 | D9. Packaging metadata | Mostly complete for local Python packaging. Build, staged wheel install, `pipx`, `uvx`, and Docker build/demo/doctor smokes passed. | Keep `signal-desk` as a source-checkout launcher until resources are package-safe; re-run Docker when Dockerfile/package-data/dependency metadata changes. |
@@ -616,7 +637,8 @@ Large current files are still the main maintainability signal:
 | Settings source library panel | `dashboard/src/components/settings/source-library-panel.tsx` | 204 | Saved-source library composition now owns summary/search/list orchestration after model helpers and row editor moved out. |
 | Settings source library row | `dashboard/src/components/settings/source-library-row.tsx` | 155 | Focused saved-source row/editor component for pause/use, remove, and topic editing controls. |
 | Settings source library model | `dashboard/src/components/settings/source-library-model.ts` | 85 | Pure saved-source filtering, pagination, activity-label, and topic validation helpers covered by Settings tests. |
-| Dashboard runtime settings | `dashboard/src/components/profiles/runtime-settings-control.tsx` | 394 | Profile runtime controls remain a focused but sizeable UI boundary with tuning semantics. |
+| Dashboard runtime settings control | `dashboard/src/components/profiles/runtime-settings-control.tsx` | 200 | Profile runtime settings state owner after fieldset/action rendering moved out. |
+| Dashboard runtime settings sections | `dashboard/src/components/profiles/runtime-settings-sections.tsx` | 377 | Focused runtime settings fieldset/action rendering for scan scope, work hours, alerts, matching rules, and save/draft/cancel actions. |
 | Dashboard sanitize summary | `dashboard/src/domain/sanitize/dashboard-summary.ts` | 300 | Largest dashboard sanitizer submodule; owns optional summary/setup/source insight projections. |
 | Dashboard sanitizer tests | `dashboard/src/domain/sanitize-dashboard-state.test.ts` | 458 | Largest remaining sanitizer test file; now scoped to dashboard state rather than all sanitizer surfaces. |
 

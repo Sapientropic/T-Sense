@@ -1,13 +1,18 @@
-import { FileDiff, Save, SlidersHorizontal } from "lucide-react";
+import { SlidersHorizontal } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import type { Profile, ProfileRuntimeSettings } from "../../domain/types";
 import {
-  PROFILE_WEEKDAY_OPTIONS,
   normalizeWeekdays,
   runtimeSettingsSaveState,
 } from "./runtime-settings-model";
-import { ProfileHelpTip } from "./profile-help-tip";
+import {
+  RuntimeAlertFields,
+  RuntimeMatchingRulesField,
+  RuntimeScanScopeFields,
+  RuntimeSettingsActions,
+  RuntimeWorkHoursFields,
+} from "./runtime-settings-sections";
 import { profileDisplayName } from "../../domain/format";
 
 export function ProfileRuntimeSettingsControl({
@@ -123,272 +128,73 @@ export function ProfileRuntimeSettingsControl({
         </div>
       </div>
 
-      <fieldset className="profile-runtime-group profile-runtime-scope">
-        <legend>
-          Scan scope
-          <ProfileHelpTip text="How much saved-channel history this profile reads each time it scans." />
-        </legend>
-        <p>Use smaller numbers for fast checks; increase them only when important posts are missed.</p>
-        <div className="profile-field-grid two">
-          <label>
-            <span className="profile-field-title">Hours to check</span>
-            <input
-              aria-label={`${profile.profile_id} scan window hours`}
-              disabled={busy}
-              inputMode="numeric"
-              max={168}
-              min={1}
-              onChange={(event) => setScanWindowHours(event.target.value)}
-              step={1}
-              type="number"
-              value={scanWindowHours}
-            />
-            <small>hours back</small>
-          </label>
-          <label>
-            <span className="profile-field-title">Posts to read</span>
-            <input
-              aria-label={`${profile.profile_id} item limit`}
-              disabled={busy}
-              inputMode="numeric"
-              max={500}
-              min={1}
-              onChange={(event) => setItemLimit(event.target.value)}
-              step={1}
-              type="number"
-              value={itemLimit}
-            />
-            <small>per scan</small>
-          </label>
-        </div>
-      </fieldset>
+      <RuntimeScanScopeFields
+        profileId={profile.profile_id}
+        busy={busy}
+        scanWindowHours={scanWindowHours}
+        setScanWindowHours={setScanWindowHours}
+        itemLimit={itemLimit}
+        setItemLimit={setItemLimit}
+      />
 
-      <fieldset className="profile-runtime-group profile-runtime-work-hours">
-        <legend>
-          Work hours
-          <ProfileHelpTip text="The local time window used when this profile is set to workday notifications." />
-        </legend>
-        <p>These settings decide when live alerts are allowed; they do not change what gets scanned.</p>
-        <div className="profile-field-grid three">
-          <label>
-            <span className="profile-field-title">Timezone</span>
-            <input
-              aria-label={`${profile.profile_id} timezone`}
-              disabled={busy}
-              onChange={(event) => setTimezone(event.target.value)}
-              placeholder="Asia/Shanghai"
-              value={timezone}
-            />
-          </label>
-          <label>
-            <span className="profile-field-title">Work starts</span>
-            <input
-              aria-label={`${profile.profile_id} work start`}
-              disabled={busy}
-              onChange={(event) => setWorkStart(event.target.value)}
-              type="time"
-              value={workStart}
-            />
-          </label>
-          <label>
-            <span className="profile-field-title">Work ends</span>
-            <input
-              aria-label={`${profile.profile_id} work end`}
-              disabled={busy}
-              onChange={(event) => setWorkEnd(event.target.value)}
-              type="time"
-              value={workEnd}
-            />
-          </label>
-        </div>
-        <div className="profile-weekday-block">
-          <span className="profile-field-title">
-            Workdays
-            <ProfileHelpTip text="Days included in this profile's work-hours schedule." />
-          </span>
-          <div className="profile-weekday-options">
-            {PROFILE_WEEKDAY_OPTIONS.map((day) => (
-              <label className="profile-weekday-toggle" key={day.value}>
-                <input
-                  checked={workdays.includes(day.value)}
-                  disabled={busy}
-                  onChange={(event) => {
-                    if (event.target.checked) {
-                      setWorkdays(normalizeWeekdays([...workdays, day.value]));
-                    } else {
-                      setWorkdays(workdays.filter((value) => value !== day.value));
-                    }
-                  }}
-                  type="checkbox"
-                />
-                <span>{day.label}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-      </fieldset>
+      <RuntimeWorkHoursFields
+        profileId={profile.profile_id}
+        busy={busy}
+        timezone={timezone}
+        setTimezone={setTimezone}
+        workStart={workStart}
+        setWorkStart={setWorkStart}
+        workEnd={workEnd}
+        setWorkEnd={setWorkEnd}
+        workdays={workdays}
+        setWorkdays={setWorkdays}
+      />
 
-      <fieldset className="profile-runtime-group profile-runtime-alerts">
-        <legend>
-          Scan cadence and alerts
-          <ProfileHelpTip text="Cadence controls practice scans. Alert age prevents stale high-signal items from notifying you later." />
-        </legend>
-        <p>Leave these blank to use the app defaults.</p>
-        <div className="profile-field-grid four">
-          <label>
-            <span className="profile-field-title">Work interval</span>
-            <input
-              aria-label={`${profile.profile_id} work interval minutes`}
-              disabled={busy}
-              inputMode="numeric"
-              max={1440}
-              min={1}
-              onChange={(event) => setWorkInterval(event.target.value)}
-              step={1}
-              type="number"
-              value={workInterval}
-            />
-            <small>minutes</small>
-          </label>
-          <label>
-            <span className="profile-field-title">Quiet interval</span>
-            <input
-              aria-label={`${profile.profile_id} off hours interval minutes`}
-              disabled={busy}
-              inputMode="numeric"
-              max={1440}
-              min={1}
-              onChange={(event) => setOffHoursInterval(event.target.value)}
-              step={1}
-              type="number"
-              value={offHoursInterval}
-            />
-            <small>minutes</small>
-          </label>
-          <label>
-            <span className="profile-field-title">Alert rule</span>
-            <select
-              aria-label={`${profile.profile_id} alert rule`}
-              disabled={busy}
-              onChange={(event) => setAlertRule(event.target.value)}
-              value={alertRule}
-            >
-              <option value="high_new_or_changed">High new or changed</option>
-              <option value="high_new_only">High new only</option>
-            </select>
-          </label>
-          <label>
-            <span className="profile-field-title">Alert age</span>
-            <input
-              aria-label={`${profile.profile_id} alert max age minutes`}
-              disabled={busy}
-              inputMode="numeric"
-              max={10080}
-              min={1}
-              onChange={(event) => setAlertMaxAge(event.target.value)}
-              step={1}
-              type="number"
-              value={alertMaxAge}
-            />
-            <small>minutes</small>
-          </label>
-        </div>
-      </fieldset>
+      <RuntimeAlertFields
+        profileId={profile.profile_id}
+        busy={busy}
+        workInterval={workInterval}
+        setWorkInterval={setWorkInterval}
+        offHoursInterval={offHoursInterval}
+        setOffHoursInterval={setOffHoursInterval}
+        alertRule={alertRule}
+        setAlertRule={setAlertRule}
+        alertMaxAge={alertMaxAge}
+        setAlertMaxAge={setAlertMaxAge}
+      />
 
-      <div className="profile-runtime-group profile-runtime-matching">
-        <label className="profile-preference-note">
-          <span className="profile-field-title">
-            Matching rules
-            <ProfileHelpTip text={currentPreferences
-              ? "Edit learned rules here. Signal Desk will preview a draft before the rules affect matching."
-              : "Write plain-language rules here. Signal Desk will preview a draft before applying them."}
-            />
-          </span>
-          <textarea
-            aria-label={`${profile.profile_id} background and match rules`}
-            disabled={busy}
-            maxLength={4000}
-            onChange={(event) => setPreferenceNote(event.target.value)}
-            placeholder={"- Prefer senior remote AI engineering roles\n- Avoid unpaid internships and vague promos"}
-            value={preferenceNote}
-          />
-          {preferenceNote.length > 3600 && <small>{4000 - preferenceNote.length} characters left before the preview limit.</small>}
-        </label>
-      </div>
-      <div className="profile-runtime-actions">
-        <button
-          className="profile-save-settings profile-primary-action text-button"
-          disabled={busy || !saveState.canSave}
-          onClick={() => {
-            if (!saveState.canSave) {
-              return;
-            }
-            setProfileRuntimeSettings(profile.profile_id, {
-              ...saveState.settings,
-            });
-            setEditing(false);
-          }}
-          type="button"
-        >
-          <Save size={15} />
-          <span>Save scan settings</span>
-        </button>
-        <button
-          className="profile-save-settings profile-secondary-action text-button"
-          disabled={busy || !canDraftPreferences}
-          onClick={() => {
-            if (!canDraftPreferences) {
-              return;
-            }
-            void createProfileMatchingPreferencesDraft(profile.profile_id, normalizedPreference).then(() => {
-              setEditing(false);
-            });
-          }}
-          title={canDraftPreferences ? "Preview these matching-rule changes" : "Change the matching rules first"}
-          type="button"
-        >
-          <FileDiff size={15} />
-          <span>Preview matching changes</span>
-        </button>
-        <button
-          className="profile-save-settings profile-tertiary-action text-button secondary"
-          disabled={busy || !normalizedPreference}
-          onClick={() => {
-            if (!normalizedPreference) {
-              return;
-            }
-            void createProfileDraftNote(profile.profile_id, normalizedPreference).then(() => {
-              setEditing(false);
-            });
-          }}
-          title={normalizedPreference ? "Add this as a separate profile note" : "Write a matching note first"}
-          type="button"
-        >
-          <FileDiff size={15} />
-          <span>Add as draft note</span>
-        </button>
-        <button
-          className="profile-cancel-settings text-button"
-          disabled={busy}
-          onClick={() => {
-            setScanWindowHours(String(currentScanWindow));
-            setItemLimit(String(currentItemLimit));
-            setTimezone(currentTimezone);
-            setWorkdays(currentWorkdays);
-            setWorkStart(currentWorkStart);
-            setWorkEnd(currentWorkEnd);
-            setWorkInterval(currentWorkInterval ? String(currentWorkInterval) : "");
-            setOffHoursInterval(currentOffHoursInterval ? String(currentOffHoursInterval) : "");
-            setAlertRule(currentAlertRule);
-            setAlertMaxAge(currentAlertMaxAge ? String(currentAlertMaxAge) : "");
-            setPreferenceNote(currentPreferences);
-            setEditing(false);
-          }}
-          type="button"
-        >
-          <span>Cancel</span>
-        </button>
-      </div>
+      <RuntimeMatchingRulesField
+        profileId={profile.profile_id}
+        busy={busy}
+        currentPreferences={currentPreferences}
+        preferenceNote={preferenceNote}
+        setPreferenceNote={setPreferenceNote}
+      />
+      <RuntimeSettingsActions
+        profileId={profile.profile_id}
+        busy={busy}
+        canSaveSettings={saveState.canSave}
+        settings={saveState.settings}
+        canDraftPreferences={canDraftPreferences}
+        normalizedPreference={normalizedPreference}
+        setProfileRuntimeSettings={setProfileRuntimeSettings}
+        createProfileDraftNote={createProfileDraftNote}
+        createProfileMatchingPreferencesDraft={createProfileMatchingPreferencesDraft}
+        closeEditor={() => setEditing(false)}
+        resetDraft={() => {
+          setScanWindowHours(String(currentScanWindow));
+          setItemLimit(String(currentItemLimit));
+          setTimezone(currentTimezone);
+          setWorkdays(currentWorkdays);
+          setWorkStart(currentWorkStart);
+          setWorkEnd(currentWorkEnd);
+          setWorkInterval(currentWorkInterval ? String(currentWorkInterval) : "");
+          setOffHoursInterval(currentOffHoursInterval ? String(currentOffHoursInterval) : "");
+          setAlertRule(currentAlertRule);
+          setAlertMaxAge(currentAlertMaxAge ? String(currentAlertMaxAge) : "");
+          setPreferenceNote(currentPreferences);
+        }}
+      />
     </div>
   );
 }
