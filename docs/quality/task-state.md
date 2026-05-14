@@ -1,19 +1,20 @@
-state: active_quality_iteration_runtime_settings_ui_split_checkpoint
+state: active_quality_iteration_bot_gateway_background_split_checkpoint
 mode: Standard
 run_shape: continuous_until_deadline
-slice_goal: "Continue the technical-debt SPEC with high-value dashboard/backend slices, including Inbox/Runs concentration cleanup, sanitizer test ownership cleanup, dashboard profile-creation facade cleanup, monitor/tgcs CLI test concentration cleanup, monitor delivery runtime cleanup, dashboard profile projection cleanup, monitor command execution cleanup, monitor manifest/result projection cleanup, dashboard opportunity projection cleanup, dashboard setup projection cleanup, Desk server selection cleanup, Desk HTTP security cleanup, Desk profile route mutation cleanup, report HTML link-rendering cleanup, Desk source assistant planning cleanup, Desk source access cleanup, Settings source-library UI cleanup, and profile runtime-settings UI cleanup, while preserving public props, review/run action names, sanitizer behavior, route contracts, monitor/tgcs CLI behavior, dashboard state contracts, run manifest contracts, monitor result contracts, report link safety, loopback safety, pre-state-access private input rejection, source assistant external-AI confirmation gates, source access cached-health repair semantics, quiet-source semantics, source library topic-editor behavior, runtime-settings save/reset/draft behavior, and local-first privacy boundaries."
+slice_goal: "Continue the technical-debt SPEC with high-value dashboard/backend slices, including Inbox/Runs concentration cleanup, sanitizer test ownership cleanup, dashboard profile-creation facade cleanup, monitor/tgcs CLI test concentration cleanup, monitor delivery runtime cleanup, dashboard profile projection cleanup, monitor command execution cleanup, monitor manifest/result projection cleanup, dashboard opportunity projection cleanup, dashboard setup projection cleanup, Desk server selection cleanup, Desk HTTP security cleanup, Desk profile route mutation cleanup, report HTML link-rendering cleanup, Desk source assistant planning cleanup, Desk source access cleanup, Settings source-library UI cleanup, profile runtime-settings UI cleanup, and Bot Gateway background/autostart cleanup, while preserving public props, review/run action names, sanitizer behavior, route contracts, monitor/tgcs CLI behavior, dashboard state contracts, run manifest contracts, monitor result contracts, report link safety, loopback safety, pre-state-access private input rejection, source assistant external-AI confirmation gates, source access cached-health repair semantics, quiet-source semantics, source library topic-editor behavior, runtime-settings save/reset/draft behavior, Bot Gateway token/confirm gating, fixed scheduler argv, and local-first privacy boundaries."
 stop_condition: "Do not enter final closeout before 2026-05-14 14:00 Asia/Shanghai unless the user explicitly stops; if SPEC work is exhausted, research competitors/user pain points and expand ROADMAP/SPEC before continuing."
 handoff_policy: after_deadline_closeout
 continuation_policy: "Use docs/technical-debt-cleanup-spec.md as the debt authority; continue with one remaining boundary at a time and keep old facade exports until downstream callers move."
 intake_status: explicit_user_request
-gate_status: runtime_settings_ui_split_gates_passed_review_clean
+gate_status: bot_gateway_background_split_gates_passed_review_clean
 blockers: []
 needs_human: []
-residual_risk: "This checkpoint is a profile runtime-settings UI structure split. It does not exercise live browser rendering, DOM interaction tests for runtime-settings inputs/actions, live Telegram access, real LLM/provider calls, Scheduler/Credential Manager, Docker packaging install/build commands, or human product acceptance. Browser smoke was skipped because this slice did not change CSS/layout/rendered copy and Playwright is not installed in the dashboard workspace; DOM interaction coverage should be added when the dashboard test stack gains jsdom/testing-library."
+residual_risk: "This checkpoint is a Bot Gateway background/autostart structure split. It does not exercise live scheduler install/remove, live Telegram polling, keyring, real bot token resolution, Docker packaging install/build commands, or human product acceptance. Focused tests cover patched dashboard facade paths, token/confirm gating, fixed Windows/macOS/Linux argv/service payloads, and sanitized status output; live operator checks should be rerun only if scheduler command construction or packaging/runtime environment changes again."
 completed_slices:
   - "dashboard_server artifact helpers moved to scripts/desk_artifacts.py with dashboard_server re-export compatibility."
   - "dashboard_server git helpers moved to scripts/desk_git.py with dashboard_server wrapper compatibility."
-  - "dashboard_server scheduler and Bot Gateway background helpers moved to scripts/desk_scheduler.py with monkeypatch compatibility preserved."
+  - "dashboard_server fixed dry-run scheduler helpers moved to scripts/desk_scheduler.py with monkeypatch compatibility preserved."
+  - "Bot Gateway background split: scripts/desk_bot_gateway_background.py now owns local-first Bot Gateway status, background status, fixed bot argv, launchd/systemd service files, and confirmed autostart install/remove actions; scripts/desk_scheduler.py preserves old helper names and syncs dashboard monkeypatch dependencies into the new module."
   - "monitor_state DB/schema helpers moved to scripts/monitor_db.py."
   - "monitor_state shared constants/privacy guards moved to scripts/monitor_common.py."
   - "monitor_state review-card CRUD/actions moved to scripts/review_cards.py."
@@ -197,6 +198,14 @@ verification:
   - "cd dashboard; npm test -- --run -> 25 files, 150 tests passed"
   - "cd dashboard; npm run build -> passed"
   - "git diff --check -> passed for the Runtime settings UI split working tree"
+  - "python -m pytest tests/dashboard/test_scheduler.py -q -> 28 passed"
+  - "python -m py_compile scripts/desk_scheduler.py scripts/desk_bot_gateway_background.py scripts/dashboard_server.py scripts/desk_actions.py -> passed"
+  - "python -m ruff check scripts/desk_scheduler.py scripts/desk_bot_gateway_background.py tests/dashboard/test_scheduler.py -> passed"
+  - "python -m pytest tests/dashboard/test_scheduler.py tests/dashboard/test_credentials_settings.py tests/dashboard/test_desk_actions.py tests/test_bot_gateway.py tests/test_bot_gateway_contracts.py -q -> 104 passed, 17 subtests passed"
+  - "python -m pytest -q -> 511 passed, 2 skipped, 198 subtests passed"
+  - "python -m ruff check . -> passed"
+  - "CI-list py_compile including scripts/desk_bot_gateway_background.py -> passed"
+  - "git diff --check -> passed"
 reviewer_status:
   - "Explorer review of the proposed split recommended a搬运式拆分: keep InboxView as facade, move filters/backlog, review-card/actions/source refs, and setup checklist into focused submodules."
   - "Post-diff reviewer found no blocking issues. Remaining risks were untracked new files, SSR-only test coverage, and preserving existing link sanitizer boundaries; untracked files are included in the checkpoint plan and the browser smoke covers the main interaction path."
@@ -221,6 +230,8 @@ reviewer_status:
   - "Source access split reviewer found no P0. P1 staging risk for the new untracked scripts/desk_source_access.py is addressed by staging that file explicitly before commit; P2 async facade cache-write compatibility feedback was fixed by restoring _probe_source_access_async cache writes and adding a direct-helper regression test."
   - "Source library UI split reviewer found no P0/P1. P2 staging risk for source-library-model.ts and source-library-row.tsx is addressed by staging both new files explicitly before commit. P2 component identity feedback was accepted as an intentional UX fix: topic editor text and save errors should survive parent panel rerenders; the behavior is documented in code. A true DOM interaction regression test remains deferred until the dashboard test stack includes jsdom/testing-library."
   - "Runtime settings UI split reviewer found no P0/P1 and confirmed UI text, constraints, disabled states, aria labels, button classes/titles, save/cancel/draft behavior, and state/reset/runtimeSettingsSaveState ownership were preserved. P2 staging risk for runtime-settings-sections.tsx is addressed by staging the new file explicitly before commit. P3 DOM interaction coverage remains a known test-stack gap until jsdom/testing-library is added."
+  - "Bot Gateway background pre-diff explorer recommended moving Bot Gateway status/autostart helpers into scripts/desk_bot_gateway_background.py while preserving dashboard_server facade wrappers, constants, PROJECT_ROOT/_pythonw_entry/_run_scheduler_command/token-status patch paths, token gating, Windows immediate /Run semantics, and macOS/Linux fixed argv/service semantics."
+  - "Bot Gateway background post-diff reviewer found no P0/P1. It confirmed the dashboard_server -> desk_scheduler -> desk_bot_gateway_background monkeypatch chain, token/confirm gating, Windows immediate /Run behavior, macOS/Linux fixed argv/service semantics, no hidden import cycle, and no real scheduler subprocess bypass. The only P2 was the untracked new-module risk, addressed by explicitly staging scripts/desk_bot_gateway_background.py before commit."
 operator_checks:
   - "Docker Desktop 4.65.0 / engine 29.2.1 reachable after startup; docker build -t tgcs-local-smoke:<temp> . -> exit 0"
   - "Docker demo container -> exit 0, generated one demo report in a temporary mounted output directory; temporary directory and image removed."
@@ -230,10 +241,10 @@ operator_checks:
   - "Live Windows Task Scheduler dry-run task with random name -> install exit 0, status installed, remove exit 0, final status not_installed."
   - "Live Windows Credential Manager smoke -> random secret write/read/delete passed; post-delete read returned empty."
   - "Live LLM structured call -> provider=deepseek, model=deepseek-v4-flash, JSON response status=TGCS_LIVE_LLM_OK, total_tokens=58."
-next_action: "Stage runtime-settings control/sections plus docs, commit the runtime settings UI checkpoint, then continue."
+next_action: "Stage the Bot Gateway background split explicitly, commit the checkpoint, then continue with the next backend boundary."
 candidate_slices:
   - "Inspect scripts/dashboard_server.py for remaining state payload or route dispatch boundaries only if existing tests can preserve patch compatibility and pre-state-access guards."
   - "Inspect scripts/desk_sources.py only for focused registry/import helper cleanup; it is now a 552-line registry facade, so avoid low-value line shaving unless behavior tests expose a clear boundary."
-  - "Inspect dashboard runtime settings or source library panels only if the next slice can include behavior-focused Vitest coverage rather than cosmetic file movement."
-last_update: "2026-05-14T09:16:12+08:00"
+  - "Inspect scripts/desk_credentials.py for a focused credentials/settings boundary only if token/key/chat-detection tests can preserve local-secret and redaction behavior."
+last_update: "2026-05-14T09:33:04+08:00"
 checkpoint_ready: true

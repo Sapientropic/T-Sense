@@ -89,9 +89,10 @@ gates without changing HTTP endpoints, SQLite table names, or dashboard
 contract names:
 
 - `scripts/dashboard_server.py` is still the public server facade, but artifact
-  helpers, git update helpers, scheduler helpers, and Bot Gateway background
-  helpers now live in `scripts/desk_artifacts.py`, `scripts/desk_git.py`, and
-  `scripts/desk_scheduler.py`. A follow-up split moved Telegram credentials,
+  helpers, git update helpers, fixed dry-run scheduler helpers, and Bot Gateway
+  background helpers now live in `scripts/desk_artifacts.py`,
+  `scripts/desk_git.py`, `scripts/desk_scheduler.py`, and
+  `scripts/desk_bot_gateway_background.py`. A follow-up split moved Telegram credentials,
   notification/AI key settings, source registry/access helpers, source
   assistant planning, and core Desk action execution into
   `desk_credentials.py`, `desk_sources.py`, `desk_source_assistant.py`, and
@@ -594,6 +595,35 @@ submit behavior in the control component:
   stack; this split intentionally avoided changing rendered text, CSS classes,
   input limits, or save/reset ownership.
 
+## Progress Update: 2026-05-14 Bot Gateway Background Split
+
+The Desk scheduler boundary shed the Bot Gateway background/autostart product
+surface without changing dashboard actions, Bot Gateway status, or local-first
+privacy behavior:
+
+- `scripts/desk_bot_gateway_background.py` now owns Bot Gateway state loading,
+  local-first status projection, background status, fixed Bot Gateway argv,
+  launchd plist writing, systemd service writing, and confirmed autostart
+  install/remove actions.
+- `scripts/desk_scheduler.py` remains the fixed dry-run auto-scan scheduler
+  owner and keeps the old Bot Gateway helper names as compatibility wrappers.
+  Its sync layer deliberately forwards `PROJECT_ROOT`, token status, scheduler
+  backend, `_pythonw_entry`, `_run_scheduler_command`, and Bot Gateway constants
+  into the new module so the `dashboard_server` monkeypatch surface stays
+  effective.
+- Regression tests now directly lock the split facade path: patched
+  `dashboard_server._pythonw_entry` controls `_fixed_bot_gateway_argv()`, and
+  patched `dashboard_server._run_scheduler_command` controls Windows background
+  status queries. Existing tests continue to cover token gating, explicit
+  confirmation gating, Windows create/run, macOS `KeepAlive`, Linux
+  `Restart=on-failure`, and sanitized status output.
+- The CI explicit `py_compile` list now includes
+  `scripts/desk_bot_gateway_background.py`.
+- Focused gates passed: `python -m pytest tests/dashboard/test_scheduler.py
+  -q`, targeted `py_compile`, targeted `ruff`, and the mixed Bot Gateway/Desk
+  action gate covering scheduler, credentials, action dispatch, and bot
+  contracts.
+
 ## Current Debt Snapshot: 2026-05-14
 
 The debt register below remains the long-form reasoning. This table is the
@@ -603,7 +633,7 @@ current triage view for what is still real after the later splits:
 | --- | --- | --- |
 | D1. WIP and branch hygiene | Cleared for the known backlog. The dirty implementation slices from the handoff are now checkpoint commits. | Keep using staged snapshot or clean worktree gates for future slices; do not use mixed-worktree gates as commit proof. |
 | D2. Contract sprawl | Materially improved. Shared fixtures now cover the high-risk Python/TypeScript contracts, but `docs/agent-cli-contract.md` is still long. | Keep the contract doc as an index and move new guarantees into fixtures first, prose second. |
-| D3. `dashboard_server.py` boundaries | Artifact, git, scheduler, credentials, sources, source access, source assistant, action execution, profile creation, server selection, HTTP security, and profile route mutation helpers are split behind the old facade. The facade is currently `1276` lines and mainly owns route dispatch, state payload assembly, pre-state-access guards, and compatibility re-exports. | Keep remaining route dispatch in the facade until a group has focused tests; next backend leverage is test concentration or state payload routing, not low-value line shaving. |
+| D3. `dashboard_server.py` boundaries | Artifact, git, fixed dry-run scheduler, Bot Gateway background, credentials, sources, source access, source assistant, action execution, profile creation, server selection, HTTP security, and profile route mutation helpers are split behind the old facade. The facade is currently `1276` lines and mainly owns route dispatch, state payload assembly, pre-state-access guards, and compatibility re-exports. | Keep remaining route dispatch in the facade until a group has focused tests; next backend leverage is test concentration or state payload routing, not low-value line shaving. |
 | D4. `monitor_state.py` boundaries | Mostly reduced to a `411` line facade. DB/schema, common privacy guards, review cards, alerts, feedback, profile patches, and dashboard projection are split. | Profile runtime/settings helpers are the only meaningful remaining state responsibility; split only with focused tests if that area changes. |
 | D5. `report.py` coupling | Mostly reduced. `report.py` is now `503` lines; report behavior moved into `report_*` modules, and report HTML link/source rendering now lives in a focused helper module. | Treat `report_extraction.py`, `report_html.py`, and `report_sources.py` as review units; next report work should be behavior or visual-output driven, not line-count driven. |
 | D6. Dashboard root/settings state | Actions, Profiles, Inbox, Runs, the Settings source library, and the profile runtime settings editor are now composition entrypoints. `inbox.tsx` is down to `137` lines, `runs.tsx` to `76` lines, `source-library-panel.tsx` to `204` lines, and `runtime-settings-control.tsx` to `200` lines, each backed by focused submodules. | The next UI slice should be driven by a real UX/test gap rather than more line-count cleanup. |
@@ -617,6 +647,8 @@ Large current files are still the main maintainability signal:
 | Area | File | Lines | Why It Matters |
 | --- | ---: | ---: | --- |
 | Python server | `scripts/dashboard_server.py` | 1276 | HTTP routing, state payload assembly, route-level validation, and compatibility re-exports remain in the facade after profile creation, server selection, HTTP security, and profile route mutation payloads moved out. |
+| Desk scan scheduler | `scripts/desk_scheduler.py` | 630 | Fixed dry-run auto-scan scheduler and compatibility wrappers remain here after Bot Gateway background/autostart moved out. |
+| Desk Bot Gateway background | `scripts/desk_bot_gateway_background.py` | 556 | Focused Bot Gateway background module for local-first status, token-gated autostart, fixed launcher argv, and launchd/systemd/Windows login task handling. |
 | Desk source registry | `scripts/desk_sources.py` | 552 | Source registry CRUD/import and facade compatibility remain here after source assistant and source access moved out. |
 | Desk source access | `scripts/desk_source_access.py` | 489 | Focused access module for cached source-health files, source-access summaries, Telethon bounded probes, quiet-source semantics, and cached-health repair actions. |
 | Desk source assistant | `scripts/desk_source_assistant.py` | 451 | Focused source planning module for free-text channel extraction, local add/remove/enable/disable plans, confirmed LLM existing-source planning, and resolved-plan application. |
@@ -787,7 +819,8 @@ Cleanup:
     mutations, source access health.
   - `scripts/desk_credentials.py`: Telegram credentials, notification tokens,
     AI key status, delivery chat detection.
-  - `scripts/desk_scheduler.py`: fixed dry-run scheduler and bot gateway
+  - `scripts/desk_scheduler.py`: fixed dry-run scheduler helpers.
+  - `scripts/desk_bot_gateway_background.py`: Bot Gateway status and
     autostart helpers.
   - `scripts/desk_artifacts.py`: artifact path resolution and report/markdown
     rendering.

@@ -142,6 +142,36 @@ class DashboardSchedulerTests(unittest.TestCase):
         self.assertIn("confirmation", str(raised.exception))
 
 
+    def test_bot_gateway_argv_uses_dashboard_facade_patch_after_split(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            scripts_dir = project_root / "scripts"
+            scripts_dir.mkdir()
+            bot_script = scripts_dir / "bot_gateway.py"
+            bot_script.write_text("# bot gateway\n", encoding="utf-8")
+            pythonw = project_root / "pythonw.exe"
+            pythonw.write_text("", encoding="utf-8")
+
+            with patch.object(dashboard_server, "PROJECT_ROOT", project_root):
+                with patch.object(dashboard_server, "_pythonw_entry", return_value=pythonw):
+                    argv = dashboard_server._fixed_bot_gateway_argv()
+
+        self.assertEqual(argv, [str(pythonw), str(bot_script), "run", "--poll-timeout", "8"])
+
+
+    def test_bot_gateway_background_status_uses_dashboard_scheduler_patch_after_split(self):
+        completed = subprocess.CompletedProcess(["schtasks.exe"], 0, stdout="TaskName: private path\n", stderr="")
+
+        with patch.object(dashboard_server.sys, "platform", "win32"):
+            with patch.object(dashboard_server, "_run_scheduler_command", return_value=completed) as run_mock:
+                status = dashboard_server.desk_bot_gateway_background_status(token_configured=True)
+
+        run_mock.assert_called_once_with(["schtasks.exe", "/Query", "/TN", dashboard_server.DESK_BOT_GATEWAY_TASK_NAME])
+        self.assertEqual(status["schema_version"], "desk_bot_gateway_background_status_v1")
+        self.assertTrue(status["installed"])
+        self.assertTrue(status["can_remove"])
+
+
     def test_bot_gateway_autostart_install_uses_fixed_windows_login_task(self):
         with tempfile.TemporaryDirectory() as tmp:
             project_root = Path(tmp)
