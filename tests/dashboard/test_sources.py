@@ -5,10 +5,23 @@ from http import HTTPStatus
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts import dashboard_server
+from scripts import dashboard_server, desk_source_assistant, desk_sources
 
 
 class DashboardSourcesTests(unittest.TestCase):
+    def test_source_assistant_split_preserves_dashboard_facade_helpers(self):
+        self.assertIs(dashboard_server.run_source_assistant, desk_sources.run_source_assistant)
+        self.assertEqual(
+            dashboard_server._source_assistant_plan("add @remote_jobs; pause @web3_jobs"),
+            desk_source_assistant._source_assistant_plan("add @remote_jobs; pause @web3_jobs"),
+        )
+        self.assertEqual(
+            dashboard_server._clean_resolved_source_plan(
+                {"add": ["@remote_jobs"], "remove": ["telegram:old_jobs"], "disable": [], "enable": []}
+            ),
+            {"add": ["remote_jobs"], "remove": ["telegram:old_jobs"], "disable": [], "enable": []},
+        )
+
     def test_desk_source_import_preview_does_not_write_default_registry(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -221,6 +234,31 @@ class DashboardSourcesTests(unittest.TestCase):
         self.assertTrue(applied["written"])
         self.assertEqual(listed["source_count"], 1)
         self.assertFalse(listed["sources"][0]["enabled"])
+
+
+    def test_source_assistant_skips_confirmed_ai_when_local_plan_is_complete(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                dashboard_server.import_desk_sources({"sources": "old_jobs", "topic": "jobs"})
+                with patch.object(
+                    dashboard_server,
+                    "_source_assistant_llm_plan",
+                    return_value={"remove": [], "disable": [], "enable": []},
+                ) as planner:
+                    preview = dashboard_server.run_source_assistant(
+                        {
+                            "instruction": "remove @old_jobs",
+                            "topic": "jobs",
+                            "dry_run": True,
+                            "confirm_external_ai": True,
+                        }
+                    )
+
+        planner.assert_not_called()
+        self.assertFalse(preview["llm_used"])
+        self.assertEqual(preview["removed_count"], 1)
+        self.assertEqual(preview["resolved_plan"]["remove"], ["telegram:old_jobs"])
 
 
     def test_source_assistant_uses_confirmed_ai_for_mixed_add_and_existing_source_mentions(self):

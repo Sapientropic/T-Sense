@@ -37,7 +37,7 @@ jobs:
 
       - name: Compile Python scripts
         run: |
-          python -m py_compile scripts/scan.py scripts/summarize.py scripts/media_ocr.py scripts/ocr_media.py scripts/report.py scripts/report_diagnostics.py scripts/report_html_links.py scripts/daily_report.py scripts/doctor.py scripts/delivery.py scripts/monitor_state.py scripts/monitor.py scripts/monitor_runner.py scripts/monitor_execution.py scripts/monitor_manifest.py scripts/dashboard_projection.py scripts/dashboard_opportunities.py scripts/dashboard_setup.py scripts/desk_server_selection.py scripts/desk_http_security.py scripts/desk_profile_routes.py scripts/dashboard_server.py
+          python -m py_compile scripts/scan.py scripts/summarize.py scripts/media_ocr.py scripts/ocr_media.py scripts/report.py scripts/report_diagnostics.py scripts/report_html_links.py scripts/daily_report.py scripts/doctor.py scripts/delivery.py scripts/monitor_state.py scripts/monitor.py scripts/monitor_runner.py scripts/monitor_execution.py scripts/monitor_manifest.py scripts/dashboard_projection.py scripts/dashboard_opportunities.py scripts/dashboard_setup.py scripts/desk_server_selection.py scripts/desk_http_security.py scripts/desk_profile_routes.py scripts/desk_source_assistant.py scripts/dashboard_server.py
 
       - name: Run Ruff
         run: |

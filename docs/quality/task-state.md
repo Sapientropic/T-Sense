@@ -1,15 +1,15 @@
-state: active_quality_iteration_report_html_link_split_checkpoint
+state: active_quality_iteration_source_assistant_split_checkpoint
 mode: Standard
 run_shape: continuous_until_deadline
-slice_goal: "Continue the technical-debt SPEC with high-value dashboard/backend slices, including Inbox/Runs concentration cleanup, sanitizer test ownership cleanup, dashboard profile-creation facade cleanup, monitor/tgcs CLI test concentration cleanup, monitor delivery runtime cleanup, dashboard profile projection cleanup, monitor command execution cleanup, monitor manifest/result projection cleanup, dashboard opportunity projection cleanup, dashboard setup projection cleanup, Desk server selection cleanup, Desk HTTP security cleanup, Desk profile route mutation cleanup, and report HTML link-rendering cleanup, while preserving public props, review/run action names, sanitizer behavior, route contracts, monitor/tgcs CLI behavior, dashboard state contracts, run manifest contracts, monitor result contracts, report link safety, loopback safety, pre-state-access private input rejection, and local-first privacy boundaries."
+slice_goal: "Continue the technical-debt SPEC with high-value dashboard/backend slices, including Inbox/Runs concentration cleanup, sanitizer test ownership cleanup, dashboard profile-creation facade cleanup, monitor/tgcs CLI test concentration cleanup, monitor delivery runtime cleanup, dashboard profile projection cleanup, monitor command execution cleanup, monitor manifest/result projection cleanup, dashboard opportunity projection cleanup, dashboard setup projection cleanup, Desk server selection cleanup, Desk HTTP security cleanup, Desk profile route mutation cleanup, report HTML link-rendering cleanup, and Desk source assistant planning cleanup, while preserving public props, review/run action names, sanitizer behavior, route contracts, monitor/tgcs CLI behavior, dashboard state contracts, run manifest contracts, monitor result contracts, report link safety, loopback safety, pre-state-access private input rejection, source assistant external-AI confirmation gates, and local-first privacy boundaries."
 stop_condition: "Do not enter final closeout before 2026-05-14 14:00 Asia/Shanghai unless the user explicitly stops; if SPEC work is exhausted, research competitors/user pain points and expand ROADMAP/SPEC before continuing."
 handoff_policy: after_deadline_closeout
 continuation_policy: "Use docs/technical-debt-cleanup-spec.md as the debt authority; continue with one remaining boundary at a time and keep old facade exports until downstream callers move."
 intake_status: explicit_user_request
-gate_status: report_html_link_split_gates_passed_review_clean
+gate_status: source_assistant_split_gates_passed_review_clean
 blockers: []
 needs_human: []
-residual_risk: "This checkpoint is a report HTML link-helper split. It does not exercise live Telegram, live LLM/provider behavior, Scheduler/Credential Manager, Docker packaging install/build commands beyond CI compile parity, browser visual rendering screenshots, or human product acceptance."
+residual_risk: "This checkpoint is a Desk source assistant planning split. It does not exercise live Telegram access probes, real LLM/provider calls, Scheduler/Credential Manager, Docker packaging install/build commands beyond CI compile parity, browser visual rendering screenshots, or human product acceptance."
 completed_slices:
   - "dashboard_server artifact helpers moved to scripts/desk_artifacts.py with dashboard_server re-export compatibility."
   - "dashboard_server git helpers moved to scripts/desk_git.py with dashboard_server wrapper compatibility."
@@ -44,6 +44,7 @@ completed_slices:
   - "Desk HTTP security split: scripts/desk_http_security.py now owns JSON POST integrity, same-port loopback Origin/Referer checks, request host-port extraction, and sensitive route loopback gates; DashboardHandler preserves private helper names as patch-compatible wrappers."
   - "Desk profile route split: scripts/desk_profile_routes.py now owns profile alert-mode/enabled/runtime-settings/draft-note/matching-preferences payload helpers and profile patch apply/revert/replay payload helpers; dashboard_server.py preserves HTTP dispatch, loopback gates, pre-state-access validation, and patch-compatible monitor_state/PROFILE_* injection."
   - "Report HTML link split: scripts/report_html_links.py now owns safe_href, Telegram handle links, Telegram Markdown snippets, URL labels, inline value splitting, contact/source link rendering, and shared escaping; scripts/report_html.py preserves old helper names as compatibility re-exports."
+  - "Source assistant split: scripts/desk_source_assistant.py now owns free-text source instruction parsing, local source plan construction, confirmed LLM existing-source planning, resolved-plan cleanup, preview, and confirmed apply; scripts/desk_sources.py preserves source registry/access ownership and old facade helper names."
 verification:
   - "python -m pytest tests/dashboard -q -> 149 passed, 71 subtests passed"
   - "python -m pytest tests/monitor_state -q -> 81 passed, 24 subtests passed"
@@ -168,6 +169,14 @@ verification:
   - "python -m ruff check . -> passed"
   - "python -m pytest -q -> 506 passed, 2 skipped, 198 subtests passed"
   - "git diff --check -> passed for the Report HTML link split working tree"
+  - "python -m pytest tests/dashboard/test_sources.py tests/dashboard/test_desk_actions.py tests/test_bot_gateway.py -q -> 65 passed, 14 subtests passed"
+  - "python -m ruff check scripts/desk_source_assistant.py scripts/desk_sources.py tests/dashboard/test_sources.py -> passed"
+  - "python -m py_compile scripts/desk_source_assistant.py scripts/desk_sources.py scripts/dashboard_server.py -> passed"
+  - "python -m pytest tests/dashboard -q -> 159 passed, 71 subtests passed"
+  - "python -m py_compile scripts/scan.py scripts/summarize.py scripts/media_ocr.py scripts/ocr_media.py scripts/report.py scripts/report_diagnostics.py scripts/report_html_links.py scripts/daily_report.py scripts/doctor.py scripts/delivery.py scripts/monitor_state.py scripts/monitor.py scripts/monitor_runner.py scripts/monitor_execution.py scripts/monitor_manifest.py scripts/dashboard_projection.py scripts/dashboard_opportunities.py scripts/dashboard_setup.py scripts/desk_server_selection.py scripts/desk_http_security.py scripts/desk_profile_routes.py scripts/desk_source_assistant.py scripts/dashboard_server.py -> passed"
+  - "python -m ruff check . -> passed"
+  - "python -m pytest -q -> 507 passed, 2 skipped, 198 subtests passed"
+  - "git diff --check -> passed for the Source assistant split working tree"
 reviewer_status:
   - "Explorer review of the proposed split recommended a搬运式拆分: keep InboxView as facade, move filters/backlog, review-card/actions/source refs, and setup checklist into focused submodules."
   - "Post-diff reviewer found no blocking issues. Remaining risks were untracked new files, SSR-only test coverage, and preserving existing link sanitizer boundaries; untracked files are included in the checkpoint plan and the browser smoke covers the main interaction path."
@@ -188,6 +197,7 @@ reviewer_status:
   - "Desk HTTP security split reviewer found no loopback-safety or compatibility blocker. P2 staging risk for the new untracked scripts/desk_http_security.py is addressed by staging that file explicitly before commit; P3 Referer/wrong-port direct coverage was addressed with a rejection-before-action regression test."
   - "Desk profile route split reviewer found no route-equivalence, pre-DB rejection, or monkeypatch compatibility blocker. P1 staging risk for the new untracked scripts/desk_profile_routes.py is addressed by staging that file explicitly before commit."
   - "Report HTML link split reviewer found no P0/P1 behavior or link-safety blocker. P2 staging risk for the new untracked scripts/report_html_links.py is addressed by staging that file explicitly before commit; P3 facade coverage feedback was addressed by testing _source_links, _tg_md_to_html, and _url_field_html identity and behavior."
+  - "Source assistant split reviewer found no P0/P1 behavior, facade, or privacy blocker. P2 staging risk for the new untracked scripts/desk_source_assistant.py is addressed by staging that file explicitly before commit; P3 confirmed-AI/local-plan coverage feedback was addressed by adding a test that confirm_external_ai=True still skips LLM when local parsing fully resolves the operation."
 operator_checks:
   - "Docker Desktop 4.65.0 / engine 29.2.1 reachable after startup; docker build -t tgcs-local-smoke:<temp> . -> exit 0"
   - "Docker demo container -> exit 0, generated one demo report in a temporary mounted output directory; temporary directory and image removed."
@@ -197,10 +207,10 @@ operator_checks:
   - "Live Windows Task Scheduler dry-run task with random name -> install exit 0, status installed, remove exit 0, final status not_installed."
   - "Live Windows Credential Manager smoke -> random secret write/read/delete passed; post-delete read returned empty."
   - "Live LLM structured call -> provider=deepseek, model=deepseek-v4-flash, JSON response status=TGCS_LIVE_LLM_OK, total_tokens=58."
-next_action: "Stage scripts/report_html_links.py, report_html facade re-exports, report HTML tests, CI compile coverage, and docs; commit the report HTML link boundary checkpoint, then continue."
+next_action: "Stage scripts/desk_source_assistant.py, desk_sources facade wrappers, source assistant tests, CI compile coverage, and docs; commit the source assistant boundary checkpoint, then continue."
 candidate_slices:
-  - "Inspect scripts/report_html.py for a larger card/feedback/template boundary only if visual or behavior tests can preserve generated HTML semantics."
+  - "Inspect scripts/desk_sources.py source access health/probe/repair for a possible split only if async probe and repair tests can preserve Telegram-session and cached-health semantics."
   - "Inspect scripts/dashboard_server.py for remaining state payload or route dispatch boundaries only if existing tests can preserve patch compatibility and pre-state-access guards."
   - "Inspect dashboard runtime settings or source library panels only if the next slice can include behavior-focused Vitest coverage rather than cosmetic file movement."
-last_update: "2026-05-14T08:35:04+08:00"
+last_update: "2026-05-14T08:49:18+08:00"
 checkpoint_ready: true
