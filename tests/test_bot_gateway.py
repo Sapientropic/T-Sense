@@ -1,3 +1,4 @@
+import argparse
 import json
 import os
 import subprocess
@@ -74,8 +75,10 @@ class FakeBotApi:
         self.menu_button = None
         self.profile_photo = None
 
-    def send_message(self, chat_id, text, *, reply_markup=None):
-        self.messages.append({"chat_id": chat_id, "text": text, "reply_markup": reply_markup})
+    def send_message(self, chat_id, text, *, reply_markup=None, parse_mode=None):
+        self.messages.append(
+            {"chat_id": chat_id, "text": text, "reply_markup": reply_markup, "parse_mode": parse_mode}
+        )
 
     def answer_callback_query(self, callback_query_id, text=""):
         self.callbacks.append({"callback_query_id": callback_query_id, "text": text})
@@ -178,6 +181,23 @@ class BotGatewayTests(unittest.TestCase):
         self.assertEqual(content, b"\xff\xd8fake-jpeg\xff\xd9")
         self.assertEqual(content_type, "image/jpeg")
 
+    def test_send_message_uses_markdown_parse_mode(self):
+        class CapturingApi(bot_gateway.TelegramBotApi):
+            def __init__(self):
+                super().__init__("123456:ABCDEF_secret")
+                self.payloads = []
+
+            def request(self, method, payload=None):
+                self.payloads.append({"method": method, "payload": payload})
+                return {"ok": True, "result": {"message_id": 1}}
+
+        api = CapturingApi()
+        api.send_message("12345", "*Ready*", reply_markup={"inline_keyboard": []})
+
+        payload = api.payloads[0]["payload"]
+        self.assertEqual(payload["parse_mode"], "Markdown")
+        self.assertEqual(payload["reply_markup"], {"inline_keyboard": []})
+
     def test_packaged_avatar_is_static_jpg_asset(self):
         data = bot_gateway.BOT_AVATAR_PATH.read_bytes()
 
@@ -234,20 +254,79 @@ class BotGatewayTests(unittest.TestCase):
         self.assertIn("not", unsafe.safe_reply.casefold())
         self.assertNotIn("Remove-Item", unsafe.safe_reply)
 
-    def test_bot_defaults_keep_free_text_knowledge_local_without_llm(self):
+    def test_bot_defaults_use_llm_for_free_text_knowledge_when_available(self):
         api = FakeBotApi()
         gateway = bot_gateway.BotGateway(api, allowed={"12345"})
 
-        with patch.object(bot_gateway.bot_intents, "llm_intent", side_effect=AssertionError("intent LLM called")) as llm_mock:
-            with patch.object(
-                bot_gateway.bot_actions.bot_knowledge.BotKnowledge,
-                "_llm_answer",
-                side_effect=AssertionError("knowledge LLM called"),
-            ):
-                gateway.handle_text("12345", "怎么添加 Telegram 频道？")
+        with patch.object(
+            bot_gateway.bot_actions.bot_knowledge.BotKnowledge,
+            "answer",
+            return_value=bot_gateway.bot_actions.bot_knowledge.KnowledgeAnswer(
+                text="AI answer from local docs.",
+                sections=(),
+                used_llm=True,
+            ),
+        ) as answer_mock:
+            gateway.handle_text("12345", "怎么添加 Telegram 频道？")
 
-        llm_mock.assert_not_called()
+        answer_mock.assert_called_once()
+        self.assertTrue(answer_mock.call_args.kwargs["use_llm"])
+        self.assertIn("AI answer from local docs", api.messages[-1]["text"])
         self.assertIn("Status", json.dumps(api.messages[-1]["reply_markup"]))
+
+    def test_run_loop_uses_llm_by_default_and_can_opt_out(self):
+        from scripts import bot_runtime
+
+        captured: list[bool] = []
+
+        class FakeApi:
+            def __init__(self, token):
+                self.token = token
+
+            def get_updates(self, *, offset, timeout_seconds):
+                raise KeyboardInterrupt
+
+        class FakeLock:
+            def __init__(self, _path):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_exc):
+                return False
+
+        class CapturingGateway:
+            def __init__(self, _api, *, use_llm, **_kwargs):
+                captured.append(use_llm)
+                self.allowed = {"12345"}
+
+        def args(**overrides):
+            base = {
+                "lock": "bot.lock",
+                "db": "state.db",
+                "state": "bot-state.json",
+                "skip_menu": True,
+                "allow_chat_id": [],
+                "poll_timeout": 0,
+                "llm": False,
+                "no_llm": False,
+            }
+            base.update(overrides)
+            return argparse.Namespace(**base)
+
+        with patch.object(bot_runtime, "load_bot_token", return_value="123456:ABCDEF_secret"):
+            with patch.object(bot_runtime, "TelegramBotApi", FakeApi):
+                with patch.object(bot_runtime, "BotGatewayLock", FakeLock):
+                    with patch.object(bot_runtime, "load_state", return_value={}):
+                        with patch.object(bot_runtime, "write_gateway_state"):
+                            with patch.object(bot_runtime, "BotGateway", CapturingGateway):
+                                with self.assertRaises(KeyboardInterrupt):
+                                    bot_runtime.run_loop(args())
+                                with self.assertRaises(KeyboardInterrupt):
+                                    bot_runtime.run_loop(args(no_llm=True))
+
+        self.assertEqual(captured, [True, False])
 
     def test_bot_llm_routing_requires_explicit_opt_in(self):
         routed = bot_gateway.BotIntent(action="status", source="llm")
@@ -365,8 +444,8 @@ class BotGatewayTests(unittest.TestCase):
                 "schema_version": "desk_action_result_v1",
                 "action_id": "monitor_jobs_dry_run",
                 "status": "success",
-                "title": "Run fresh practice scan",
-                "detail": "Fresh practice scan finished.",
+                "title": "Run AI review",
+                "detail": "Fresh AI review finished.",
                 "next_action": "Review cards.",
             },
         ) as run_mock:
@@ -376,13 +455,14 @@ class BotGatewayTests(unittest.TestCase):
 
         run_mock.assert_called_once_with("monitor_jobs_dry_run")
         self.assertEqual(result.error_category, "")
-        self.assertIn("Fresh practice scan finished", result.text)
+        self.assertIn("Fresh AI review finished", result.text)
 
         rejected = bot_actions.BotActionRegistry().execute(
             bot_intents.BotIntent(action="scan_profile_dry_run", args={"profile_id": "market-news"})
         )
         self.assertEqual(rejected.error_category, "unsupported_request")
         self.assertIn("jobs-fast", rejected.text)
+        self.assertNotIn("dry", rejected.text.casefold())
 
     def test_action_registry_scan_busy_reply_has_one_next_step(self):
         from scripts import bot_actions, bot_intents
@@ -395,16 +475,16 @@ class BotGatewayTests(unittest.TestCase):
                 "action_id": "monitor_jobs_dry_run",
                 "status": "blocked",
                 "title": "Action already running",
-                "detail": "Practice scan is already running.",
+                "detail": "AI review is already running.",
                 "next_action": "Wait for the current action to finish, then refresh Signal Desk.",
             },
         ):
             result = bot_actions.BotActionRegistry().execute(
                 bot_intents.BotIntent(action="scan_profile_dry_run", args={"profile_id": "jobs-fast"})
-            )
+        )
 
         self.assertEqual(result.error_category, "action_busy")
-        self.assertIn("Practice scan is already running.", result.text)
+        self.assertIn("AI review is already running.", result.text)
         self.assertIn("Next: Wait for the current action to finish", result.text)
 
     def test_redaction_removes_sensitive_telegram_reply_content(self):
@@ -870,7 +950,7 @@ class BotGatewayTests(unittest.TestCase):
             self.assertIn("bot_gateway.py", call[1])
             self.assertNotIn("token", " ".join(call).lower())
 
-    def test_tgcs_bot_llm_flag_is_explicit_opt_in(self):
+    def test_tgcs_bot_run_can_opt_out_of_default_llm(self):
         from tests.tgcs_cli import load_tgcs_module
 
         tgcs = load_tgcs_module(self)
@@ -882,10 +962,11 @@ class BotGatewayTests(unittest.TestCase):
 
         with patch.object(tgcs.subprocess, "run", side_effect=fake_run):
             self.assertEqual(tgcs.main(["bot", "run"]), 0)
-            self.assertEqual(tgcs.main(["bot", "run", "--llm"]), 0)
+            self.assertEqual(tgcs.main(["bot", "run", "--no-llm"]), 0)
 
         self.assertNotIn("--llm", calls[0])
-        self.assertIn("--llm", calls[1])
+        self.assertNotIn("--no-llm", calls[0])
+        self.assertIn("--no-llm", calls[1])
 
 
 if __name__ == "__main__":

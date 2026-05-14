@@ -140,7 +140,27 @@ class DashboardDeskActionCatalogTests(unittest.TestCase):
 
         cmd = [str(part) for part in run_mock.call_args.args[0]]
         self.assertEqual(cmd[cmd.index("--profile-id") + 1], "frontend-only")
-        self.assertEqual(result["display_command"], "tgcs monitor run --profile-id frontend-only --delivery-mode dry-run")
+        self.assertEqual(result["display_command"], "tgcs monitor run --profile-id frontend-only --delivery-mode live")
+
+
+    def test_run_desk_action_accepts_safe_one_off_scan_window(self):
+        completed = subprocess.CompletedProcess(
+            ["python"],
+            0,
+            stdout=json.dumps({"ok": True, "data": {"status": "complete"}, "error": None}),
+            stderr="",
+        )
+
+        with patch.object(dashboard_server.subprocess, "run", return_value=completed) as run_mock:
+            dashboard_server.run_desk_action("monitor_jobs_dry_run", body={"scan_window_hours": 24})
+
+        cmd = [str(part) for part in run_mock.call_args.args[0]]
+        self.assertEqual(cmd[cmd.index("--hours") + 1], "24")
+
+
+    def test_run_desk_action_rejects_unsafe_one_off_scan_window(self):
+        with self.assertRaises(dashboard_server.DashboardDeskActionError):
+            dashboard_server.run_desk_action("monitor_jobs_dry_run", body={"scan_window_hours": "24; rm -rf ."})
 
 
     def test_run_desk_action_only_returns_openable_report_artifacts(self):
@@ -196,11 +216,11 @@ class DashboardDeskActionCatalogTests(unittest.TestCase):
         self.assertIn("schedule", cmd)
         self.assertIn("print", cmd)
         self.assertNotIn("/Create", cmd)
-        self.assertIn("dry-run", cmd)
+        self.assertIn("live", cmd)
         self.assertEqual(cmd[cmd.index("--profile-id") + 1], "jobs-fast")
-        self.assertNotIn("live", cmd)
+        self.assertNotIn("dry-run", cmd)
         self.assertEqual(result["status"], "success")
-        self.assertIn("practice scans would run every 15 minutes", result["detail"])
+        self.assertIn("AI reviews would run every 15 minutes", result["detail"])
         self.assertNotIn("schtasks", result["detail"].lower())
         self.assertIn("Signal Desk", result["next_action"])
 
@@ -238,7 +258,7 @@ class DashboardDeskActionCatalogTests(unittest.TestCase):
         self.assertEqual(cmd[cmd.index("--profile-id") + 1], "frontend-only")
         self.assertEqual(
             result["display_command"],
-            "tgcs schedule print --profile-id frontend-only --interval-minutes 15 --delivery-mode dry-run",
+            "tgcs schedule print --profile-id frontend-only --interval-minutes 15 --delivery-mode live",
         )
 
 

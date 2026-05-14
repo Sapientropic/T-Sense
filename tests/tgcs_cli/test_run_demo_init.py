@@ -252,7 +252,7 @@ class TgcsRunDemoInitTests(unittest.TestCase):
         self.assertEqual(payload["next_command"], "tgcs login")
         self.assertIn("Signal Desk Start", payload["next_app_step"])
 
-    def test_quickstart_jobs_points_to_first_dry_run_after_login(self):
+    def test_quickstart_jobs_points_to_first_ai_review_after_login(self):
         tgcs = load_tgcs_module(self)
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -281,12 +281,12 @@ class TgcsRunDemoInitTests(unittest.TestCase):
 
         payload = json.loads(stdout.getvalue())
         self.assertEqual(exit_code, 0)
-        self.assertEqual(payload["stage"], "dry_run_required")
+        self.assertEqual(payload["stage"], "first_review_required")
         self.assertEqual(
             payload["next_command"],
-            "tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run",
+            "tgcs monitor run --profile-id jobs-fast --delivery-mode live",
         )
-        self.assertEqual(payload["next_app_step"], "Open Signal Desk Start and run the first dry-run scan.")
+        self.assertEqual(payload["next_app_step"], "Open Signal Desk Start and run the first AI review.")
 
     def test_login_calls_scan_login_only(self):
         tgcs = load_tgcs_module(self)

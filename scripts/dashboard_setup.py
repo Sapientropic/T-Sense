@@ -10,26 +10,30 @@ def dashboard_setup_status(
     profiles: list[dict[str, Any]],
     runs: list[dict[str, Any]],
     delivery_targets: list[dict[str, Any]],
+    ai_configured: bool = False,
 ) -> dict[str, Any]:
     active_profiles = [profile for profile in profiles if profile.get("enabled")]
     active_targets = [target for target in delivery_targets if target.get("enabled")]
     preferred = preferred_setup_profile(active_profiles)
     latest_source_attention = latest_run_needs_source_attention(runs[0]) if runs else False
-    if not profiles:
-        next_step = "tgcs monitor init-config"
+    if not ai_configured:
+        next_step = "Open Signal Desk Settings > AI API key and save a matching model key."
+        stage = "needs_ai_key"
+    elif not profiles:
+        next_step = "Open Profiles and create an AI-generated matching profile."
         stage = "needs_profiles"
     elif not active_profiles:
         next_step = "Enable a profile in .tgcs/profiles.toml"
         stage = "needs_enabled_profile"
     elif not runs:
-        next_step = f"tgcs monitor run --profile-id {preferred['profile_id']} --delivery-mode dry-run"
+        next_step = f"Open Start and run the first AI review for {preferred['profile_id']}."
         stage = "needs_first_run"
     elif latest_source_attention:
         profile = profile_for_run(active_profiles, runs[0])
         next_step = source_attention_next_step(profile)
         stage = "needs_source_access"
     elif not active_targets:
-        next_step = "tgcs delivery test telegram-bot --delivery-mode dry-run"
+        next_step = "Save and enable a Telegram bot notification target in Settings > Alerts."
         stage = "needs_delivery_target"
     else:
         next_step = "Review inbox"
@@ -43,6 +47,7 @@ def dashboard_setup_status(
         "has_delivery_targets": bool(delivery_targets),
         "has_enabled_delivery_targets": bool(active_targets),
         "checks": setup_checklist(
+            ai_configured=ai_configured,
             profiles=profiles,
             active_profiles=active_profiles,
             runs=runs,
@@ -103,6 +108,7 @@ def profile_for_run(active_profiles: list[dict[str, Any]], run: dict[str, Any]) 
 
 def setup_checklist(
     *,
+    ai_configured: bool = False,
     profiles: list[dict[str, Any]],
     active_profiles: list[dict[str, Any]],
     runs: list[dict[str, Any]],
@@ -110,12 +116,23 @@ def setup_checklist(
     latest_source_attention: bool,
 ) -> list[dict[str, str]]:
     preferred = preferred_setup_profile(active_profiles)
-    first_run_command = f"tgcs monitor run --profile-id {preferred['profile_id']} --delivery-mode dry-run"
+    first_run_command = f"tgcs monitor run --profile-id {preferred['profile_id']} --delivery-mode live"
 
-    if not profiles:
+    if not ai_configured:
+        ai_status = "active"
+        ai_detail = "AI matching is required before Signal Desk can generate profiles or select sources."
+    else:
+        ai_status = "done"
+        ai_detail = "AI matching key is configured."
+
+    if not ai_configured:
+        profile_status = "blocked"
+        profile_command = ""
+        profile_detail = "Add an AI API key before creating an AI-generated profile."
+    elif not profiles:
         profile_status = "active"
-        profile_command = "tgcs monitor init-config"
-        profile_detail = "Create local monitor profile config."
+        profile_command = ""
+        profile_detail = "Create an AI-generated matching profile from a plain-language goal."
     elif not active_profiles:
         profile_status = "blocked"
         profile_command = "Enable a profile in .tgcs/profiles.toml"
@@ -131,12 +148,12 @@ def setup_checklist(
     elif runs:
         source_status = "done"
         source_detail = "The latest run reached the scan/report pipeline."
-    elif active_profiles:
+    elif active_profiles and ai_configured:
         source_status = "todo"
-        source_detail = "Run doctor or import a real channel list before live monitoring."
+        source_detail = "Discover Telegram channels, then let AI select sources for this profile."
     else:
         source_status = "todo"
-        source_detail = "Configure profiles before source checks."
+        source_detail = "Configure AI and profiles before source discovery."
 
     if latest_source_attention:
         first_run_status = "blocked"
@@ -144,22 +161,29 @@ def setup_checklist(
     elif runs:
         first_run_status = "done"
         first_run_detail = "Run history exists in the local dashboard database."
-    elif active_profiles:
+    elif active_profiles and ai_configured:
         first_run_status = "active"
-        first_run_detail = "Run once in dry-run mode before enabling live alerts."
+        first_run_detail = "Run one AI review pass locally; Telegram alerts send when a notification target is enabled."
     else:
         first_run_status = "todo"
-        first_run_detail = "Profile setup is required first."
+        first_run_detail = "AI and profile setup are required first."
 
     delivery_status = "done" if active_targets else "todo"
     if not active_targets:
-        delivery_detail = "Delivery is optional for reports, required for interrupt alerts."
-        delivery_command = "tgcs delivery test telegram-bot --delivery-mode dry-run"
+        delivery_detail = "Save and enable a Telegram bot target for interrupt alerts."
+        delivery_command = ""
     else:
         delivery_detail = "At least one delivery target is enabled."
         delivery_command = ""
 
     return [
+        setup_check(
+            "ai_api",
+            "AI API key",
+            ai_status,
+            detail=ai_detail,
+            command="",
+        ),
         setup_check(
             "profiles",
             "Profiles",
@@ -176,7 +200,7 @@ def setup_checklist(
         ),
         setup_check(
             "first_run",
-            "First monitor run",
+            "First AI review",
             first_run_status,
             detail=first_run_detail,
             command="" if latest_source_attention else first_run_command,
@@ -205,6 +229,6 @@ def source_attention_next_step(profile: dict[str, Any]) -> str:
     config = profile.get("config") if isinstance(profile.get("config"), dict) else {}
     profile_id = str(profile.get("profile_id") or config.get("id") or "market-news")
     return (
-        "Open Signal Desk Settings > Sources, use starter sources or Source assistant, "
-        f"then run a dry scan for {profile_id}."
+        "Open Signal Desk Settings > Sources, discover Telegram channels with AI, "
+        f"then run another AI review for {profile_id}."
     )

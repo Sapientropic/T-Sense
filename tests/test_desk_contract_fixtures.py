@@ -122,7 +122,7 @@ class DeskContractFixtureTests(unittest.TestCase):
         result = dashboard_server._desk_action_result(
             "monitor_jobs_dry_run",
             status="success",
-            title="Practice scan complete",
+            title="AI review complete",
             detail="Report ready.",
             next_action="Open the generated report.",
             exit_code=0,

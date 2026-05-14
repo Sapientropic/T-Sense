@@ -19,14 +19,18 @@ export function SourceInsightsPanel({
 }) {
   return (
     <div className="settings-evidence-grid">
-      <div className="table-section source-yield-panel">
-        <PanelHeader icon={<Activity size={18} />} title="Yield History" count={sourceStats.length} />
+      <details className="table-section source-yield-panel settings-evidence-card" aria-label="Source yield details">
+        <summary>
+          <PanelHeader icon={<Activity size={18} />} title="Yield History" count={sourceStats.length} />
+        </summary>
         {sourceStats.length ? <SourceYieldMap sources={sourceStats} /> : <InlineEmpty title="No source stats yet" />}
-      </div>
-      <div className="table-section source-actions-panel">
-        <PanelHeader icon={<ShieldCheck size={18} />} title="Source Actions" count={sourceInsights.length} />
+      </details>
+      <details className="table-section source-actions-panel settings-evidence-card" aria-label="Source action details">
+        <summary>
+          <PanelHeader icon={<ShieldCheck size={18} />} title="Source Actions" count={sourceInsights.length} />
+        </summary>
         {sourceInsights.length ? <SourceActionGrid insights={sourceInsights} /> : <InlineEmpty title="No source actions yet" />}
-      </div>
+      </details>
     </div>
   );
 }

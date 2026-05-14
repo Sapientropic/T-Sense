@@ -16,13 +16,24 @@ from typing import Any
 
 from scripts import report, source_registry
 
-DESK_SOURCE_ASSISTANT_ALLOWED_FIELDS = {"instruction", "topic", "dry_run", "confirm_external_ai", "resolved_plan"}
+DESK_SOURCE_ASSISTANT_ALLOWED_FIELDS = {
+    "instruction",
+    "topic",
+    "dry_run",
+    "confirm_external_ai",
+    "resolved_plan",
+    "profile_id",
+    "folder_name",
+    "folder_id",
+}
 
 SourceOperationPayload = Callable[..., dict]
 DeskSourceRecord = Callable[[dict], dict]
 ValidateSourceId = Callable[[str], str]
 CleanSourceTopic = Callable[[object], str]
 LlmPlan = Callable[[str, str, dict[str, dict]], dict[str, list[str]]]
+DiscoverSourceChannels = Callable[..., list[dict]]
+ProfileContext = Callable[[str], dict[str, str]]
 
 
 def _reject_unexpected_source_assistant_fields(body: dict) -> None:
@@ -151,12 +162,61 @@ def _clean_resolved_source_plan(plan: dict, *, validate_source_id: ValidateSourc
     }
 
 
+def _clean_folder_id(value: object) -> int | None:
+    if value in (None, ""):
+        return None
+    if isinstance(value, bool):
+        raise ValueError("Telegram folder ID must be a number.")
+    try:
+        folder_id = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Telegram folder ID must be a number.") from exc
+    if folder_id <= 0:
+        raise ValueError("Telegram folder ID must be a positive number.")
+    return folder_id
+
+
+def _source_discovery_requested(body: dict, instruction: str) -> bool:
+    if str(body.get("profile_id") or "").strip():
+        return True
+    if str(body.get("folder_name") or "").strip() or body.get("folder_id") not in (None, ""):
+        return True
+    lowered = instruction.casefold()
+    return any(token in lowered for token in ("scan all", "discover", "telegram channels", "folder", "扫", "扫描", "频道", "文件夹"))
+
+
+def _sanitize_discovered_candidates(candidates: list[dict]) -> list[dict]:
+    sanitized: list[dict] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            continue
+        channel = source_registry.normalize_channel_name(candidate.get("channel"))
+        if not channel:
+            continue
+        marker = channel.casefold()
+        if marker in seen:
+            continue
+        seen.add(marker)
+        sanitized.append(
+            {
+                "channel": channel,
+                "label": str(candidate.get("label") or candidate.get("title") or channel).strip(),
+                "title": str(candidate.get("title") or candidate.get("label") or channel).strip(),
+                "folder": str(candidate.get("folder") or "").strip(),
+            }
+        )
+    return sanitized
+
+
 def _source_assistant_llm_plan(
     instruction: str,
     topic: str,
     existing: dict[str, dict],
     *,
     validate_source_id: ValidateSourceId,
+    profile_text: str = "",
+    candidates: list[dict] | None = None,
 ) -> dict[str, list[str]]:
     if not report.llm_key_available():
         raise ValueError("Save an AI API key in Settings before using AI source planning.")
@@ -181,18 +241,36 @@ def _source_assistant_llm_plan(
         }
         for source_id, source in sorted(existing.items())
     ][:300]
+    candidate_sources = [
+        {
+            "channel": source_registry.normalize_channel_name(candidate.get("channel")),
+            "label": str(candidate.get("label") or candidate.get("title") or candidate.get("channel") or ""),
+            "title": str(candidate.get("title") or candidate.get("label") or candidate.get("channel") or ""),
+            "folder": str(candidate.get("folder") or ""),
+        }
+        for candidate in (candidates or [])
+        if isinstance(candidate, dict) and source_registry.normalize_channel_name(candidate.get("channel"))
+    ][:500]
     system_prompt = (
         "You plan local Telegram source registry changes. Return JSON only with keys "
-        "remove, disable, enable. Each value must be a list of source_id strings copied "
-        "from the provided sources. Do not invent source ids, commands, paths, argv, tokens, "
-        "or new Telegram channels. If the instruction asks to add unknown sources, return empty lists."
+        "add, remove, disable, enable. add must contain Telegram channel values copied "
+        "exactly from candidate_sources.channel. remove/disable/enable must contain source_id "
+        "strings copied exactly from existing_sources.source_id. Select channels semantically "
+        "against the profile text; do not invent channels, ids, commands, paths, argv, or tokens."
     )
     user_prompt = json.dumps(
         {
             "instruction": instruction,
             "topic": topic,
-            "sources": sources,
-            "output_schema": {"remove": ["telegram:..."], "disable": ["telegram:..."], "enable": ["telegram:..."]},
+            "profile_text": profile_text[:12000],
+            "candidate_sources": candidate_sources,
+            "existing_sources": sources,
+            "output_schema": {
+                "add": ["candidate channel"],
+                "remove": ["telegram:..."],
+                "disable": ["telegram:..."],
+                "enable": ["telegram:..."],
+            },
         },
         ensure_ascii=False,
     )
@@ -224,16 +302,31 @@ def _source_assistant_llm_plan(
         raise ValueError("AI source planning must return a JSON object.")
 
     existing_ids = set(existing)
-    plan: dict[str, list[str]] = {"remove": [], "disable": [], "enable": []}
+    candidate_channels = {
+        source_registry.normalize_channel_name(candidate.get("channel")).casefold(): source_registry.normalize_channel_name(candidate.get("channel"))
+        for candidate in candidate_sources
+    }
+    plan: dict[str, list[str]] = {"add": [], "remove": [], "disable": [], "enable": []}
     for action in plan:
         values = payload.get(action) or []
         if not isinstance(values, list):
             raise ValueError("AI source planning returned an invalid action list.")
         for value in values:
+            if action == "add":
+                channel = source_registry.normalize_channel_name(str(value))
+                matched = candidate_channels.get(channel.casefold())
+                if matched:
+                    plan[action].append(matched)
+                continue
             source_id = validate_source_id(str(value))
             if source_id in existing_ids:
                 plan[action].append(source_id)
-    return {action: _dedupe_source_ids(values, validate_source_id=validate_source_id) for action, values in plan.items()}
+    return {
+        "add": _dedupe_source_channels(plan["add"]),
+        "remove": _dedupe_source_ids(plan["remove"], validate_source_id=validate_source_id),
+        "disable": _dedupe_source_ids(plan["disable"], validate_source_id=validate_source_id),
+        "enable": _dedupe_source_ids(plan["enable"], validate_source_id=validate_source_id),
+    }
 
 
 def run_source_assistant(
@@ -245,6 +338,8 @@ def run_source_assistant(
     desk_source_record: DeskSourceRecord,
     validate_source_id: ValidateSourceId,
     llm_plan_fn: LlmPlan | None,
+    discover_source_channels_fn: DiscoverSourceChannels | None = None,
+    profile_context_fn: ProfileContext | None = None,
 ) -> dict:
     _reject_unexpected_source_assistant_fields(body)
     instruction = str(body.get("instruction") or "").strip()
@@ -252,7 +347,8 @@ def run_source_assistant(
         raise ValueError("Source instruction is too long.")
     if not instruction:
         raise ValueError("Describe what to add, pause, or remove.")
-    topic = clean_source_topic(body.get("topic"))
+    topic_input = str(body.get("topic") or "").strip()
+    topic = clean_source_topic(topic_input or "sources")
     dry_run = body.get("dry_run") is not False
     confirm_external_ai = body.get("confirm_external_ai", False)
     if not isinstance(confirm_external_ai, bool):
@@ -270,6 +366,78 @@ def run_source_assistant(
             desk_source_record=desk_source_record,
             validate_source_id=validate_source_id,
         )
+
+    payload = source_registry.load_registry(registry_path, missing_ok=True)
+    existing = {str(source.get("source_id")): source for source in payload.get("sources", []) if isinstance(source, dict)}
+
+    if _source_discovery_requested(body, instruction):
+        if not confirm_external_ai:
+            raise ValueError("Confirm AI source discovery before sending Telegram channel names to the configured model.")
+        if discover_source_channels_fn is None or profile_context_fn is None:
+            raise ValueError("Telegram source discovery is not available.")
+        profile_context = profile_context_fn(str(body.get("profile_id") or ""))
+        profile_text = str(profile_context.get("profile_text") or "")
+        topic = clean_source_topic(topic_input or profile_context.get("topic") or profile_context.get("profile_id") or "sources")
+        folder_name = str(body.get("folder_name") or "").strip()
+        folder_id = _clean_folder_id(body.get("folder_id"))
+        candidates = _sanitize_discovered_candidates(discover_source_channels_fn(folder_name=folder_name, folder_id=folder_id))
+        planner = llm_plan_fn or (
+            lambda plan_instruction, plan_topic, plan_existing, **kwargs: _source_assistant_llm_plan(
+                plan_instruction,
+                plan_topic,
+                plan_existing,
+                validate_source_id=validate_source_id,
+                **kwargs,
+            )
+        )
+        llm_plan = planner(
+            instruction,
+            topic,
+            existing,
+            profile_text=profile_text,
+            candidates=candidates,
+        )
+        clean_plan = _clean_resolved_source_plan(llm_plan, validate_source_id=validate_source_id)
+        preview_sources: list[dict] = []
+        added_count = updated_count = unchanged_count = removed_count = enabled_count = disabled_count = 0
+        if clean_plan["add"]:
+            result = source_registry.import_channels(
+                clean_plan["add"],
+                registry_path,
+                dry_run=dry_run,
+                topics=[topic],
+                input_path=f"Telegram folder: {folder_name}" if folder_name else "Telegram channel discovery",
+            )
+            added_count += int(result.get("added_count") or 0)
+            updated_count += int(result.get("updated_count") or 0)
+            unchanged_count += int(result.get("unchanged_count") or 0)
+            for source in (result.get("sources") or []) + (result.get("updated_sources") or []) + (result.get("unchanged_sources") or []):
+                if isinstance(source, dict):
+                    preview_sources.append(desk_source_record(source))
+        operation_count = added_count + updated_count + unchanged_count
+        return source_operation_payload(
+            action="assistant",
+            topic=topic,
+            dry_run=dry_run,
+            added_count=added_count,
+            updated_count=updated_count,
+            unchanged_count=unchanged_count,
+            removed_count=removed_count,
+            enabled_count=enabled_count,
+            disabled_count=disabled_count,
+            preview_sources=preview_sources[:12],
+            resolved_plan=clean_plan,
+            title="AI source plan ready" if dry_run else "AI source plan applied",
+            detail=(
+                "AI selected Telegram channels for this profile. Review the plan, then apply it."
+                if operation_count
+                else "AI did not select any Telegram channels for this profile."
+            )
+            if dry_run
+            else "Signal Desk saved the AI-selected Telegram sources.",
+            llm_used=True,
+        )
+
     plan = _source_assistant_plan(instruction)
     preview_sources: list[dict] = []
     added_count = updated_count = unchanged_count = removed_count = enabled_count = disabled_count = 0
@@ -291,19 +459,18 @@ def run_source_assistant(
             if isinstance(source, dict):
                 preview_sources.append(desk_source_record(source))
 
-    payload = source_registry.load_registry(registry_path, missing_ok=True)
-    existing = {str(source.get("source_id")): source for source in payload.get("sources", []) if isinstance(source, dict)}
-    llm_plan = {"remove": [], "disable": [], "enable": []}
+    llm_plan = {"add": [], "remove": [], "disable": [], "enable": []}
     if confirm_external_ai and _source_assistant_should_use_llm_plan(instruction, plan):
         # This branch sends the local source inventory to a configured model.
         # Keep it behind an explicit confirmation and an injected planner so
         # dashboard facade monkeypatches remain the single testable privacy gate.
         planner = llm_plan_fn or (
-            lambda plan_instruction, plan_topic, plan_existing: _source_assistant_llm_plan(
+            lambda plan_instruction, plan_topic, plan_existing, **kwargs: _source_assistant_llm_plan(
                 plan_instruction,
                 plan_topic,
                 plan_existing,
                 validate_source_id=validate_source_id,
+                **kwargs,
             )
         )
         llm_plan = planner(instruction, topic, existing)
@@ -347,7 +514,7 @@ def run_source_assistant(
     operation_count = added_count + updated_count + unchanged_count + removed_count + enabled_count + disabled_count
     if operation_count == 0:
         ai_hint = (
-            " AI keys are configured, but Signal Desk will not send private source lists to an external model without a dedicated confirmation flow."
+            " AI keys are configured, but Signal Desk still needs an explicit discovery request before sending channel names to the model."
             if report.llm_key_available()
             else ""
         )
@@ -356,7 +523,7 @@ def run_source_assistant(
             topic=topic,
             dry_run=True,
             title="No source changes found",
-            detail=f"Include Telegram handles, t.me links, numeric chat IDs, or enable AI source planning. For example: add @remote_jobs; remove @old_jobs.{ai_hint}",
+            detail=f"Choose a profile, then discover all Telegram channels or a named folder for AI source planning.{ai_hint}",
             llm_used=llm_used,
             resolved_plan=resolved_plan,
         )

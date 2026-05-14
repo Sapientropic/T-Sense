@@ -84,17 +84,17 @@ describe("InboxView", () => {
     const filters = inboxFilterOptions(
       [
         card({
-          card_id: "old-high",
-          first_run_id: "run-0",
-          last_run_id: "run-0",
-          rating: "high",
-          decision_status: "seen",
-        }),
-        card({
           card_id: "old-medium",
           first_run_id: "run-0",
           last_run_id: "run-0",
           rating: "medium",
+          decision_status: "seen",
+        }),
+        card({
+          card_id: "old-low",
+          first_run_id: "run-0",
+          last_run_id: "run-0",
+          rating: "low",
           decision_status: "seen",
         }),
       ],
@@ -102,7 +102,10 @@ describe("InboxView", () => {
     );
 
     expect(filters.find((item) => item.id === "actionable")?.count).toBe(0);
-    expect(nextNonEmptyReviewFilter(filters, "actionable")).toBe("high");
+    expect(filters.find((item) => String(item.id) === "high")).toBeUndefined();
+    expect(filters.find((item) => item.id === "medium")).toMatchObject({ label: "Middle", count: 1 });
+    expect(filters.find((item) => item.id === "low")).toMatchObject({ label: "Low", count: 1 });
+    expect(nextNonEmptyReviewFilter(filters, "actionable")).toBe("medium");
   });
 
   it("keeps open review cards ahead of handled history after priority clears", () => {
@@ -114,10 +117,10 @@ describe("InboxView", () => {
           opportunity_updated_at: "2026-05-11T02:00:00Z",
         }),
         card({
-          card_id: "old-high",
+          card_id: "old-medium",
           first_run_id: "run-0",
           last_run_id: "run-0",
-          rating: "high",
+          rating: "medium",
           decision_status: "seen",
         }),
         card({
@@ -132,7 +135,7 @@ describe("InboxView", () => {
 
     expect(filters.find((item) => item.id === "actionable")?.count).toBe(0);
     expect(filters.find((item) => item.id === "handled")?.count).toBe(1);
-    expect(nextNonEmptyReviewFilter(filters, "actionable")).toBe("high");
+    expect(nextNonEmptyReviewFilter(filters, "actionable")).toBe("medium");
   });
 
   it("turns an empty priority view into a visible bucket jump", () => {
@@ -140,10 +143,10 @@ describe("InboxView", () => {
       <InboxView
         cards={[
           card({
-            card_id: "old-high",
+            card_id: "old-medium",
             first_run_id: "run-0",
             last_run_id: "run-0",
-            rating: "high",
+            rating: "medium",
             decision_status: "seen",
           }),
         ]}
@@ -155,7 +158,25 @@ describe("InboxView", () => {
     );
 
     expect(html).toContain("No priority cards");
-    expect(html).toContain("Show High 1");
+    expect(html).toContain("Show Middle 1");
+  });
+
+  it("keeps low-priority cards visible but out of the blocking next action", () => {
+    const filters = inboxFilterOptions(
+      [
+        card({
+          card_id: "old-low",
+          first_run_id: "run-0",
+          last_run_id: "run-0",
+          rating: "low",
+          decision_status: "seen",
+        }),
+      ],
+      "run-1",
+    );
+
+    expect(filters.find((item) => item.id === "low")).toMatchObject({ label: "Low", count: 1 });
+    expect(nextNonEmptyReviewFilter(filters, "actionable")).toBeNull();
   });
 
   it("keeps open opportunity actions visible and moves close reasons into feedback", () => {
@@ -170,8 +191,11 @@ describe("InboxView", () => {
     );
 
     expect(html).toContain('data-review-action="applied"');
+    expect(html).toContain('data-review-tone="positive"');
     expect(html).toContain('data-review-action="saved"');
+    expect(html).toContain('data-review-tone="supportive"');
     expect(html).toContain('data-review-action="tune"');
+    expect(html).toContain('data-review-tone="negative"');
     expect(html).toContain("Reasons + signals");
     expect(html).not.toContain('data-review-action="contacted"');
     expect(html).not.toContain('data-review-action="dismissed"');
@@ -221,6 +245,30 @@ describe("InboxView", () => {
     expect(html).toContain("Compensation");
     expect(html).toContain("View original");
     expect(html).toContain("Scan details");
+  });
+
+  it("labels notification preview proof in ordinary user language", () => {
+    const html = renderToStaticMarkup(
+      <ReviewCardArticle
+        card={card({
+          alert_summary: {
+            schema_version: "review_card_alert_summary_v1",
+            alert_count: 1,
+            latest_delivery_mode: "dry-run",
+            latest_delivery_ok: true,
+            latest_delivery_status: "dry_run",
+            latest_target_type: "telegram_bot",
+          },
+        })}
+        profileReportNames={{ "jobs-fast": "Jobs Report" }}
+        act={vi.fn()}
+        busy={false}
+      />,
+    );
+
+    expect(html).toContain("Checked");
+    expect(html).toContain("checked without sending");
+    expect(html).not.toContain("Dry run");
   });
 
   it("shows repeat counts directly in the card context strip", () => {
@@ -379,13 +427,14 @@ describe("InboxView", () => {
     );
 
     expect(html).toContain("Inbox clear");
-    expect(html).toContain("Next: Open Start and run the first practice scan.");
-    expect(html).toContain("Run first scan");
+    expect(html).toContain("Next: Open Start and run the first AI review.");
+    expect(html).toContain("Open Start");
     expect(html).toContain("Workspace");
     expect(html).toContain("Done");
     expect(html).toContain("Source access");
     expect(html).toContain("Next");
     expect(html).toContain("Check recent messages before pruning.");
-    expect(html).toContain("Advanced command");
+    expect(html).not.toContain("Advanced command");
+    expect(html).not.toContain("COPY COMMAND");
   });
 });

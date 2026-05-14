@@ -24,6 +24,8 @@ class DeliveryTests(unittest.TestCase):
         self.assertIn("Exchange outage", text)
         self.assertIn("cointelegraph#123", text)
         self.assertNotIn("RAW TELEGRAM BODY", text)
+        self.assertNotIn("output/runs", text)
+        self.assertNotIn("127.0.0.1", text)
 
     def test_telegram_alert_title_uses_role_when_company_is_placeholder(self):
         text = delivery.build_telegram_alert_text(
@@ -38,8 +40,8 @@ class DeliveryTests(unittest.TestCase):
             card={"card_id": "card_123"},
         )
 
-        self.assertIn("T-Sense alert: AI Engineer", text)
-        self.assertNotIn("T-Sense alert: Unknown", text)
+        self.assertIn("*T-Sense alert*: AI Engineer", text)
+        self.assertNotIn("*T-Sense alert*: Unknown", text)
 
     def test_dry_run_telegram_delivery_does_not_require_token(self):
         attempt = delivery.send_telegram_bot_message(
@@ -51,6 +53,41 @@ class DeliveryTests(unittest.TestCase):
 
         self.assertTrue(attempt.ok)
         self.assertEqual(attempt.status, "dry_run")
+
+    def test_live_telegram_delivery_sends_markdown_and_reply_markup(self):
+        captured = {}
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_exc):
+                return False
+
+            @staticmethod
+            def read():
+                return json.dumps({"ok": True, "result": {"message_id": 7}}).encode("utf-8")
+
+        def fake_urlopen(request, timeout):
+            captured["payload"] = json.loads(request.data.decode("utf-8"))
+            captured["timeout"] = timeout
+            return FakeResponse()
+
+        reply_markup = {"inline_keyboard": [[{"text": "Applied", "callback_data": "card:applied:card_1"}]]}
+        with patch.dict("os.environ", {delivery.TELEGRAM_BOT_TOKEN_ENV: "123456:ABCDEF_secret"}):
+            with patch.object(delivery.urllib.request, "urlopen", side_effect=fake_urlopen):
+                attempt = delivery.send_telegram_bot_message(
+                    target_id="telegram-bot-default",
+                    chat_id="12345",
+                    text="*T-Sense alert*: Role",
+                    mode="live",
+                    reply_markup=reply_markup,
+                )
+
+        self.assertTrue(attempt.ok)
+        self.assertEqual(attempt.status, "sent")
+        self.assertEqual(captured["payload"]["parse_mode"], "Markdown")
+        self.assertEqual(captured["payload"]["reply_markup"], reply_markup)
 
     def test_delivery_attempt_dict_redacts_error_private_fragments(self):
         attempt = delivery.DeliveryAttempt(

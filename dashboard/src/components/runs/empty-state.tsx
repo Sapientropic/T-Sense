@@ -25,7 +25,7 @@ export function RunsEmptyState({
       <div className="empty-actions" aria-label="Run history next actions">
         <button type="button" onClick={() => onRunDeskAction?.("monitor_jobs_dry_run")} disabled={!onRunDeskAction}>
           <Activity size={15} />
-          <span>Run first scan</span>
+          <span>Run first AI review</span>
         </button>
         <button type="button" onClick={() => onRunDeskAction?.("doctor_jobs")} disabled={!onRunDeskAction}>
           <Clock3 size={15} />

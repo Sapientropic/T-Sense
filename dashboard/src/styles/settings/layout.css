@@ -127,6 +127,35 @@
   border-top: 0;
 }
 
+.settings-evidence-card {
+  align-content: start;
+}
+
+.settings-evidence-card > summary {
+  min-width: 0;
+  cursor: pointer;
+  list-style: none;
+}
+
+.settings-evidence-card > summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-evidence-card > summary .panel-header {
+  min-height: 48px;
+}
+
+.settings-evidence-card > summary .panel-header::after {
+  color: var(--amber);
+  font-size: 13px;
+  font-weight: var(--badge-weight);
+  content: "+";
+}
+
+.settings-evidence-card[open] > summary .panel-header::after {
+  content: "-";
+}
+
 .settings-grid .delivery-targets-panel {
   grid-area: delivery;
 }

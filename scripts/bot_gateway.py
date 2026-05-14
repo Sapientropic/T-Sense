@@ -154,9 +154,16 @@ class BotGateway(_BotGatewayImpl):
         _sync_modules()
         return super().chat_is_allowed(chat_id)
 
-    def send_message(self, chat_id: str, text: str, *, reply_markup: dict[str, Any] | None = None) -> None:
+    def send_message(
+        self,
+        chat_id: str,
+        text: str,
+        *,
+        reply_markup: dict[str, Any] | None = None,
+        parse_mode: str | None = "Markdown",
+    ) -> None:
         _sync_modules()
-        return super().send_message(chat_id, text, reply_markup=reply_markup)
+        return super().send_message(chat_id, text, reply_markup=reply_markup, parse_mode=parse_mode)
 
     def prune_pending_source_plans(self) -> None:
         _sync_modules()
@@ -216,8 +223,8 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--poll-timeout", type=int, default=BOT_POLL_TIMEOUT_SECONDS)
     run.add_argument("--install-menu", action="store_true", help="Install the Telegram command menu before polling; this is now the default.")
     run.add_argument("--skip-menu", action="store_true", help="Skip command menu installation before polling.")
-    run.add_argument("--llm", action="store_true", help="Opt in to optional LLM routing and knowledge answers for free-form messages.")
-    run.add_argument("--no-llm", action="store_true", help="Keep free-form routing and knowledge answers local-only; this is the default.")
+    run.add_argument("--llm", action="store_true", help="Use AI routing and knowledge answers when an AI API key is configured; this is the default.")
+    run.add_argument("--no-llm", action="store_true", help="Keep free-form routing and knowledge answers local-only.")
     run.set_defaults(func=run_loop)
 
     menu = subparsers.add_parser("install-menu", help="Install Telegram Bot command menu.")

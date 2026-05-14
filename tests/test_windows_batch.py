@@ -56,7 +56,7 @@ class SetupScriptPromptTests(unittest.TestCase):
         self.assertIn("./tgcs init --starter jobs", setup_text)
         self.assertIn("./tgcs quickstart jobs", setup_text)
         self.assertIn("./tgcs doctor --profile jobs", setup_text)
-        self.assertIn("./tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run", setup_text)
+        self.assertIn("./tgcs monitor run --profile-id jobs-fast --delivery-mode live", setup_text)
         self.assertIn(
             "./tgcs schedule print --profile-id jobs-fast --interval-minutes 15",
             setup_text,

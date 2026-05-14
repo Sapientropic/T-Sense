@@ -1,6 +1,6 @@
 import { type CSSProperties } from "react";
 
-import { CopyableCommand, StatusLine } from "./common";
+import { StatusLine } from "./common";
 import {
   opportunityDetail,
   opportunityHeadline,
@@ -37,12 +37,6 @@ export function OpportunitySummaryPanel({
           <span className="panel-kicker">Next</span>
           <strong>{nextActionLabel || "Review run"}</strong>
           <DecisionMemoryLine counts={displaySummary.decision_counts} />
-          {displaySummary.next_action.command && (
-            <details className="signal-command">
-              <summary>Advanced command</summary>
-              <CopyableCommand command={displaySummary.next_action.command} label="next action" compact />
-            </details>
-          )}
         </div>
       )}
     </section>

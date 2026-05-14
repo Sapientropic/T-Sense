@@ -59,10 +59,7 @@ function runEvidenceRepairPrompt(kind: RunEvidenceGroup["repairKind"]) {
 }
 
 function shouldOpenRunEvidenceByDefault() {
-  if (typeof window === "undefined") {
-    return true;
-  }
-  return window.innerWidth > 680;
+  return false;
 }
 
 export function RunClusterRow({ cluster, scaleMax, historyOnly = false }: { cluster: RunEvidenceCluster; scaleMax: number; historyOnly?: boolean }) {

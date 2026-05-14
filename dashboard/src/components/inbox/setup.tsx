@@ -1,6 +1,6 @@
 import { AlertTriangle, Check, Clock3, Inbox, Play } from "lucide-react";
 
-import { CopyableCommand, EmptyStateShell } from "../common";
+import { EmptyStateShell } from "../common";
 import { setupCheckLabel, setupCheckTone, setupNeedsAttention } from "../../domain/inbox";
 import type { DashboardState } from "../../domain/types";
 
@@ -47,7 +47,7 @@ export function InboxEmptyState({
         <div className="empty-actions" aria-label="Inbox next actions">
           <button type="button" onClick={onOpenStart}>
             <Play size={15} />
-            <span>{setupStatus?.has_runs ? "Open Start" : "Run first scan"}</span>
+            <span>Open Start</span>
           </button>
         </div>
       )}
@@ -62,10 +62,13 @@ export function appFirstNextStep(nextStep: string) {
     return "";
   }
   if (text.includes("sources import")) {
-    return "Open Settings, update Sources, then run another scan.";
+    return "Open Settings, discover Sources with AI, then run another AI review.";
+  }
+  if (text.includes("AI API key")) {
+    return "Open Settings and add an AI API key.";
   }
   if (text.includes("monitor run")) {
-    return "Open Start and run the first practice scan.";
+    return "Open Start and run the first AI review.";
   }
   if (text.includes("delivery test")) {
     return "Open Settings and add a notification target, or keep manual review.";
@@ -99,12 +102,6 @@ function SetupChecklist({ setupStatus, compact = false }: { setupStatus?: Dashbo
               <span>{setupCheckLabel(check.status)}</span>
             </div>
             {check.detail && <p>{check.detail}</p>}
-            {check.command && (
-              <details className="setup-command">
-                <summary>Advanced command</summary>
-                <CopyableCommand command={check.command} label={check.label} />
-              </details>
-            )}
           </div>
         </div>
       ))}

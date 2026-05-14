@@ -386,12 +386,16 @@ export async function previewSourceAssistant(
   instruction: string,
   topic: string,
   confirmExternalAi = false,
+  profileId?: string,
+  folderName?: string,
 ): Promise<SourceImportResult> {
   const payload = await postJson("/api/desk/sources/assistant", {
     instruction,
     topic,
     dry_run: true,
     confirm_external_ai: confirmExternalAi,
+    ...(profileId ? { profile_id: profileId } : {}),
+    ...(folderName ? { folder_name: folderName } : {}),
   });
   return readSourceImportResult(payload.result, "Invalid source assistant response");
 }
@@ -401,6 +405,8 @@ export async function applySourceAssistant(
   topic: string,
   confirmExternalAi = false,
   resolvedPlan?: SourceImportResult["resolved_plan"],
+  profileId?: string,
+  folderName?: string,
 ): Promise<SourceImportResult> {
   const payload = await postJson("/api/desk/sources/assistant", {
     instruction,
@@ -408,6 +414,8 @@ export async function applySourceAssistant(
     dry_run: false,
     confirm_external_ai: confirmExternalAi,
     ...(resolvedPlan ? { resolved_plan: resolvedPlan } : {}),
+    ...(profileId ? { profile_id: profileId } : {}),
+    ...(folderName ? { folder_name: folderName } : {}),
   });
   return readSourceImportResult(payload.result, "Invalid source assistant response");
 }
@@ -574,6 +582,9 @@ export function normalizeDashboardError(message: string) {
   }
   if (/invalid .* response/i.test(text)) {
     return "Local dashboard API returned data this screen cannot read. Refresh once; if it repeats, restart Signal Desk.";
+  }
+  if (/profile patch is not applied:\s*patch_[a-f0-9]+/i.test(text)) {
+    return "This profile suggestion is already cleared. Refreshing the list will hide it.";
   }
   return text;
 }

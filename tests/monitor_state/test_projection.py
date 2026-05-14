@@ -9,6 +9,11 @@ from scripts import dashboard_opportunities, dashboard_profiles, dashboard_proje
 
 
 class MonitorStateProjectionTests(unittest.TestCase):
+    def setUp(self):
+        self.llm_key_patcher = patch.object(dashboard_projection.report, "llm_key_available", return_value=True)
+        self.llm_key_available = self.llm_key_patcher.start()
+        self.addCleanup(self.llm_key_patcher.stop)
+
     def test_dashboard_projection_helpers_stay_available_from_monitor_state_facade(self):
         self.assertIs(monitor_state.dashboard_snapshot, dashboard_projection.dashboard_snapshot)
         self.assertIs(monitor_state.dashboard_setup_status, dashboard_projection.dashboard_setup_status)
@@ -52,12 +57,14 @@ class MonitorStateProjectionTests(unittest.TestCase):
         conn.row_factory = sqlite3.Row
         monitor_state.init_db(conn)
 
+        self.llm_key_available.return_value = False
         empty_snapshot = monitor_state.dashboard_snapshot(conn)
 
-        self.assertEqual(empty_snapshot["setup_status"]["next_step"], "tgcs monitor init-config")
+        self.assertEqual(empty_snapshot["setup_status"]["stage"], "needs_ai_key")
+        self.assertIn("AI API key", empty_snapshot["setup_status"]["next_step"])
         self.assertFalse(empty_snapshot["setup_status"]["has_profiles"])
         self.assertFalse(empty_snapshot["setup_status"]["has_runs"])
-        self.assertEqual(empty_snapshot["setup_status"]["checks"][0]["check_id"], "profiles")
+        self.assertEqual(empty_snapshot["setup_status"]["checks"][0]["check_id"], "ai_api")
         self.assertEqual(empty_snapshot["setup_status"]["checks"][0]["status"], "active")
 
         monitor_state.upsert_profile(
@@ -69,11 +76,12 @@ class MonitorStateProjectionTests(unittest.TestCase):
                 "alert_schedule_mode": "work_hours",
             },
         )
+        self.llm_key_available.return_value = True
         profile_snapshot = monitor_state.dashboard_snapshot(conn)
 
         self.assertEqual(
             profile_snapshot["setup_status"]["next_step"],
-            "tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run",
+            "Open Start and run the first AI review for jobs-fast.",
         )
         self.assertTrue(profile_snapshot["setup_status"]["has_profiles"])
         self.assertFalse(profile_snapshot["setup_status"]["has_runs"])
@@ -82,8 +90,25 @@ class MonitorStateProjectionTests(unittest.TestCase):
         self.assertEqual(checks["first_run"]["status"], "active")
         self.assertEqual(
             checks["first_run"]["command"],
-            "tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run",
+            "tgcs monitor run --profile-id jobs-fast --delivery-mode live",
         )
+
+
+    def test_dashboard_setup_status_keeps_profiles_blocked_until_ai_key_exists(self):
+        status = dashboard_setup.dashboard_setup_status(
+            profiles=[],
+            runs=[],
+            delivery_targets=[],
+            ai_configured=False,
+        )
+
+        self.assertEqual(status["stage"], "needs_ai_key")
+        self.assertIn("AI API key", status["next_step"])
+        checks = {item["check_id"]: item for item in status["checks"]}
+        self.assertEqual(list(checks)[0], "ai_api")
+        self.assertEqual(checks["ai_api"]["status"], "active")
+        self.assertEqual(checks["profiles"]["status"], "blocked")
+        self.assertIn("AI", checks["profiles"]["detail"])
 
 
     def test_dashboard_setup_prefers_latest_desk_profile_for_first_run(self):
@@ -114,12 +139,12 @@ class MonitorStateProjectionTests(unittest.TestCase):
 
         self.assertEqual(
             snapshot["setup_status"]["next_step"],
-            "tgcs monitor run --profile-id frontend-only --delivery-mode dry-run",
+            "Open Start and run the first AI review for frontend-only.",
         )
         checks = {item["check_id"]: item for item in snapshot["setup_status"]["checks"]}
         self.assertEqual(
             checks["first_run"]["command"],
-            "tgcs monitor run --profile-id frontend-only --delivery-mode dry-run",
+            "tgcs monitor run --profile-id frontend-only --delivery-mode live",
         )
 
 
@@ -193,7 +218,7 @@ class MonitorStateProjectionTests(unittest.TestCase):
 
         self.assertEqual(snapshot["setup_status"]["stage"], "needs_source_access")
         self.assertIn("Settings > Sources", snapshot["setup_status"]["next_step"])
-        self.assertIn("Source assistant", snapshot["setup_status"]["next_step"])
+        self.assertIn("discover Telegram channels with AI", snapshot["setup_status"]["next_step"])
         self.assertTrue(snapshot["setup_status"]["has_runs"])
         checks = {item["check_id"]: item for item in snapshot["setup_status"]["checks"]}
         self.assertEqual(checks["source_access"]["status"], "blocked")

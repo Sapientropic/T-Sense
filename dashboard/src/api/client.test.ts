@@ -51,6 +51,13 @@ describe("dashboard API errors", () => {
     );
   });
 
+  it("hides profile patch ids from stale clear errors", () => {
+    const message = normalizeDashboardError("Profile patch is not applied: patch_6668d2c593f24130bb26a668bbc43755");
+
+    expect(message).toBe("This profile suggestion is already cleared. Refreshing the list will hide it.");
+    expect(message).not.toContain("patch_");
+  });
+
   it("keeps specific validation errors readable", () => {
     expect(errorMessage(new Error("Use 1 to 8 topic tags."))).toBe("Use 1 to 8 topic tags.");
     expect(errorMessage(new Error("Invalid source library response"))).toBe(

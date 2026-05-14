@@ -18,9 +18,10 @@ import type { DashboardState, DeliveryTarget, DeskAction, DeskActionResult, Desk
 export { buildJourneySteps, buildStartSummary, notificationReadiness } from "./actions/journey-model";
 
 const SETUP_STAGE_LABELS: Record<string, string> = {
+  needs_ai_key: "AI setup",
   needs_profiles: "Workspace setup",
   needs_enabled_profile: "Profile needs enabling",
-  needs_first_run: "Ready for first scan",
+  needs_first_run: "Ready for AI review",
   needs_source_access: "Source access needs attention",
   needs_delivery_target: "Delivery optional",
   ready: "Review inbox ready",
@@ -72,7 +73,7 @@ export function ActionsView({
     ? currentStep?.detail
     : reviewCount
       ? ""
-      : "Run a fresh practice scan first. Automation and notifications can wait.";
+      : "Run a fresh AI review first. Automation and notifications can wait.";
   const compactReadyMode = !activeStep && (stage === "ready" || stage === "needs_delivery_target");
   const showCompactMoreControls = false;
   const firstRunStep = steps.find((step) => step.key === "first-run");

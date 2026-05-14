@@ -52,6 +52,7 @@ describe("ProfilesView", () => {
         createProfileFromBrief={createProfileFromBrief}
         profileCreateResult={null}
         busy={false}
+        onGenerateProfileSuggestions={vi.fn()}
       />,
     );
 
@@ -64,8 +65,23 @@ describe("ProfilesView", () => {
     expect(html).toContain("2h history");
     expect(html).toContain("20 messages");
     expect(html).toContain("1 notification");
-    expect(html).toContain("Edit profile");
+    expect(html).toContain("Notification details");
+    expect(html).toContain("<select");
+    expect(html).toContain("Work starts");
+    expect(html).toContain("Work ends");
+    expect(html).toContain("Every day");
+    expect(html).toContain("Mon-Fri");
+    expect(html).toContain("Workday interval (minutes)");
+    expect(html).toContain("Off-hour interval (minutes)");
+    expect(html).toContain(">15 min<");
+    expect(html).toContain(">60 min<");
+    expect(html).toContain("Save notification settings");
     expect(html).toContain("Delete profile");
+    expect(html).not.toContain("placeholder=\"mon, tue, wed, thu, fri\"");
+    expect(html).not.toContain("inputMode=\"numeric\"");
+    expect(html).not.toContain("Edit profile");
+    expect(html).not.toContain("Editable profile settings");
+    expect(html).not.toContain("Detailed scan and alert defaults");
     expect(html).not.toContain("per run");
     expect(html).not.toContain("WINDOW");
     expect(html).not.toContain("ITEMS");
@@ -103,7 +119,7 @@ describe("ProfilesView", () => {
     expect(html).toContain("No profiles yet");
   });
 
-  it("shows preference drafts only when there is work to review", () => {
+  it("shows preference drafts as one editable suggestion editor when there is work to review", () => {
     const patch: ProfilePatch = {
       patch_id: "patch-1",
       profile_id: "jobs-fast",
@@ -134,11 +150,20 @@ describe("ProfilesView", () => {
 
     expect(html).toContain("Profile Drafts");
     expect(html).toContain("aria-expanded=\"true\"");
-    expect(html).toContain("Jobs Fast feedback batch");
+    expect(html).toContain("Profile suggestions");
     expect(html).toContain("2 Review decisions");
-    expect(html).toContain("Apply batch");
-    expect(html).toContain("Combines 2 Review decisions into reusable matching rules for future scans.");
-    expect(html).not.toContain("Prefer remote React roles.");
+    expect(html).toContain("Edit the suggestion, preview it, then apply the draft.");
+    expect(html).toContain("Suggested matching changes");
+    expect(html).toContain("Preview");
+    expect(html).toContain("Apply");
+    expect(html).toContain("Clear");
+    expect(html).not.toContain("AI profile suggestions");
+    expect(html).not.toContain("AI modification suggestions");
+    expect(html).not.toContain("Regenerate with AI");
+    expect(html).not.toContain("Preview with AI");
+    expect(html).not.toContain("Apply AI suggestions");
+    expect(html).not.toContain("Apply batch");
+    expect(html).not.toContain("Jobs Fast feedback batch");
     expect(html).not.toContain("Adds your manual preference");
   });
 
@@ -175,24 +200,31 @@ describe("ProfilesView", () => {
     expect(html).not.toContain("Replay");
   });
 
-  it("keeps blocked pending drafts visible but disables apply", () => {
-    const patch: ProfilePatch = {
+  it("does not block stale profile drafts or duplicate diff and note text", () => {
+    const patches: ProfilePatch[] = [{
       patch_id: "patch-1",
       profile_id: "jobs-fast",
-      note: "Prefer remote React roles.",
+      note: "not fullstack",
       status: "pending",
-      diff_text: "-old\n+new",
+      diff_text: "+not fullstack",
       apply_readiness: {
         status: "blocked",
         label: "Profile changed",
         detail: "Regenerate before applying.",
       },
       created_at: "2026-05-10T00:00:00Z",
-    };
+    }, {
+      patch_id: "patch-2",
+      profile_id: "jobs-fast",
+      note: "not full stack",
+      status: "pending",
+      diff_text: "+not full stack",
+      created_at: "2026-05-10T00:01:00Z",
+    }];
     const html = renderToStaticMarkup(
       <ProfilesView
         profiles={[profile({ enabled: true })]}
-        patches={[patch]}
+        patches={patches}
         applyPatch={vi.fn()}
         revertPatch={vi.fn()}
         replayPatch={vi.fn()}
@@ -207,9 +239,60 @@ describe("ProfilesView", () => {
       />,
     );
 
-    expect(html).toContain("Profile changed");
-    expect(html).toContain("Regenerate before applying.");
-    expect(html).toContain("disabled=\"\"");
+    expect(html).not.toContain("Profile changed");
+    expect(html).not.toContain("Regenerate before applying.");
+    expect(html).not.toContain("Regenerate with AI");
+    expect(html).not.toContain("Add: not fullstack");
+    expect(html).not.toContain("Add: not full stack");
+    expect(html.match(/not fullstack/g) ?? []).toHaveLength(1);
+    expect(html.match(/not full stack/g) ?? []).toHaveLength(1);
+    expect(html).toContain("Preview");
+    expect(html).toContain("Apply");
+    expect(html).toContain("Clear");
+    expect(html).toContain("title=\"Apply all current profile suggestions\" type=\"button\"");
+    expect(html).not.toContain("Regenerate the stale suggestion before applying");
+  });
+
+  it("lets users edit matching rule sections directly from the matching panel", () => {
+    const html = renderToStaticMarkup(
+      <ProfilesView
+        profiles={[
+          profile({
+            enabled: true,
+            matching_profile: {
+              summary: "Current matching rules",
+              learned_preferences: [],
+              editable_text: "- Prefer senior AI roles\n- Avoid unpaid internships",
+              sections: [
+                {
+                  key: "rules",
+                  label: "How cards are judged",
+                  items: ["Prefer senior AI roles", "Avoid unpaid internships"],
+                },
+              ],
+            },
+          }),
+        ]}
+        patches={[]}
+        applyPatch={vi.fn()}
+        revertPatch={vi.fn()}
+        replayPatch={vi.fn()}
+        setAlertMode={vi.fn()}
+        setProfileEnabled={vi.fn()}
+        setProfileRuntimeSettings={vi.fn()}
+        createProfileDraftNote={vi.fn()}
+        createProfileMatchingPreferencesDraft={vi.fn()}
+        createProfileFromBrief={createProfileFromBrief}
+        profileCreateResult={null}
+        busy={false}
+      />,
+    );
+
+    expect(html).toContain("Preview");
+    expect(html).toContain("Prefer senior AI roles");
+    expect(html).toContain("textarea");
+    expect(html).toContain("directly edit matching rules");
+    expect(html).not.toContain("Editable profile settings");
   });
 
   it("validates profile scan setting edits before save", () => {

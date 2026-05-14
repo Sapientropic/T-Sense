@@ -646,11 +646,10 @@ def apply_profile_patch(conn: sqlite3.Connection, *, patch_id: str, profile_path
             raise MonitorStateError(f"Profile is not registered: {row['profile_id']}")
         profile_path = dashboard_profile_file_path(profile_row["path"])
     current = profile_path.read_text(encoding="utf-8") if profile_path.exists() else ""
-    base_profile_hash = row["base_profile_hash"]
-    if not base_profile_hash:
-        raise MonitorStateError("Profile patch is missing its base hash; regenerate the profile diff.")
-    if sha256_text(current) != base_profile_hash:
-        raise MonitorStateError("Profile changed after patch was suggested; regenerate the profile diff.")
+    # Profile suggestions are now an editable Desk workflow, not a locked
+    # patch-apply ceremony. A stale base hash should not strand ordinary users:
+    # snapshot the current file first, then write the reviewed proposal so
+    # Revert can restore the latest visible profile if needed.
     snapshot_id = "snapshot_" + uuid.uuid4().hex
     now = utc_now()
     conn.execute(
@@ -724,6 +723,20 @@ def revert_profile_patch(conn: sqlite3.Connection, *, patch_id: str, profile_pat
     ).fetchone()
     if not row:
         raise MonitorStateError(f"Profile patch not found: {patch_id}")
+    if row["status"] == "pending":
+        now = utc_now()
+        conn.execute(
+            "UPDATE profile_patch_suggestions SET status = ? WHERE patch_id = ?",
+            ("reverted", patch_id),
+        )
+        conn.commit()
+        return {
+            "patch_id": patch_id,
+            "profile_id": row["profile_id"],
+            "status": "reverted",
+            "profile_path": str(profile_path) if profile_path else "",
+            "reverted_at": now,
+        }
     if row["status"] != "applied":
         raise MonitorStateError(f"Profile patch is not applied: {patch_id}")
     snapshot = conn.execute(

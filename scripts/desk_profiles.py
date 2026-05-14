@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from scripts import monitor_config, monitor_state
+from scripts import monitor_config, monitor_state, report, source_registry
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -73,7 +73,10 @@ def create_profile_from_brief(conn, body: dict) -> dict:
     if unexpected:
         raise ValueError(f"Unsupported profile creation field: {', '.join(unexpected)}")
     brief = _facade_callable("_profile_create_input_text", _profile_create_input_text)(body)
-    title = _facade_callable("_profile_title_from_text", _profile_title_from_text)(brief)
+    if not report.llm_key_available():
+        raise ValueError("Save an AI API key in Settings before creating a profile.")
+    ai_payload = _facade_callable("_profile_ai_payload_from_text", _profile_ai_payload_from_text)(brief)
+    title = _profile_ai_title(ai_payload)
     project_root = _project_root()
     profile_id = _facade_callable("_unique_profile_id", _unique_profile_id)(
         conn,
@@ -82,7 +85,8 @@ def create_profile_from_brief(conn, body: dict) -> dict:
     profile_rel_path = Path("profiles") / "desk" / f"{profile_id}.md"
     profile_path = project_root / profile_rel_path
     profile_path.parent.mkdir(parents=True, exist_ok=True)
-    profile_path.write_text(_facade_callable("_profile_markdown_from_brief", _profile_markdown_from_brief)(title, brief), encoding="utf-8")
+    profile_path.write_text(_profile_markdown_from_ai_payload(ai_payload, source_brief=brief), encoding="utf-8")
+    source_topic = _profile_source_topic(ai_payload, profile_id)
 
     config = {
         "id": profile_id,
@@ -94,7 +98,7 @@ def create_profile_from_brief(conn, body: dict) -> dict:
         "scan_window_hours": 2,
         "source_registry": ".tgcs/sources.json",
         "channel_list": "channel_lists/example.txt",
-        "source_topics": ["jobs"],
+        "source_topics": [source_topic],
         "alert_rule": "high_new_or_changed",
         "alert_schedule_mode": "work_hours",
         "delivery_targets": [_desk_delivery_target_id()],
@@ -106,7 +110,7 @@ def create_profile_from_brief(conn, body: dict) -> dict:
         "semantic_max_tokens": monitor_config.DEFAULT_FAST_JOBS_SEMANTIC_MAX_TOKENS,
         "semantic_batch_size": monitor_config.DEFAULT_FAST_JOBS_SEMANTIC_BATCH_SIZE,
         "semantic_concurrency": monitor_config.DEFAULT_FAST_JOBS_SEMANTIC_CONCURRENCY,
-        "prefilter_keywords": _facade_callable("_profile_keywords_from_text", _profile_keywords_from_text)(brief),
+        "prefilter_keywords": _profile_keywords_from_ai_payload(ai_payload),
     }
     _facade_callable("_append_profile_config", _append_profile_config)(config)
     monitor_state.upsert_profile(conn, {**config, "path": str(profile_path)})
@@ -116,8 +120,8 @@ def create_profile_from_brief(conn, body: dict) -> dict:
         "display_name": title,
         "profile_path": profile_rel_path.as_posix(),
         "created": True,
-        "detail": "Profile created from your brief. Review its matching rules, then run a practice scan.",
-        "next_action": "Open the new profile, adjust matching rules if needed, then run a practice scan from Start.",
+        "detail": "AI generated this matching profile from your brief.",
+        "next_action": "Discover Telegram sources for this profile, then run an AI review from Start.",
         "created_at": _utc_now(),
     }
 
@@ -254,6 +258,152 @@ def _profile_title_from_text(text: str) -> str:
     return "Custom Monitor"
 
 
+def _clean_profile_ai_list(value: object, *, field: str, max_items: int, max_item_length: int = 220) -> list[str]:
+    if not isinstance(value, list):
+        raise ValueError(f"AI profile generation must return a {field} list.")
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        text = re.sub(r"\s+", " ", str(item or "")).strip()
+        if not text:
+            continue
+        text = text[:max_item_length].strip()
+        marker = text.casefold()
+        if marker in seen:
+            continue
+        seen.add(marker)
+        cleaned.append(text)
+        if len(cleaned) >= max_items:
+            break
+    if not cleaned:
+        raise ValueError(f"AI profile generation returned no usable {field}.")
+    return cleaned
+
+
+def _clean_profile_ai_payload(payload: object) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise ValueError("AI profile generation must return a JSON object.")
+    title = re.sub(r"\s+", " ", str(payload.get("title") or "")).strip()[:72].strip(" :-")
+    goal = re.sub(r"\s+", " ", str(payload.get("goal") or "")).strip()[:320].strip()
+    if not title or not goal:
+        raise ValueError("AI profile generation must return title and goal.")
+    search_rules = _clean_profile_ai_list(payload.get("search_rules"), field="search_rules", max_items=8)
+    rejection_rules = _clean_profile_ai_list(payload.get("rejection_rules"), field="rejection_rules", max_items=6)
+    keywords = _clean_profile_ai_keywords(payload.get("keywords"))
+    topic = _clean_profile_ai_topic(str(payload.get("topic") or title))
+    return {
+        "title": title,
+        "goal": goal,
+        "search_rules": search_rules,
+        "rejection_rules": rejection_rules,
+        "keywords": keywords,
+        "topic": topic,
+    }
+
+
+def _profile_ai_payload_from_text(text: str) -> dict[str, Any]:
+    if not report.llm_key_available():
+        raise ValueError("Save an AI API key in Settings before creating a profile.")
+    try:
+        from openai import OpenAI
+    except ImportError as exc:
+        raise ValueError("Install optional LLM dependencies before creating AI profiles.") from exc
+
+    base_url, model = report.resolve_llm_settings(None, report.DEFAULT_MODEL)
+    provider = report.llm_provider(base_url, model)
+    api_key = report.api_key_for_provider(provider)
+    if not api_key:
+        raise ValueError("Save an AI API key in Settings before creating a profile.")
+    system_prompt = (
+        "You generate Telegram monitoring profiles. Return JSON only. The profile will be used "
+        "by an LLM matcher, so write explicit semantic rules, not keyword-only matching. Do not "
+        "include secrets, commands, file paths, or long copies of the user's text."
+    )
+    user_prompt = json.dumps(
+        {
+            "brief": text,
+            "output_schema": {
+                "title": "short human title",
+                "goal": "one sentence matching goal",
+                "search_rules": ["include criteria"],
+                "rejection_rules": ["exclude criteria"],
+                "keywords": ["short prefilter hints"],
+                "topic": "short lowercase topic tag",
+            },
+        },
+        ensure_ascii=False,
+    )
+    create_kwargs: dict[str, Any] = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": report.llm_temperature(provider),
+    }
+    if provider in {"deepseek", "openai"}:
+        create_kwargs["response_format"] = {"type": "json_object"}
+    thinking_extra = report.minimax_thinking_extra(provider) or report.deepseek_thinking_extra(provider, model)
+    if thinking_extra:
+        create_kwargs["extra_body"] = thinking_extra
+    report.add_token_limit(create_kwargs, provider=provider, max_tokens=1100)
+    try:
+        response = OpenAI(api_key=api_key, base_url=base_url).chat.completions.create(**create_kwargs)
+    except Exception as exc:
+        raise ValueError(f"AI profile generation failed: {exc}") from exc
+    raw = response.choices[0].message.content or ""
+    try:
+        payload = json.loads(report.strip_json_fence(raw))
+    except json.JSONDecodeError as exc:
+        raise ValueError("AI profile generation did not return valid JSON.") from exc
+    return _clean_profile_ai_payload(payload)
+
+
+def _clean_profile_ai_keywords(value: object) -> list[str]:
+    if not isinstance(value, list):
+        raise ValueError("AI profile generation must return a keywords list.")
+    keywords: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        text = re.sub(r"\s+", " ", str(item or "").strip().lower())
+        text = re.sub(r"[^a-z0-9+#._ -]+", "", text).strip(" ._-")
+        if len(text) < 2 or text in seen:
+            continue
+        seen.add(text)
+        keywords.append(text[:48])
+        if len(keywords) >= 18:
+            break
+    if not keywords:
+        raise ValueError("AI profile generation returned no usable keywords.")
+    return keywords
+
+
+def _clean_profile_ai_topic(value: str) -> str:
+    slug = _slugify_profile_id(value)[:40].strip("-")
+    try:
+        return source_registry.normalize_topics([slug])[0]
+    except source_registry.RegistryError as exc:
+        raise ValueError("AI profile generation returned an invalid topic tag.") from exc
+
+
+def _profile_ai_title(payload: dict[str, Any]) -> str:
+    return str(payload.get("title") or "").strip() or "Custom Monitor"
+
+
+def _profile_source_topic(payload: dict[str, Any], profile_id: str) -> str:
+    topic = str(payload.get("topic") or "").strip()
+    if topic:
+        return topic
+    return _clean_profile_ai_topic(profile_id)
+
+
+def _profile_keywords_from_ai_payload(payload: dict[str, Any]) -> list[str]:
+    keywords = payload.get("keywords")
+    if isinstance(keywords, list) and keywords:
+        return [str(item) for item in keywords][:18]
+    raise ValueError("AI profile generation returned no usable keywords.")
+
+
 def _slugify_profile_id(title: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
     return slug[:48].strip("-") or "custom-monitor"
@@ -292,6 +442,80 @@ def _profile_keywords_from_text(text: str) -> list[str]:
         if len(keywords) >= 18:
             break
     return keywords or ["hiring", "opportunity", "role", "project", "apply"]
+
+
+def _profile_markdown_from_ai_payload(payload: dict[str, Any], *, source_brief: str) -> str:
+    title = _profile_ai_title(payload)
+    goal = str(payload.get("goal") or "").strip()
+    search_rules = _clean_profile_ai_list(payload.get("search_rules"), field="search_rules", max_items=8)
+    rejection_rules = _clean_profile_ai_list(payload.get("rejection_rules"), field="rejection_rules", max_items=6)
+    toml_escape = _facade_callable("_toml_escape_inline", _toml_escape_inline)
+    slugify = _facade_callable("_slugify_profile_id", _slugify_profile_id)
+    return "\n".join(
+        [
+            f"# Profile: {title}",
+            "",
+            "## Basic Info",
+            f"- **Goal**: {goal}",
+            "- **Work format**: Use the AI-generated profile rules as the matching contract.",
+            "- **Review style**: Prefer actionable items with clear next steps; reject vague promos.",
+            "",
+            "## Search Rules",
+            *[f"{index + 1}. {rule}" for index, rule in enumerate(search_rules)],
+            "",
+            "## Rejection Rules",
+            *[f"{index + 1}. {rule}" for index, rule in enumerate(rejection_rules)],
+            "",
+            "## Source Brief",
+            source_brief[:1200].strip(),
+            "",
+            "## Extraction Schema",
+            "mode: custom",
+            "top_level_key: items",
+            "dedup_fields: [title, source]",
+            "fields:",
+            "  - name: source_message_refs",
+            "    type: list",
+            "  - name: source_message_ids",
+            "    type: list",
+            "  - name: title",
+            "    required: true",
+            "  - name: source",
+            "  - name: contact",
+            "  - name: link",
+            "  - name: rating",
+            "    values: [high, medium, low]",
+            "  - name: why",
+            "  - name: action",
+            "    values: [Act now, Inspect, Skip unless criteria change]",
+            "",
+            "## Extraction Prompt",
+            "system_prompt: |",
+            "  Extract only Telegram items that match this AI-generated monitor profile.",
+            "  Apply the Search Rules and Rejection Rules semantically; do not rely on",
+            "  keyword overlap alone. Keep each item compact and actionable, explain why",
+            "  it matters in one sentence, and preserve source references.",
+            "",
+            "## Report Preferences",
+            "- Put high-priority items first and explain the fastest safe next step.",
+            "- For medium matches, state what must be verified before acting.",
+            "- For low matches, state which criterion would need to change.",
+            "",
+            "## Follow-up Preferences",
+            "- No extra learned preferences yet.",
+            "",
+            "## Report Labels",
+            f'report_title: "{toml_escape(title)} Signal Report"',
+            'section_high: "Act Now"',
+            'section_medium: "Inspect First"',
+            'section_low: "Boundary Examples"',
+            f'stats_label: "{toml_escape(title)} matches"',
+            f'output_filename: "{slugify(title)}-signal-report-{{date}}.md"',
+            f'profile_section_title: "{toml_escape(title)} Profile"',
+            'methodology_label: "AI-assisted Telegram source monitoring"',
+            "",
+        ]
+    )
 
 
 def _profile_markdown_from_brief(title: str, brief: str) -> str:

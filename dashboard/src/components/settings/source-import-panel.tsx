@@ -1,7 +1,7 @@
-import { useState } from "react";
-import { Database, Eye, Save, Upload } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Eye, FolderSearch, Save } from "lucide-react";
 
-import type { SourceImportResult } from "../../domain/types";
+import type { Profile, SourceImportResult } from "../../domain/types";
 
 export function SourceImportPanel({
   result,
@@ -12,35 +12,50 @@ export function SourceImportPanel({
   applySourceAssistant,
   busy,
   hasSavedSources,
+  profiles,
 }: {
   result: SourceImportResult | null;
   previewSourceImport: (sources: string, topic: string) => Promise<SourceImportResult>;
   importSources: (sources: string, topic: string) => Promise<SourceImportResult>;
   importStarterSources: (topic: string) => Promise<SourceImportResult>;
-  previewSourceAssistant: (instruction: string, topic: string, confirmExternalAi?: boolean) => Promise<SourceImportResult>;
+  previewSourceAssistant: (
+    instruction: string,
+    topic: string,
+    confirmExternalAi?: boolean,
+    profileId?: string,
+    folderName?: string,
+  ) => Promise<SourceImportResult>;
   applySourceAssistant: (
     instruction: string,
     topic: string,
     confirmExternalAi?: boolean,
     resolvedPlan?: SourceImportResult["resolved_plan"],
+    profileId?: string,
+    folderName?: string,
   ) => Promise<SourceImportResult>;
   busy: boolean;
   hasSavedSources: boolean;
+  profiles: Profile[];
 }) {
-  const [sources, setSources] = useState("");
-  const [topic, setTopic] = useState("jobs");
-  const [assistantText, setAssistantText] = useState("");
-  const [assistantExternalAi, setAssistantExternalAi] = useState(false);
   const [assistantPreviewKey, setAssistantPreviewKey] = useState("");
-  const [previewKey, setPreviewKey] = useState("");
-  const currentKey = `${sources.trim()}\n${topic.trim().toLowerCase() || "jobs"}`;
-  const assistantKey = `${assistantText.trim()}\n${topic.trim().toLowerCase() || "jobs"}\n${assistantExternalAi ? "ai" : "local"}`;
+  const activeProfiles = profiles.filter((profile) => profile.enabled);
+  const selectableProfiles = activeProfiles.length ? activeProfiles : profiles;
+  const initialProfileId = selectableProfiles[0]?.profile_id ?? "";
+  const [profileId, setProfileId] = useState(initialProfileId);
+  const [folderName, setFolderName] = useState("");
+  const selectedProfile = selectableProfiles.find((profile) => profile.profile_id === profileId) ?? selectableProfiles[0];
+  const selectedProfileId = selectedProfile?.profile_id ?? "";
+  const selectedProfileLabel = selectedProfile?.display_name || selectedProfile?.report_display_name || selectedProfile?.profile_id || "Profile";
+  const topic = selectedProfile?.source_topics?.[0] || selectedProfileId || "default";
+  const folder = folderName.trim();
+  const instruction = folder
+    ? `Scan Telegram folder "${folder}" and let AI select sources for ${selectedProfileLabel}.`
+    : `Scan all Telegram channels and let AI select sources for ${selectedProfileLabel}.`;
+  const assistantKey = `${selectedProfileId}\n${folder.toLowerCase()}\n${topic}`;
   const assistantOperationCount = result
     ? result.added_count + result.updated_count + (result.removed_count ?? 0) + (result.enabled_count ?? 0) + (result.disabled_count ?? 0)
     : 0;
-  const canPreview = sources.trim().length > 0;
-  const canImport = canPreview && previewKey === currentKey && result?.dry_run === true;
-  const canAssistantPreview = assistantText.trim().length > 0;
+  const canAssistantPreview = Boolean(selectedProfileId);
   const canAssistantApply =
     canAssistantPreview &&
     assistantPreviewKey === assistantKey &&
@@ -49,26 +64,24 @@ export function SourceImportPanel({
     assistantOperationCount > 0 &&
     !!result.resolved_plan;
   const previewSources = result?.preview_sources ?? [];
+  void previewSourceImport;
+  void importSources;
+  void importStarterSources;
+
+  useEffect(() => {
+    if (!profileId && initialProfileId) {
+      setProfileId(initialProfileId);
+    }
+  }, [initialProfileId, profileId]);
+
   return (
     <details className="table-section source-import-panel source-import-details" open={!hasSavedSources}>
       <summary>
         <span className="panel-title">
-          <Upload size={18} />
-          Add Sources
+          <FolderSearch size={18} />
+          Discover Sources
         </span>
-        {hasSavedSources && <small>Open when adding new channels</small>}
       </summary>
-      <div className="source-quick-actions" aria-label="One-click source setup">
-        <button
-          className="text-button"
-          disabled={busy}
-          onClick={() => void importStarterSources(topic).catch(() => undefined)}
-          type="button"
-        >
-          <Database size={15} />
-          <span>Use starter set</span>
-        </button>
-      </div>
       <form
         className="source-import-form source-assistant-form"
         onSubmit={(event) => {
@@ -76,7 +89,7 @@ export function SourceImportPanel({
           if (!canAssistantPreview) {
             return;
           }
-          void previewSourceAssistant(assistantText, topic, assistantExternalAi)
+          void previewSourceAssistant(instruction, topic, true, selectedProfileId, folder || undefined)
             .then((next) => {
               if (next.dry_run && next.action === "assistant") {
                 setAssistantPreviewKey(assistantKey);
@@ -85,91 +98,61 @@ export function SourceImportPanel({
             .catch(() => undefined);
         }}
       >
+        <p className="delivery-note">AI filters your Telegram channels against the selected profile.</p>
         <label className="source-import-field">
-          <span>Source assistant</span>
-          <textarea
+          <span>Profile</span>
+          <select
             onChange={(event) => {
-              setAssistantText(event.target.value);
+              setProfileId(event.target.value);
               setAssistantPreviewKey("");
             }}
-            placeholder={"add @remote_jobs and @frontend_jobs\npause @old_jobs\nremove @spam_jobs"}
-            rows={4}
-            value={assistantText}
+            value={selectedProfileId}
+          >
+            {selectableProfiles.map((profile) => (
+              <option key={profile.profile_id} value={profile.profile_id}>
+                {profile.display_name || profile.report_display_name || profile.profile_id}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="source-import-field">
+          <span>Telegram folder</span>
+          <input
+            onChange={(event) => {
+              setFolderName(event.target.value);
+              setAssistantPreviewKey("");
+            }}
+            placeholder="Optional folder name"
+            type="text"
+            value={folderName}
           />
         </label>
+        <label className="source-assistant-ai">
+          <input checked={!folder} readOnly type="checkbox" />
+          <span>Scan all channels</span>
+        </label>
         <div className="source-import-actions">
-          <label className="source-assistant-ai">
-            <input
-              checked={assistantExternalAi}
-              onChange={(event) => {
-                setAssistantExternalAi(event.target.checked);
-                setAssistantPreviewKey("");
-              }}
-              type="checkbox"
-            />
-            <span>Use AI on saved source names</span>
-          </label>
           <button className="text-button secondary" disabled={busy || !canAssistantPreview} type="submit">
             <Eye size={15} />
-            <span>{busy ? "Checking" : "Preview plan"}</span>
+            <span>{busy ? "Checking" : "Preview AI selection"}</span>
           </button>
           <button
             className="text-button"
             disabled={busy || !canAssistantApply}
-            onClick={() => void applySourceAssistant(assistantText, topic, assistantExternalAi, result?.resolved_plan).catch(() => undefined)}
+            onClick={() =>
+              void applySourceAssistant(instruction, topic, true, result?.resolved_plan, selectedProfileId, folder || undefined).catch(
+                () => undefined,
+              )
+            }
             type="button"
           >
             <Save size={15} />
-            <span>Apply plan</span>
+            <span>Apply selected list</span>
           </button>
         </div>
-      </form>
-      <form
-        className="source-import-form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (!canPreview) {
-            return;
-          }
-          void previewSourceImport(sources, topic)
-            .then((next) => {
-              if (next.dry_run) {
-                setPreviewKey(currentKey);
-              }
-            })
-            .catch(() => undefined);
-        }}
-      >
-        <label className="source-import-field">
-          <span>Telegram channels</span>
-          <textarea
-            onChange={(event) => setSources(event.target.value)}
-            placeholder={"@remote_jobs\nhttps://t.me/s/miniapps_jobs"}
-            rows={5}
-            value={sources}
-          />
-        </label>
-        <label className="source-import-topic">
-          <span>Topic</span>
-          <input onChange={(event) => setTopic(event.target.value)} type="text" value={topic} />
-        </label>
-        <p className="delivery-note">Paste channel handles or t.me links, one per line. Preview checks duplicates before anything is saved.</p>
-        <div className="source-import-actions">
-          <button className="text-button secondary" disabled={busy || !canPreview} type="submit">
-            <Eye size={15} />
-            <span>{busy ? "Checking" : "Preview sources"}</span>
-          </button>
-          <button
-            className="text-button"
-            disabled={busy || !canImport}
-            onClick={() => void importSources(sources, topic).catch(() => undefined)}
-            type="button"
-          >
-            <Upload size={15} />
-            <span>Import sources</span>
-          </button>
-        </div>
-        {canPreview && !canImport && result?.dry_run && <span className="delivery-dirty">Preview again before importing</span>}
+        {canAssistantPreview && assistantPreviewKey !== assistantKey && result?.dry_run && (
+          <span className="delivery-dirty">Preview again before applying</span>
+        )}
         {result && (
           <div className={`source-import-result ${result.written ? "written" : "preview"}`} role="status">
             <strong>{result.title || (result.written ? "Sources saved" : "Source preview ready")}</strong>

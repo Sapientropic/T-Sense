@@ -1,9 +1,9 @@
-import { useState } from "react";
-import { ChevronDown, CirclePlay, FileDiff, UserRoundCog } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Check, ChevronDown, CirclePlay, FileDiff, UserRoundCog, X } from "lucide-react";
 
 import { InlineEmpty, PanelHeader } from "./common";
 import { NewProfilePanel } from "./profiles/new-profile-panel";
-import { ProfilePatchCard } from "./profiles/profile-patch-card";
+import { parseDiff } from "./profiles/diff";
 import { ProfileRow } from "./profiles/profile-row";
 import type { Profile, ProfileCreateResult, ProfilePatch, ProfileRuntimeSettings } from "../domain/types";
 
@@ -24,6 +24,7 @@ export function ProfilesView({
   createProfileFromBrief,
   profileCreateResult,
   busy,
+  onGenerateProfileSuggestions,
   onOpenStart,
 }: {
   profiles: Profile[];
@@ -45,6 +46,7 @@ export function ProfilesView({
   }) => Promise<ProfileCreateResult>;
   profileCreateResult: ProfileCreateResult | null;
   busy: boolean;
+  onGenerateProfileSuggestions?: () => void;
   onOpenStart?: () => void;
 }) {
   const [draftsOpen, setDraftsOpen] = useState(() => shouldOpenDraftsByDefault());
@@ -64,7 +66,6 @@ export function ProfilesView({
             {profiles.map((profile) => (
               <ProfileRow
                 busy={busy}
-                createProfileDraftNote={createProfileDraftNote}
                 createProfileMatchingPreferencesDraft={createProfileMatchingPreferencesDraft}
                 key={profile.profile_id}
                 profile={profile}
@@ -110,21 +111,141 @@ export function ProfilesView({
             <span className="count-badge">{visiblePatches.length}</span>
           </header>
           <div className="patch-list" hidden={!draftsOpen} id={draftsPanelId}>
-            {visiblePatches.map((patch) => (
-              <ProfilePatchCard
-                applyPatch={applyPatch}
-                busy={busy}
-                key={patch.patch_id}
-                patch={patch}
-                replayPatch={replayPatch}
-                revertPatch={revertPatch}
-              />
-            ))}
+            <ProfileDraftSuggestionEditor
+              applyPatch={applyPatch}
+              busy={busy}
+              createProfileMatchingPreferencesDraft={createProfileMatchingPreferencesDraft}
+              patches={visiblePatches}
+              revertPatch={revertPatch}
+            />
           </div>
         </div>
       )}
     </section>
   );
+}
+
+function ProfileDraftSuggestionEditor({
+  applyPatch,
+  busy,
+  createProfileMatchingPreferencesDraft,
+  patches,
+  revertPatch,
+}: {
+  applyPatch: (patchId: string) => void;
+  busy: boolean;
+  createProfileMatchingPreferencesDraft: (profileId: string, preferences: string) => Promise<void>;
+  patches: ProfilePatch[];
+  revertPatch: (patchId: string) => void;
+}) {
+  const initialSuggestion = profileSuggestionText(patches);
+  const [suggestionText, setSuggestionText] = useState(initialSuggestion);
+  const reviewDecisionCount = patches.reduce((sum, patch) => sum + Math.max(1, patch.source_card_count || (patch.card_id ? 1 : 0)), 0);
+  const primaryProfileId = patches[0]?.profile_id || "";
+  const normalizedSuggestion = suggestionText.trim();
+  const canPreview = Boolean(normalizedSuggestion && primaryProfileId);
+
+  useEffect(() => {
+    setSuggestionText(initialSuggestion);
+  }, [initialSuggestion]);
+
+  return (
+    <article className="review-card patch-card profile-draft-ai-card">
+      <div className="card-main">
+        <div className="card-title-row">
+          <h3>Profile suggestions</h3>
+          <span className="status pending">{patches.length} drafts</span>
+        </div>
+        <div className="patch-context-row">
+          <span>{reviewDecisionCount} Review decisions</span>
+          <span>{new Set(patches.map((patch) => patch.profile_id)).size} profiles</span>
+        </div>
+        <p className="note-line">Edit the suggestion, preview it, then apply the draft.</p>
+        <label className="profile-draft-suggestion-field">
+          <span>Suggested matching changes</span>
+          <textarea
+            disabled={busy}
+            maxLength={5000}
+            onChange={(event) => setSuggestionText(event.target.value)}
+            value={suggestionText}
+          />
+        </label>
+        <div className="patch-actions">
+          <button
+            className="text-button"
+            disabled={busy || !canPreview}
+            onClick={() => {
+              if (canPreview) {
+                void createProfileMatchingPreferencesDraft(primaryProfileId, normalizedSuggestion);
+              }
+            }}
+            title={canPreview ? "Preview the edited suggestion as a draft" : "Add a suggestion before previewing"}
+            type="button"
+          >
+            <FileDiff size={15} />
+            <span>Preview</span>
+          </button>
+          <button
+            className="text-button"
+            disabled={busy || patches.length === 0}
+            onClick={() => patches.forEach((patch) => applyPatch(patch.patch_id))}
+            title="Apply all current profile suggestions"
+            type="button"
+          >
+            <Check size={15} />
+            <span>Apply</span>
+          </button>
+          <button
+            className="text-button secondary"
+            disabled={busy || patches.length === 0}
+            onClick={() => patches.forEach((patch) => revertPatch(patch.patch_id))}
+            title="Clear these suggestions without changing the profile"
+            type="button"
+          >
+            <X size={15} />
+            <span>Clear</span>
+          </button>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function profileSuggestionText(patches: ProfilePatch[]) {
+  const lines: string[] = [];
+  const seen = new Set<string>();
+  const addLine = (value: string) => {
+    const normalized = normalizeSuggestionLine(value);
+    if (!normalized) {
+      return;
+    }
+    const key = normalized.toLocaleLowerCase().replace(/\s+/g, " ");
+    if (seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    lines.push(normalized);
+  };
+  patches.forEach((patch) => {
+    patch.note.split("\n").forEach(addLine);
+    const { added } = parseDiff(patch.diff_text || "");
+    added.forEach(addLine);
+  });
+  return lines.length ? lines.join("\n") : "Use the latest Review feedback to update reusable matching rules.";
+}
+
+function normalizeSuggestionLine(value: string) {
+  const text = value
+    .replace(/^\s*[-*]\s+/, "")
+    .replace(/^\s*(?:Add|Remove):\s*/i, "")
+    .trim();
+  if (!text || text === "## Follow-up Preferences") {
+    return "";
+  }
+  if (text.startsWith("Desk feedback tuning:")) {
+    return "";
+  }
+  return text;
 }
 
 function shouldOpenDraftsByDefault() {

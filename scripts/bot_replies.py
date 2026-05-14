@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 try:
     from scripts import bot_actions, bot_intents, dashboard_server, monitor_state
@@ -31,7 +32,7 @@ def main_menu_keyboard() -> dict[str, Any]:
                 {"text": "Latest", "callback_data": "latest"},
             ],
             [
-                {"text": "Dry scan", "callback_data": "scan:jobs-fast"},
+                {"text": "AI review", "callback_data": "scan:jobs-fast"},
                 {"text": "Sources", "callback_data": "sources"},
             ],
             [
@@ -46,12 +47,12 @@ def main_menu_keyboard() -> dict[str, Any]:
 def help_text() -> str:
     return "\n".join(
         [
-            "T-Sense bot",
+            "*T-Sense bot*",
             "",
-            "Commands:",
+            "*Commands*",
             "/status - setup, source, run, and inbox status",
             "/latest - latest actionable cards and report",
-            "/scan - run jobs-fast in dry-run mode",
+            "/scan - run a local AI review for jobs-fast",
             "/sources - source count and topics",
             "/sources add @channel - preview a source change",
             "/profiles - enabled profiles",
@@ -143,7 +144,20 @@ def proof_loop_status_line(snapshot: dict[str, Any]) -> str:
         return f"first decision {timing}" + (f" ({action})" if action else "")
     if safe_int(summary.get("runs_count")) > 0:
         return "waiting for first review decision"
-    return "run a dry scan to start"
+    return "run an AI review to start"
+
+
+def public_telegram_link(value: object) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    parsed = urlparse(text)
+    if parsed.scheme not in {"http", "https"}:
+        return ""
+    host = (parsed.hostname or "").casefold()
+    if host in {"localhost", "127.0.0.1", "::1"}:
+        return ""
+    return text
 
 
 def latest_summary(snapshot: dict[str, Any]) -> str:
@@ -188,8 +202,9 @@ def latest_summary(snapshot: dict[str, Any]) -> str:
     if runs:
         artifact = runs[0].get("report_artifact") if isinstance(runs[0].get("report_artifact"), dict) else {}
         display_path = str(artifact.get("display_path") or artifact.get("path") or "")
-        if display_path:
-            lines.append(f"Report: {display_path}")
+        public_report = public_telegram_link(display_path)
+        if public_report:
+            lines.append(f"Report: {public_report}")
     return "\n".join(lines)
 
 

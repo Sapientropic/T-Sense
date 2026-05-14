@@ -485,5 +485,5 @@ def apply_source_access_repair(
         status="success",
         title=title,
         detail=detail,
-        next_action="Run a fresh practice scan to verify the narrowed source list.",
+        next_action="Run a fresh AI review to verify the narrowed source list.",
     )

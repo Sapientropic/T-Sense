@@ -68,6 +68,8 @@ describe("inbox domain helpers", () => {
     expect(filterInboxCards(cards, "all")).toHaveLength(7);
     expect(filterInboxCards(cards, "high")).toEqual([cards[0], cards[1]]);
     expect(filterInboxCards(cards, "new_changed")).toEqual([cards[0], cards[1]]);
+    expect(filterInboxCards(cards, "medium")).toEqual([cards[2]]);
+    expect(filterInboxCards(cards, "low")).toEqual([cards[3]]);
     expect(filterInboxCards(cards, "low_medium")).toEqual([cards[2], cards[3]]);
     expect(countInboxCardsByRating(cards, "high")).toBe(2);
     expect(countInboxCardsByRating(cards, "medium")).toBe(1);
@@ -78,9 +80,9 @@ describe("inbox domain helpers", () => {
     expect(inboxFilterOptions(cards, "run-2")).toEqual([
       { id: "actionable", label: "Priority now", count: 1 },
       { id: "all", label: "All cards", count: 7 },
-      { id: "high", label: "High", count: 2 },
       { id: "new_changed", label: "New/Updated", count: 2 },
-      { id: "low_medium", label: "Lower priority", count: 2 },
+      { id: "medium", label: "Middle", count: 1 },
+      { id: "low", label: "Low", count: 1 },
     ]);
     expect(inboxFilterOptions([], "run-2")[0]).toEqual({ id: "actionable", label: "Priority now", count: 0 });
   });

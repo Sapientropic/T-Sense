@@ -172,10 +172,14 @@ def telegram_status(
     if expired_login:
         _telegram_login_clear()
         login = {}
-    if session_ready:
+    if session_ready and credentials_ready:
         state = "authorized"
         detail = "Telegram is connected for local scans."
         next_step = "Run the first scan from Signal Desk."
+    elif session_ready:
+        state = "credentials_missing"
+        detail = "Telegram login is saved, but app credentials are missing."
+        next_step = "Save API ID and API hash before scanning channels."
     elif not credentials_ready:
         state = "credentials_missing"
         detail = "Telegram app credentials are not saved yet."

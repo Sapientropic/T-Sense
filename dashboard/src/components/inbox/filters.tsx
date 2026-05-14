@@ -37,7 +37,7 @@ export function ReviewFilterEmptyState({
   const nextFilter = nextNonEmptyReviewFilter(filters, activeFilter);
   const next = nextFilter ? filters.find((item) => item.id === nextFilter) : null;
   const reviewQueueTotal = filters
-    .filter((item) => ["high", "new_changed", "low_medium"].includes(item.id))
+    .filter((item) => ["actionable", "new_changed", "medium"].includes(item.id))
     .reduce((sum, item) => sum + item.count, 0);
   const allCaughtUp = activeFilter === "actionable" && reviewQueueTotal === 0;
   const pendingDraftCount = feedbackSummary?.pending_profile_diff_count ?? 0;
@@ -133,7 +133,6 @@ function reviewFilterEmptyDetail(nextLabel: string) {
 export function compactFilterLabel(label: string) {
   if (label === "Priority now") return "Priority";
   if (label === "New/Updated") return "New";
-  if (label === "Lower priority") return "Lower";
   if (label === "All cards") return "All";
   if (label === "Duplicate") return "Dupes";
   return label;
@@ -142,8 +141,8 @@ export function compactFilterLabel(label: string) {
 export function nextNonEmptyReviewFilter(filters: ReturnType<typeof inboxFilterOptions>, current: InboxFilter): InboxFilter | null {
   const preferred: InboxFilter[] =
     current === "actionable"
-      ? ["high", "new_changed", "low_medium", "saved", "duplicate", "handled", "all"]
-      : ["actionable", "high", "new_changed", "low_medium", "saved", "handled", "duplicate", "all"];
+      ? ["new_changed", "medium", "saved", "duplicate", "handled"]
+      : ["actionable", "new_changed", "medium", "saved", "handled", "duplicate"];
   return preferred.find((id) => id !== current && (filters.find((item) => item.id === id)?.count ?? 0) > 0) ?? null;
 }
 
@@ -216,14 +215,14 @@ function backlogFilterForCard(card: ReviewCard, latestRunId?: string): InboxFilt
   }
   const rating = String(card.rating || "").toLowerCase();
   const decisionStatus = String(card.decision_status || "").toLowerCase();
-  if (rating === "high") {
-    return "high";
+  if (rating === "low") {
+    return "low";
   }
   if (["new", "changed"].includes(decisionStatus)) {
     return "new_changed";
   }
-  if (["low", "medium"].includes(rating)) {
-    return "low_medium";
+  if (rating === "medium") {
+    return "medium";
   }
   return "all";
 }

@@ -8,7 +8,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from scripts import desk_scheduler, desk_source_access, desk_source_assistant, desk_source_registry
+from scripts import (
+    desk_scheduler,
+    desk_source_access,
+    desk_source_assistant,
+    desk_source_discovery,
+    desk_source_registry,
+    monitor_config,
+)
 
 
 def _positive_int_env(name: str, fallback: int) -> int:
@@ -396,13 +403,55 @@ def _clean_resolved_source_plan(plan: dict) -> dict[str, list[str]]:
     return desk_source_assistant._clean_resolved_source_plan(plan, validate_source_id=_validate_desk_source_id)
 
 
-def _source_assistant_llm_plan(instruction: str, topic: str, existing: dict[str, dict]) -> dict[str, list[str]]:
+def _source_assistant_llm_plan(
+    instruction: str,
+    topic: str,
+    existing: dict[str, dict],
+    *,
+    profile_text: str = "",
+    candidates: list[dict] | None = None,
+) -> dict[str, list[str]]:
     return desk_source_assistant._source_assistant_llm_plan(
         instruction,
         topic,
         existing,
         validate_source_id=_validate_desk_source_id,
+        profile_text=profile_text,
+        candidates=candidates,
     )
+
+
+def _discover_source_channels(*, folder_name: str = "", folder_id: int | None = None) -> list[dict]:
+    return desk_source_discovery.discover_source_channels(folder_name=folder_name, folder_id=folder_id)
+
+
+def _source_assistant_profile_context(profile_id: str = "") -> dict[str, str]:
+    root = _project_root()
+    config = monitor_config.load_config(root / ".tgcs" / "profiles.toml", root=root)
+    profiles = [profile for profile in config.profiles.values() if profile.get("enabled", True)]
+    if not profiles:
+        raise ValueError("Create an AI-generated profile before discovering sources.")
+    selected = None
+    requested = str(profile_id or "").strip()
+    if requested:
+        selected = config.profiles.get(requested)
+        if selected is None:
+            raise ValueError(f"Profile id not found: {requested}")
+    if selected is None:
+        selected = next(
+            (profile for profile in profiles if str(profile.get("path") or "").replace("\\", "/").startswith("profiles/desk/")),
+            profiles[0],
+        )
+    profile_path = monitor_config.profile_path(selected, root=root)
+    if not profile_path.exists():
+        raise ValueError(f"Profile file not found: {selected.get('path') or profile_path}")
+    source_topics = selected.get("source_topics") if isinstance(selected.get("source_topics"), list) else []
+    topic = str(source_topics[0]) if source_topics else str(selected.get("id") or "sources")
+    return {
+        "profile_id": str(selected.get("id") or requested),
+        "profile_text": profile_path.read_text(encoding="utf-8"),
+        "topic": _clean_source_topic(topic),
+    }
 
 
 def run_source_assistant(body: dict) -> dict:
@@ -414,6 +463,8 @@ def run_source_assistant(body: dict) -> dict:
         desk_source_record=_desk_source_record,
         validate_source_id=_validate_desk_source_id,
         llm_plan_fn=_facade_attr("_source_assistant_llm_plan", _source_assistant_llm_plan),
+        discover_source_channels_fn=_facade_attr("_discover_source_channels", _discover_source_channels),
+        profile_context_fn=_facade_attr("_source_assistant_profile_context", _source_assistant_profile_context),
     )
 
 

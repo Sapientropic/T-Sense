@@ -84,8 +84,8 @@ class DashboardSchedulerTests(unittest.TestCase):
         trigger = args[args.index("/TR") + 1]
         self.assertIn("tgcs.bat", trigger)
         self.assertIn("--profile-id jobs-fast", trigger)
-        self.assertIn("--delivery-mode dry-run", trigger)
-        self.assertNotIn("--delivery-mode live", trigger)
+        self.assertIn("--delivery-mode live", trigger)
+        self.assertNotIn("--delivery-mode dry-run", trigger)
         self.assertEqual(result["status"], "success")
         self.assertNotIn(str(project_root), result["detail"])
 
@@ -129,9 +129,9 @@ class DashboardSchedulerTests(unittest.TestCase):
         self.assertIn("--profile-id frontend-only", trigger)
         self.assertEqual(
             result["display_command"],
-            "tgcs schedule print --profile-id frontend-only --interval-minutes 15 --delivery-mode dry-run",
+            "tgcs schedule print --profile-id frontend-only --interval-minutes 15 --delivery-mode live",
         )
-        self.assertIn("frontend-only practice scans", result["detail"])
+        self.assertIn("frontend-only AI reviews", result["detail"])
 
 
     def test_schedule_remove_dry_run_uses_fixed_schtasks_argv(self):
@@ -496,7 +496,7 @@ class DashboardSchedulerTests(unittest.TestCase):
                 "--profile-id",
                 "jobs-fast",
                 "--delivery-mode",
-                "dry-run",
+                "live",
             ],
         )
         self.assertIn(["launchctl", "load", "-w", str(plist_path)], calls)
@@ -567,7 +567,7 @@ class DashboardSchedulerTests(unittest.TestCase):
             timer_text = timer_path.read_text(encoding="utf-8")
 
         self.assertEqual(result["status"], "success")
-        self.assertIn(f"ExecStart={project_root / 'tgcs'} monitor run --profile-id jobs-fast --delivery-mode dry-run", service_text)
+        self.assertIn(f"ExecStart={project_root / 'tgcs'} monitor run --profile-id jobs-fast --delivery-mode live", service_text)
         self.assertIn("OnUnitActiveSec=15min", timer_text)
         self.assertIn(["systemctl", "--user", "daemon-reload"], calls)
         self.assertIn(["systemctl", "--user", "enable", "--now", "tgcs-jobs-fast-dry-run.timer"], calls)
@@ -644,7 +644,7 @@ class DashboardSchedulerTests(unittest.TestCase):
         self.assertTrue(status["available"])
         self.assertFalse(status["installed"])
         self.assertEqual(status["status"], "not_installed")
-        self.assertEqual(status["detail"], "Automatic practice scans are off.")
+        self.assertEqual(status["detail"], "Automatic AI reviews are off.")
         self.assertNotIn("ERROR", json.dumps(status))
 
 
@@ -713,10 +713,10 @@ class DashboardSchedulerTests(unittest.TestCase):
                 "available": True,
                 "installed": False,
                 "status": "not_installed",
-                "task_label": "jobs-fast dry-run",
+                "task_label": "jobs-fast AI review",
                 "interval_minutes": 15,
-                "detail": "Automatic practice scans are off.",
-                "next_action": "Turn on auto scan.",
+                "detail": "Automatic AI reviews are off.",
+                "next_action": "Turn on auto review.",
                 "checked_at": "2026-05-10T00:00:00Z",
             },
         ) as status_mock:

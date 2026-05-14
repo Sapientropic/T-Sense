@@ -52,7 +52,6 @@ type DeskActionConfirmation = {
 };
 
 function App() {
-  const { state, refresh, loadError } = useDashboardState();
   const {
     actions: deskActions,
     results: deskActionResults,
@@ -62,8 +61,10 @@ function App() {
     runAction,
   } = useDeskActions();
   const deskTelegram = useDeskTelegram();
-  const [activeTab, setActiveTab] = useState<Tab>("inbox");
+  const [activeTab, setActiveTab] = useState<Tab>("actions");
   const [busy, setBusy] = useState(false);
+  const headerBusy = busy || Boolean(busyActionId) || Boolean(deskTelegram.busy);
+  const { state, refresh, loadError } = useDashboardState({ busy: headerBusy });
   const [pendingDeskAction, setPendingDeskAction] = useState<DeskActionConfirmation | null>(null);
   const pendingDeskActionReturnFocus = useRef<HTMLElement | null>(null);
   const [settingsFocusTarget, setSettingsFocusTarget] = useState<SettingsTask | null>(null);
@@ -167,20 +168,6 @@ function App() {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, [activeTab]);
 
-  async function refreshNow() {
-    setBusy(true);
-    try {
-      await refresh();
-      await refreshStatusSurfaces();
-      await refreshDeliverySettings();
-      setNotice({ tone: "success", text: "State refreshed" });
-    } catch (error) {
-      setNotice({ tone: "error", text: errorMessage(error) });
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function act(cardId: string, action: string, note = "") {
     setBusy(true);
     setNotice(null);
@@ -246,11 +233,16 @@ function App() {
     setSettingsFocusTarget(task);
   }
 
-  async function runDeskAction(actionId: string) {
+  async function runDeskAction(actionId: string, body: Record<string, unknown> = {}) {
     setNotice(null);
     if (actionId === "live_delivery_human") {
       openSettings("notifications");
       setNotice({ tone: "success", text: "Opened notification settings" });
+      return;
+    }
+    if (actionId === "settings_ai") {
+      openSettings("ai");
+      setNotice({ tone: "success", text: "Opened AI API settings" });
       return;
     }
     const confirmation = deskActionConfirmation(actionId);
@@ -259,7 +251,7 @@ function App() {
       setPendingDeskAction(confirmation);
       return;
     }
-    await executeDeskAction(actionId);
+    await executeDeskAction(actionId, body);
   }
 
   const cancelPendingDeskAction = useCallback(() => {
@@ -286,9 +278,9 @@ function App() {
       </a>
       <div className="pixel-grid" aria-hidden="true" />
       <ConsoleHeader
-        busy={busy || Boolean(busyActionId) || Boolean(deskTelegram.busy)}
+        busy={headerBusy}
+        onNewScan={() => void runDeskAction("monitor_jobs_dry_run")}
         onOpenUpdates={() => openSettings("updates")}
-        onRefresh={refreshNow}
         updateAvailableCount={updateAvailableCount}
       />
 
@@ -369,6 +361,7 @@ function App() {
                 createProfileFromBrief={createProfileFromBrief}
                 profileCreateResult={profileCreateResult}
                 busy={busy}
+                onGenerateProfileSuggestions={generateFeedbackProfileSuggestions}
                 onOpenStart={() => setActiveTab("actions")}
               />
             )}
@@ -377,7 +370,7 @@ function App() {
                 runs={state.runs}
                 onOpenProfiles={() => setActiveTab("profiles")}
                 onOpenReview={() => setActiveTab("inbox")}
-                onRunDeskAction={(actionId) => void runDeskAction(actionId)}
+                onRunDeskAction={(actionId, body) => void runDeskAction(actionId, body)}
               />
             )}
             {activeTab === "settings" && (
@@ -389,6 +382,7 @@ function App() {
                     sourceLibrary: deskSources,
                     sourceLibraryError: deskSourcesError,
                     sourceImportResult,
+                    profiles: state.profiles,
                     previewSourceImport,
                     importSources,
                     importStarterSources,
@@ -465,17 +459,17 @@ function deskActionConfirmation(actionId: string): DeskActionConfirmation | null
   if (actionId === "schedule_install_dry_run") {
     return {
       actionId,
-      title: "Turn on automatic practice scans?",
-      detail: "Signal Desk will check for new cards every 15 minutes in the background. It stays local and sends no live Telegram alerts.",
-      confirmLabel: "Turn on auto scan",
+      title: "Turn on automatic AI reviews?",
+      detail: "Signal Desk will check for new Review cards every 15 minutes in the background. It stays local and sends no live Telegram alerts.",
+      confirmLabel: "Turn on auto review",
     };
   }
   if (actionId === "schedule_remove_dry_run") {
     return {
       actionId,
-      title: "Turn off automatic practice scans?",
-      detail: "Background checks will stop. Manual scans in Signal Desk will still work.",
-      confirmLabel: "Turn off auto scan",
+      title: "Turn off automatic AI reviews?",
+      detail: "Background checks will stop. Manual AI reviews in Signal Desk will still work.",
+      confirmLabel: "Turn off auto review",
     };
   }
   if (actionId === "sources_pause_inaccessible") {

@@ -84,3 +84,5 @@ methodology_label: "Telegram opportunity channels"
 ## Follow-up Preferences
 - not full stack
 - i don't want full stack
+- not lead
+- Desk feedback tuning: Analyze the recent Keep/Skip/Wrong Match feedback. Extract the generalized matching patterns, industry preferences, and explicit exclusions. Do not list specific card titles. Write broad, reusable rules.

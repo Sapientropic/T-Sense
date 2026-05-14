@@ -21,6 +21,7 @@ import type {
   FeedbackExportResult,
   FeedbackProfileSuggestionsResult,
   GitUpdateStatus,
+  Profile,
   SourceImportResult,
   SourceInsight,
   SourceStat,
@@ -48,15 +49,24 @@ export type SettingsSourcesController = {
   sourceLibrary: DeskSourcesResult | null;
   sourceLibraryError: string | null;
   sourceImportResult: SourceImportResult | null;
+  profiles: Profile[];
   previewSourceImport: (sources: string, topic: string) => Promise<SourceImportResult>;
   importSources: (sources: string, topic: string) => Promise<SourceImportResult>;
   importStarterSources: (topic: string) => Promise<SourceImportResult>;
-  previewSourceAssistant: (instruction: string, topic: string, confirmExternalAi?: boolean) => Promise<SourceImportResult>;
+  previewSourceAssistant: (
+    instruction: string,
+    topic: string,
+    confirmExternalAi?: boolean,
+    profileId?: string,
+    folderName?: string,
+  ) => Promise<SourceImportResult>;
   applySourceAssistant: (
     instruction: string,
     topic: string,
     confirmExternalAi?: boolean,
     resolvedPlan?: SourceImportResult["resolved_plan"],
+    profileId?: string,
+    folderName?: string,
   ) => Promise<SourceImportResult>;
   setSourceEnabled: (sourceId: string, enabled: boolean) => Promise<void>;
   removeSource: (sourceId: string) => Promise<void>;
@@ -133,6 +143,7 @@ export function SettingsView({
     sourceLibrary,
     sourceLibraryError,
     sourceImportResult,
+    profiles,
     previewSourceImport,
     importSources,
     importStarterSources,
@@ -220,6 +231,7 @@ export function SettingsView({
             previewSourceAssistant={previewSourceAssistant}
             applySourceAssistant={applySourceAssistant}
             previewSourceImport={previewSourceImport}
+            profiles={profiles}
             result={sourceImportResult}
           />
           <SourceLibraryPanel

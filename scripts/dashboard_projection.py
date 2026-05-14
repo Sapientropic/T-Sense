@@ -12,6 +12,7 @@ from scripts import (
     dashboard_opportunities as _dashboard_opportunities,
     dashboard_profiles as _dashboard_profiles,
     dashboard_setup as _dashboard_setup,
+    report as report,
     source_insights as _source_insights,
 )
 from scripts.item_display import display_item_title
@@ -21,7 +22,6 @@ from scripts.monitor_common import (
     PROFILE_PATCH_SCHEMA_VERSION,
     PROJECT_ROOT,
     parse_json,
-    sha256_text,
 )
 from scripts.monitor_feedback import feedback_summary, validation_summary
 from scripts.profile_patches import REVIEW_LEARNING_PATCH_NOTE
@@ -195,6 +195,7 @@ def dashboard_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         profiles=internal_profiles,
         runs=internal_runs,
         delivery_targets=delivery_targets,
+        ai_configured=report.llm_key_available(),
     )
     return {
         "schema_version": "dashboard_state_v1",
@@ -551,30 +552,14 @@ def profile_patch_apply_readiness(
             "label": "Not pending",
             "detail": "This diff is not waiting for apply.",
         }
-    if not base_profile_hash:
-        return {
-            "status": "unknown",
-            "label": "Needs check",
-            "detail": "No base profile hash was recorded for this diff.",
-        }
-    path = Path(profile_path)
-    if not path.exists():
-        return {
-            "status": "blocked",
-            "label": "Profile missing",
-            "detail": "The profile file could not be found, so this diff cannot be applied safely.",
-        }
-    current_hash = sha256_text(path.read_text(encoding="utf-8"))
-    if current_hash != base_profile_hash:
-        return {
-            "status": "blocked",
-            "label": "Profile changed",
-            "detail": "The profile file changed since this diff was suggested; review the file before applying.",
-        }
+    # The Desk treats profile changes as reviewable suggestions that can be
+    # edited, applied, or cleared. Do not surface base-hash drift as a blocker:
+    # apply_profile_patch snapshots the current file before writing the proposal.
+    _ = profile_path, base_profile_hash
     return {
         "status": "ready",
-        "label": "Safe to apply",
-        "detail": "The profile still matches the base hash captured when this diff was suggested.",
+        "label": "Ready",
+        "detail": "Review or edit the suggestion, then apply or clear it.",
     }
 
 

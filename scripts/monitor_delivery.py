@@ -52,6 +52,24 @@ def apply_delivery_runtime_overrides(conn, config: MonitorConfig) -> MonitorConf
     return MonitorConfig(path=config.path, profiles=config.profiles, delivery_targets=targets, defaults=config.defaults)
 
 
+def alert_card_keyboard(card: dict[str, Any]) -> dict[str, Any] | None:
+    card_id = str(card.get("card_id") or "").strip()
+    if not card_id:
+        return None
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "Applied", "callback_data": f"card:applied:{card_id}"},
+                {"text": "Save", "callback_data": f"card:saved:{card_id}"},
+            ],
+            [
+                {"text": "Dismiss", "callback_data": f"card:dismissed:{card_id}"},
+                {"text": "Duplicate", "callback_data": f"card:duplicate:{card_id}"},
+            ],
+        ]
+    }
+
+
 def run_delivery(
     *,
     conn,
@@ -92,6 +110,7 @@ def run_delivery(
                 chat_id=str(target.get("chat_id") or ""),
                 text=text,
                 mode=mode,
+                reply_markup=alert_card_keyboard(card),
             )
             event = monitor_state.record_alert_event(
                 conn,

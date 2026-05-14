@@ -558,7 +558,14 @@
   background: var(--ink);
   color: var(--paper);
   font-weight: var(--badge-weight);
+  line-height: 1.1;
+  text-align: center;
   cursor: pointer;
+}
+
+.journey-button span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .journey-button:hover,
@@ -808,6 +815,11 @@
 .telegram-status-grid span.ready {
   border-color: color-mix(in oklch, var(--teal) 48%, var(--paper-3));
   background: var(--surface-link);
+}
+
+.telegram-status-grid span.blocked {
+  border-color: color-mix(in oklch, var(--signal-danger) 36%, var(--paper-3));
+  background: color-mix(in oklch, var(--surface-warm-strong) 88%, var(--signal-danger));
 }
 
 .telegram-status-grid strong {

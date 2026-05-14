@@ -48,18 +48,20 @@ export function buildJourneySteps(
 ): JourneyStep[] {
   const actionIds = new Set(actions.map((action) => action.action_id));
   const stage = setupStatus?.stage ?? "";
+  const needsAiKey = stage === "needs_ai_key";
   const hasRuns = Boolean(setupStatus?.has_runs);
-  const telegramReady = Boolean(telegramStatus?.session_ready);
-  const workspaceDone = Boolean(setupStatus?.has_profiles && stage !== "needs_profiles" && stage !== "needs_enabled_profile");
+  const telegramReady = Boolean(telegramStatus?.credentials_ready && telegramStatus?.session_ready);
+  const workspaceDone = Boolean(setupStatus?.has_profiles && !["needs_ai_key", "needs_profiles", "needs_enabled_profile"].includes(stage));
   const sourceAttention = stage === "needs_source_access";
   const ready = stage === "ready";
   const sourceAccessCheck = setupCheckById(setupStatus, "source_access");
   const sourceAccessDetail = sourceAccessCheck?.detail || "";
-  const sourceAccessResult = results.sources_probe_access?.source_access || sourceAccessCheck?.source_access;
+  const sourceAccessActionResult = results.sources_probe_access;
+  const sourceAccessResult = sourceAccessActionResult?.source_access || sourceAccessCheck?.source_access;
   const sourceAccessHasInaccessible = Boolean(sourceAccessResult && sourceAccessResult.inaccessible_count > 0);
   const sourceAccessHasQuiet = Boolean(sourceAccessResult && sourceAccessResult.quiet_count > 0);
-  const sourceStepDetail = results.sources_probe_access?.detail || sourceAccessDetail;
-  const sourceNeedsCleanup = sourceAttention || sourceAccessHasInaccessible || sourceAccessHasQuiet;
+  const sourceStepDetail = sourceAccessActionResult?.source_access ? sourceAccessActionResult.detail : sourceAccessDetail;
+  const sourceNeedsCleanup = sourceAttention || (workspaceDone && (sourceAccessHasInaccessible || sourceAccessHasQuiet));
 
   const hasSuccess = (actionId: string) => results[actionId]?.status === "success";
   const dryRunScheduleOn = scheduler?.installed || (hasSuccess("schedule_install_dry_run") && results.schedule_remove_dry_run?.status !== "success");
@@ -67,40 +69,44 @@ export function buildJourneySteps(
   const schedulerCanInstall = scheduler ? (scheduler.can_install ?? scheduler.available !== false) : true;
   const schedulerCanRemove = scheduler ? (scheduler.can_remove ?? schedulerCanInstall) : true;
   const automationDetail = scheduler?.installed
-    ? "Automatic practice scans are on every 15 minutes."
+    ? "Automatic AI reviews are on every 15 minutes."
     : schedulerCanInstall
-      ? "Automatic practice scans can run every 15 minutes from Signal Desk."
-      : "Automatic practice scans need the manual schedule preview on this machine.";
-  const automationStateLabel = scheduler?.installed ? "Auto scan on" : schedulerCanInstall ? "Off" : "Manual";
+      ? "Automatic AI reviews can run every 15 minutes from Signal Desk."
+      : "Automatic AI reviews need the manual schedule preview on this machine.";
+  const automationStateLabel = scheduler?.installed ? "Auto review on" : schedulerCanInstall ? "Off" : "Manual";
   const automationState =
     ready || stage === "needs_delivery_target"
       ? schedulerCanInstall || scheduler?.installed
         ? "ready"
         : "manual"
       : "blocked";
-  const availableButtons = (buttons: JourneyButton[]) => buttons.filter((button) => actionIds.has(button.actionId));
+  const availableButtons = (buttons: JourneyButton[]) => buttons.filter((button) => actionIds.has(button.actionId) || button.actionId.startsWith("settings_"));
   const availableAdvanced = (ids: string[]) => ids.filter((actionId) => actionIds.has(actionId));
 
   return [
     {
-      key: "demo",
-      title: "Try Signal Desk without Telegram",
-      detail: "Open a sample report first, so a new user can see the product before connecting accounts.",
-      state: hasSuccess("demo_render") ? "done" : "ready",
-      stateLabel: hasSuccess("demo_render") ? "Demo ready" : "Optional",
-      buttons: availableButtons([{ actionId: "demo_render", label: "Create demo report", variant: "secondary" }]),
-      advancedActionIds: availableAdvanced(["demo_render"]),
+      key: "ai",
+      title: "Connect AI matching",
+      detail: "Save an AI API key first. Profile generation, source selection, and Review cards all depend on AI matching.",
+      state: needsAiKey ? "active" : "done",
+      stateLabel: needsAiKey ? "Start here" : "Ready",
+      buttons: availableButtons([
+        {
+          actionId: "settings_ai",
+          label: needsAiKey ? "Add AI API key" : "AI API settings",
+          variant: needsAiKey ? "primary" : "secondary",
+        },
+      ]),
+      advancedActionIds: [],
     },
     {
       key: "telegram",
       title: "Connect Telegram",
-      detail: telegramReady
-        ? "Telegram is connected for local scans. Check setup only if login changes."
-        : "Connect Telegram so Signal Desk can read your saved channels inside this local app.",
+      detail: telegramDetail(telegramStatus, telegramReady),
       state: telegramState(stage, telegramReady),
       stateLabel: telegramStateLabel(stage, telegramReady),
       buttons: availableButtons([
-        { actionId: "doctor_jobs", label: "Check setup", variant: stage === "needs_first_run" || ready ? "secondary" : "primary" },
+        { actionId: "doctor_jobs", label: "Check", variant: stage === "needs_first_run" || ready ? "secondary" : "primary" },
       ]),
       advancedActionIds: availableAdvanced(["doctor_jobs", "login_human"]),
     },
@@ -119,14 +125,14 @@ export function buildJourneySteps(
       buttons: availableButtons([
         { actionId: "init_jobs", label: workspaceDone ? "Refresh files" : "Prepare files", variant: workspaceDone ? "secondary" : "primary" },
         { actionId: "sources_import_jobs", label: "Fix channels", variant: sourceAttention ? "primary" : "secondary" },
-        { actionId: "sources_probe_access", label: "Check channels", variant: sourceAttention ? "primary" : "secondary" },
+        { actionId: "sources_probe_access", label: "Check access", variant: sourceAttention ? "primary" : "secondary" },
         ...(sourceAccessHasInaccessible
           ? [{ actionId: "sources_pause_inaccessible", label: "Pause unreadable", variant: "secondary" as const }]
           : []),
         ...(sourceAccessHasQuiet
-          ? [{ actionId: "sources_keep_accessible", label: "Keep active only", variant: "secondary" as const }]
+          ? [{ actionId: "sources_keep_accessible", label: "Active only", variant: "secondary" as const }]
           : []),
-        { actionId: "sources_validate", label: "Check file format", variant: "secondary" },
+        { actionId: "sources_validate", label: "File check", variant: "secondary" },
       ]),
       advancedActionIds: availableAdvanced([
         "init_jobs",
@@ -139,11 +145,11 @@ export function buildJourneySteps(
     },
     {
       key: "first-run",
-      title: hasRuns ? "Run another scan" : "Run the first scan",
-      detail: "Fetch the latest saved-channel messages and create Review cards locally. Nothing sends to Telegram.",
+      title: hasRuns ? "Run another AI review" : "Run first AI review",
+      detail: "Fetch the latest saved-channel messages and let the configured AI model create Review cards locally. Nothing sends to Telegram.",
       state: firstRunState(stage, hasRuns, workspaceDone, sourceAttention, telegramReady),
       stateLabel: firstRunStateLabel(stage, hasRuns, sourceAttention, telegramReady),
-      buttons: availableButtons([{ actionId: "monitor_jobs_dry_run", label: hasRuns ? "Run fresh scan" : "Run first scan", variant: "primary" }]),
+      buttons: availableButtons([{ actionId: "monitor_jobs_dry_run", label: "Run review", variant: "primary" }]),
       advancedActionIds: availableAdvanced(["monitor_jobs_dry_run"]),
     },
     {
@@ -153,9 +159,9 @@ export function buildJourneySteps(
       state: automationState,
       stateLabel: ready || stage === "needs_delivery_target" ? automationStateLabel : "Finish setup first",
       buttons: availableButtons([
-        { actionId: "schedule_preview", label: "Preview schedule", variant: "secondary" },
-        ...(!dryRunScheduleOn && schedulerCanInstall ? [{ actionId: "schedule_install_dry_run", label: "Turn on auto scan", variant: "primary" as const }] : []),
-        ...(dryRunScheduleOn && schedulerCanRemove ? [{ actionId: "schedule_remove_dry_run", label: "Turn off auto scan", variant: "secondary" as const }] : []),
+        { actionId: "schedule_preview", label: "Preview", variant: "secondary" },
+        ...(!dryRunScheduleOn && schedulerCanInstall ? [{ actionId: "schedule_install_dry_run", label: "Turn on", variant: "primary" as const }] : []),
+        ...(dryRunScheduleOn && schedulerCanRemove ? [{ actionId: "schedule_remove_dry_run", label: "Turn off", variant: "secondary" as const }] : []),
         { actionId: "live_delivery_human", label: "Notifications", variant: "secondary" },
       ]),
       advancedActionIds: availableAdvanced([
@@ -170,8 +176,8 @@ export function buildJourneySteps(
       title: "Tune results",
       detail: "Teach Signal Desk which results matter by reviewing cards and adjusting your preferences.",
       state: hasRuns || ready ? "ready" : "blocked",
-      stateLabel: hasRuns || ready ? "Available after review" : "Needs a scan first",
-      buttons: availableButtons([{ actionId: "feedback_export", label: "Generate profile suggestions", variant: "secondary" }]),
+      stateLabel: hasRuns || ready ? "Available after review" : "Needs an AI review first",
+      buttons: availableButtons([{ actionId: "feedback_export", label: "Suggest rules", variant: "secondary" }]),
       advancedActionIds: availableAdvanced(["feedback_export"]),
     },
   ];
@@ -186,16 +192,19 @@ export function buildStartSummary(
   reviewCount = 0,
 ): StartSummaryItem[] {
   const stage = setupStatus?.stage ?? "";
-  const workspaceReady = Boolean(setupStatus?.has_profiles && stage !== "needs_profiles" && stage !== "needs_enabled_profile");
-  const telegramValue = telegramStatus?.session_ready
-    ? "Connected"
-    : telegramStatus?.credentials_ready
-      ? "Needs login"
-      : "Needs app details";
+  const workspaceReady = Boolean(setupStatus?.has_profiles && !["needs_ai_key", "needs_profiles", "needs_enabled_profile"].includes(stage));
+  const telegramValue =
+    telegramStatus?.credentials_ready && telegramStatus?.session_ready
+      ? "Ready"
+      : telegramStatus?.session_ready
+        ? "Missing app details"
+        : telegramStatus?.credentials_ready
+          ? "Needs login"
+          : "Not connected";
   const activeStep = steps.find((step) => step.state === "active");
   const activeButton = activeStep?.key === "telegram" ? undefined : primaryButtonForStep(activeStep);
   const nextValue = activeStep?.title
-    ?? (reviewCount > 0 ? `Review ${reviewCount} card${reviewCount === 1 ? "" : "s"}` : !setupStatus?.has_runs ? "Run first scan" : "Run another scan");
+    ?? (reviewCount > 0 ? `Review ${reviewCount} card${reviewCount === 1 ? "" : "s"}` : !setupStatus?.has_runs ? "Run first AI review" : "Run another AI review");
   const automationValue = scheduler?.installed ? "On" : scheduler?.available === false ? "Manual" : "Off";
   const notifications = notificationReadiness(targets);
   const notificationAction =
@@ -215,6 +224,19 @@ export function buildStartSummary(
 
 function primaryButtonForStep(step: JourneyStep | undefined) {
   return step?.buttons.find((button) => button.variant === "primary") ?? step?.buttons[0];
+}
+
+function telegramDetail(telegramStatus: DeskTelegramStatus | null | undefined, telegramReady: boolean) {
+  if (telegramReady) {
+    return "Telegram is ready for local channel scans. Check only if login changes.";
+  }
+  if (telegramStatus?.session_ready) {
+    return "Telegram login is saved, but app credentials are missing. Save the app ID and hash before scanning channels.";
+  }
+  if (telegramStatus?.credentials_ready) {
+    return "App credentials are saved. Finish Telegram login before scanning channels.";
+  }
+  return "Connect Telegram so Signal Desk can read your saved channels inside this local app.";
 }
 
 export function notificationReadiness(targets: DeliveryTarget[]): NotificationReadiness {
@@ -250,18 +272,18 @@ function sourceSetupDetail({
   sourceAccessHasQuiet: boolean;
 }) {
   if (sourceAccessHasInaccessible) {
-    return "Some saved channels cannot be read. Check channels, then pause unreadable ones.";
+    return "Some saved channels cannot be read. Check access, then pause unreadable ones.";
   }
   if (sourceAccessHasQuiet) {
     return "Some saved channels are quiet. Keep active channels only if you want a cleaner list.";
   }
   if (sourceAttention) {
-    return "Check saved-channel access before the next scan.";
+    return "Check saved-channel access before the next AI review.";
   }
   if (workspaceDone) {
     return "Local files are ready. Refresh only if your saved channels changed.";
   }
-  return "Create the local files Signal Desk needs after Telegram is connected.";
+  return "Create the local files Signal Desk needs after Telegram is ready.";
 }
 
 function setupCheckById(setupStatus: DashboardState["setup_status"] | undefined, checkId: string) {
@@ -269,6 +291,9 @@ function setupCheckById(setupStatus: DashboardState["setup_status"] | undefined,
 }
 
 function workspaceState(stage: string, workspaceDone: boolean, sourceAttention: boolean): JourneyState {
+  if (stage === "needs_ai_key") {
+    return "blocked";
+  }
   if (sourceAttention || stage === "needs_profiles" || stage === "needs_enabled_profile") {
     return "active";
   }
@@ -285,6 +310,9 @@ function workspaceStateLabel(stage: string, workspaceDone: boolean, sourceAttent
   if (stage === "needs_profiles") {
     return "Start here";
   }
+  if (stage === "needs_ai_key") {
+    return "AI first";
+  }
   return workspaceDone ? "Ready" : "Create first";
 }
 
@@ -300,7 +328,7 @@ function telegramState(stage: string, telegramReady: boolean): JourneyState {
 
 function telegramStateLabel(stage: string, telegramReady: boolean) {
   if (telegramReady) {
-    return "Connected";
+    return "Ready";
   }
   if (stage === "ready" || stage === "needs_delivery_target") {
     return "Optional";
@@ -334,6 +362,9 @@ function firstRunStateLabel(stage: string, hasRuns: boolean, sourceAttention: bo
   if (sourceAttention) {
     return "Fix channels first";
   }
+  if (stage === "needs_ai_key") {
+    return "Add AI key first";
+  }
   if (stage === "needs_first_run") {
     return "Next";
   }
@@ -341,5 +372,12 @@ function firstRunStateLabel(stage: string, hasRuns: boolean, sourceAttention: bo
 }
 
 function firstRunBlocked(stage: string, workspaceDone: boolean, sourceAttention: boolean, telegramReady: boolean) {
-  return sourceAttention || !workspaceDone || !telegramReady || stage === "needs_profiles" || stage === "needs_enabled_profile";
+  return (
+    sourceAttention ||
+    !workspaceDone ||
+    !telegramReady ||
+    stage === "needs_ai_key" ||
+    stage === "needs_profiles" ||
+    stage === "needs_enabled_profile"
+  );
 }

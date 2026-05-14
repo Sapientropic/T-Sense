@@ -134,9 +134,13 @@
     font-size: 30px;
   }
 
-  .run-health-day {
-    min-height: 88px;
-    padding: 7px;
+  .manual-scan-panel {
+    padding: 9px;
+  }
+
+  .manual-scan-option {
+    min-height: 64px;
+    padding: 8px;
   }
 
   .run-row .run-primary span {
@@ -441,6 +445,12 @@
       linear-gradient(90deg, color-mix(in oklch, var(--teal) 5%, transparent) 1px, transparent 1px),
       color-mix(in oklch, var(--ink-2) 82%, transparent);
     background-size: 14px 100%;
+  }
+
+  .review-card .action-cluster-label,
+  .review-card .follow-up-head > label,
+  .review-card .follow-up-group-label {
+    color: color-mix(in oklch, var(--paper) 78%, var(--muted));
   }
 
   .action-cluster {
@@ -1133,12 +1143,8 @@
     width: 100%;
   }
 
-  .run-health-week {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .run-health-day {
-    min-height: 82px;
+  .manual-scan-options {
+    grid-template-columns: 1fr;
   }
 
   @media (max-width: 375px) {
@@ -1159,16 +1165,8 @@
       grid-template-columns: 1fr;
     }
 
-    .run-health-week {
-      grid-template-columns: 1fr;
-    }
-
-    .run-health-day.is-quiet {
-      display: none;
-    }
-
-    .run-health-day {
-      min-height: 44px;
+    .manual-scan-option {
+      min-height: 46px;
       padding: 7px 8px;
     }
   }

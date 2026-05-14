@@ -1,18 +1,18 @@
 import type { ReactNode } from "react";
-import { RefreshCw, ShieldCheck } from "lucide-react";
+import { Play, ShieldCheck } from "lucide-react";
 
 import signalIcon from "../assets/tgcs-signal-icon.png";
 import type { Tab } from "../domain/types";
 
 export function ConsoleHeader({
   busy,
+  onNewScan,
   onOpenUpdates,
-  onRefresh,
   updateAvailableCount = 0,
 }: {
   busy: boolean;
+  onNewScan: () => void;
   onOpenUpdates: () => void;
-  onRefresh: () => void;
   updateAvailableCount?: number;
 }) {
   const hasUpdate = updateAvailableCount > 0;
@@ -42,9 +42,9 @@ export function ConsoleHeader({
           </div>
         </div>
       </div>
-      <button className="refresh-button" onClick={onRefresh} disabled={busy} title="Refresh state" type="button">
-        <RefreshCw size={18} className={busy ? "spin" : ""} />
-        <span>Refresh</span>
+      <button className="refresh-button" onClick={onNewScan} disabled={busy} title="Run fresh AI review" type="button">
+        <Play size={18} />
+        <span>New scan</span>
       </button>
     </header>
   );

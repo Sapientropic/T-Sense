@@ -165,7 +165,7 @@ def preferred_scheduler_profile_id(
 def schedule_display_command(profile_id: str) -> str:
     return (
         f"tgcs schedule print --profile-id {profile_id} "
-        f"--interval-minutes {DESK_SCHEDULER_INTERVAL_MINUTES} --delivery-mode dry-run"
+        f"--interval-minutes {DESK_SCHEDULER_INTERVAL_MINUTES} --delivery-mode live"
     )
 
 
@@ -209,7 +209,7 @@ def scheduler_base(backend: str, *, profile_id: str | None = None) -> dict:
     can_install = backend in {"windows_schtasks", "macos_launchd", "linux_systemd_user"}
     return {
         "schema_version": "desk_scheduler_status_v1",
-        "task_label": f"{selected_profile_id} dry-run",
+        "task_label": f"{selected_profile_id} AI review",
         "profile_id": selected_profile_id,
         "interval_minutes": DESK_SCHEDULER_INTERVAL_MINUTES,
         "platform": sys.platform,
@@ -267,7 +267,7 @@ def fixed_monitor_argv(entry: Path, *, profile_id: str | None = None) -> list[st
         "--profile-id",
         selected_profile_id,
         "--delivery-mode",
-        "dry-run",
+        "live",
     ]
 
 
@@ -313,7 +313,7 @@ def desk_scheduler_status() -> dict:
             "available": False,
             "installed": False,
             "status": "manual" if sys.platform.startswith("linux") else "unavailable",
-            "detail": "Automatic scan install is not available on this machine; use the schedule preview or manual scans.",
+            "detail": "Automatic review install is not available on this machine; use the schedule preview or manual reviews.",
             "next_action": "Run tgcs schedule print --platform cron for a no-side-effect crontab preview.",
         }
 
@@ -324,11 +324,11 @@ def desk_scheduler_status() -> dict:
             "available": True,
             "installed": installed,
             "status": "installed" if installed else "not_installed",
-            "detail": "Automatic practice scans are on every 15 minutes." if installed else "Automatic practice scans are off.",
+            "detail": "Automatic AI reviews are on every 15 minutes." if installed else "Automatic AI reviews are off.",
             "next_action": (
                 "You can turn them off from Signal Desk when you no longer need background checks."
                 if installed
-                else "Turn on auto scan from Signal Desk when you want background checks."
+                else "Turn on auto review from Signal Desk when you want background checks."
             ),
         }
 
@@ -339,11 +339,11 @@ def desk_scheduler_status() -> dict:
             "available": True,
             "installed": installed,
             "status": "installed" if installed else "not_installed",
-            "detail": "Automatic practice scans are on every 15 minutes." if installed else "Automatic practice scans are off.",
+            "detail": "Automatic AI reviews are on every 15 minutes." if installed else "Automatic AI reviews are off.",
             "next_action": (
                 "You can turn them off from Signal Desk when you no longer need background checks."
                 if installed
-                else "Turn on auto scan from Signal Desk when you want background checks."
+                else "Turn on auto review from Signal Desk when you want background checks."
             ),
         }
 
@@ -374,7 +374,7 @@ def desk_scheduler_status() -> dict:
             "available": True,
             "installed": True,
             "status": "installed",
-            "detail": "Automatic practice scans are on every 15 minutes.",
+            "detail": "Automatic AI reviews are on every 15 minutes.",
             "next_action": "You can turn them off from Signal Desk when you no longer need background checks.",
         }
     return {
@@ -382,8 +382,8 @@ def desk_scheduler_status() -> dict:
         "available": True,
         "installed": False,
         "status": "not_installed",
-        "detail": "Automatic practice scans are off.",
-        "next_action": "Turn on auto scan from Signal Desk when you want background checks.",
+        "detail": "Automatic AI reviews are off.",
+        "next_action": "Turn on auto review from Signal Desk when you want background checks.",
     }
 
 
@@ -416,14 +416,14 @@ def write_systemd_units(service_path: Path, timer_path: Path, entry: Path, *, pr
             "--profile-id",
             selected_profile_id,
             "--delivery-mode",
-            "dry-run",
+            "live",
         ]
     )
     service_path.write_text(
         "\n".join(
             [
                 "[Unit]",
-                f"Description=T-Sense {selected_profile_id} dry-run scan",
+                f"Description=T-Sense {selected_profile_id} AI review",
                 "",
                 "[Service]",
                 "Type=oneshot",
@@ -438,7 +438,7 @@ def write_systemd_units(service_path: Path, timer_path: Path, entry: Path, *, pr
         "\n".join(
             [
                 "[Unit]",
-                f"Description=Run T-Sense {selected_profile_id} dry-run scan every 15 minutes",
+                f"Description=Run T-Sense {selected_profile_id} AI review every 15 minutes",
                 "",
                 "[Timer]",
                 "OnBootSec=1min",
@@ -493,7 +493,7 @@ def run_desk_scheduler_action(action_id: str, *, body: dict | None = None) -> di
         # Keep this as a single fixed /TR argument in a list argv call. Do not
         # refactor this path through shell=True: the browser must never be able
         # to turn scheduler setup into a local shell proxy.
-        task_action = f'"{tgcs_entry}" monitor run --profile-id {profile_id} --delivery-mode dry-run'
+        task_action = f'"{tgcs_entry}" monitor run --profile-id {profile_id} --delivery-mode live'
         if action_id == "schedule_install_dry_run":
             args = [
                 "schtasks.exe",
@@ -509,12 +509,12 @@ def run_desk_scheduler_action(action_id: str, *, body: dict | None = None) -> di
                 "/F",
             ]
             success_title = "Auto scan is on"
-            success_detail = f"Windows Task Scheduler will run {profile_id} practice scans every 15 minutes. Live Telegram delivery is still off."
+            success_detail = f"Windows Task Scheduler will run {profile_id} AI reviews every 15 minutes. Telegram alerts use the saved notification target."
             success_next = "You can leave Signal Desk and return later to review new Inbox cards."
         else:
             args = ["schtasks.exe", "/Delete", "/TN", DESK_SCHEDULER_TASK_NAME, "/F"]
             success_title = "Auto scan is off"
-            success_detail = "Signal Desk removed the Windows Task Scheduler task for automatic practice scans."
+            success_detail = "Signal Desk removed the Windows Task Scheduler task for automatic AI reviews."
             success_next = "Manual scans still work from Signal Desk."
 
         try:
@@ -566,12 +566,12 @@ def run_desk_scheduler_action(action_id: str, *, body: dict | None = None) -> di
             write_launchd_plist(plist_path, tgcs_entry, profile_id=profile_id)
             args = ["launchctl", "load", "-w", str(plist_path)]
             success_title = "Auto scan is on"
-            success_detail = f"launchd will run {profile_id} practice scans every 15 minutes. Live Telegram delivery is still off."
+            success_detail = f"launchd will run {profile_id} AI reviews every 15 minutes. Telegram alerts use the saved notification target."
             success_next = "You can leave Signal Desk and return later to review new Inbox cards."
         else:
             args = ["launchctl", "unload", "-w", str(plist_path)]
             success_title = "Auto scan is off"
-            success_detail = "Signal Desk removed the launchd LaunchAgent for automatic practice scans."
+            success_detail = "Signal Desk removed the launchd LaunchAgent for automatic AI reviews."
             success_next = "Manual scans still work from Signal Desk."
 
     elif backend == "linux_systemd_user":
@@ -596,12 +596,12 @@ def run_desk_scheduler_action(action_id: str, *, body: dict | None = None) -> di
                 )
             args = ["systemctl", "--user", "enable", "--now", f"{DESK_SCHEDULER_SYSTEMD_NAME}.timer"]
             success_title = "Auto scan is on"
-            success_detail = f"systemd --user will run {profile_id} practice scans every 15 minutes. Live Telegram delivery is still off."
+            success_detail = f"systemd --user will run {profile_id} AI reviews every 15 minutes. Telegram alerts use the saved notification target."
             success_next = "You can leave Signal Desk and return later to review new Inbox cards."
         else:
             args = ["systemctl", "--user", "disable", "--now", f"{DESK_SCHEDULER_SYSTEMD_NAME}.timer"]
             success_title = "Auto scan is off"
-            success_detail = "Signal Desk removed the systemd user timer for automatic practice scans."
+            success_detail = "Signal Desk removed the systemd user timer for automatic AI reviews."
             success_next = "Manual scans still work from Signal Desk."
     else:
         raise DashboardDeskActionError(f"Unknown scheduler backend: {backend}")

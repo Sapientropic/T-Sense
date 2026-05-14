@@ -31,6 +31,22 @@ class DashboardActionTests(unittest.TestCase):
                 self.assertIn("[redacted", result["detail"])
 
 
+    def test_run_desk_action_hides_python_traceback_from_setup_result(self):
+        completed = subprocess.CompletedProcess(
+            ["tgcs"],
+            1,
+            stdout="",
+            stderr="Traceback (most recent call last):\n  File \"x.py\", line 1\nRuntimeError: provider exploded",
+        )
+
+        with patch.object(dashboard_server.subprocess, "run", return_value=completed):
+            result = dashboard_server.run_desk_action("doctor_jobs")
+
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["detail"], "This setup check could not finish.")
+        self.assertNotIn("Traceback", json.dumps(result))
+
+
 
 if __name__ == "__main__":
     unittest.main()

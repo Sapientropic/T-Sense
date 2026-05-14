@@ -107,6 +107,34 @@ def _profile_id_from_body(body: dict | None) -> str:
     return _safe_profile_id((body or {}).get("profile_id"))
 
 
+def _scan_window_hours_from_body(body: dict | None) -> int | None:
+    payload = body or {}
+    if "scan_window_hours" not in payload and "hours" not in payload:
+        return None
+    value = payload.get("scan_window_hours", payload.get("hours"))
+    if isinstance(value, bool):
+        raise DashboardDeskActionError("Scan window must be a whole number of hours from 1 to 168.")
+    if isinstance(value, int):
+        hours = value
+    elif isinstance(value, str) and re.fullmatch(r"\d{1,3}", value.strip()):
+        hours = int(value.strip())
+    else:
+        raise DashboardDeskActionError("Scan window must be a whole number of hours from 1 to 168.")
+    if hours < 1 or hours > 168:
+        raise DashboardDeskActionError("Scan window must be between 1 and 168 hours.")
+    return hours
+
+
+def _set_or_append_argv_option(argv: list[str], option: str, value: str) -> None:
+    try:
+        index = argv.index(option)
+    except ValueError:
+        argv.extend([option, value])
+        return
+    if index + 1 < len(argv):
+        argv[index + 1] = value
+
+
 def _preferred_monitor_profile_id(body: dict | None = None) -> str:
     requested = _profile_id_from_body(body)
     if requested:
@@ -131,20 +159,27 @@ def _argv_for_action(action_id: str, action: dict, body: dict | None) -> list[st
             return argv
         if index + 1 < len(argv):
             argv[index + 1] = profile_id
+    if action_id == "monitor_jobs_dry_run":
+        hours = _scan_window_hours_from_body(body)
+        if hours is not None:
+            _set_or_append_argv_option(argv, "--hours", str(hours))
     return argv
 
 
 def _display_command_for_argv(action: dict, argv: list[str]) -> str:
     if argv[:2] == ["monitor", "run"] and "--profile-id" in argv:
         profile_id = argv[argv.index("--profile-id") + 1]
-        delivery_mode = "dry-run"
+        delivery_mode = "live"
         if "--delivery-mode" in argv:
             delivery_mode = argv[argv.index("--delivery-mode") + 1]
-        return f"tgcs monitor run --profile-id {profile_id} --delivery-mode {delivery_mode}"
+        hours = ""
+        if "--hours" in argv and argv.index("--hours") + 1 < len(argv):
+            hours = f" --hours {argv[argv.index('--hours') + 1]}"
+        return f"tgcs monitor run --profile-id {profile_id} --delivery-mode {delivery_mode}{hours}"
     if argv[:2] == ["schedule", "print"] and "--profile-id" in argv:
         profile_id = argv[argv.index("--profile-id") + 1]
         interval_minutes = str(desk_scheduler.DESK_SCHEDULER_INTERVAL_MINUTES)
-        delivery_mode = "dry-run"
+        delivery_mode = "live"
         if "--interval-minutes" in argv:
             interval_minutes = argv[argv.index("--interval-minutes") + 1]
         if "--delivery-mode" in argv:
@@ -188,7 +223,7 @@ DESK_ACTIONS: tuple[dict, ...] = (
         "run_mode": "execute",
         "display_command": "tgcs doctor --profile jobs",
         "argv": ["doctor", "--profile", "jobs", "--format", "json"],
-        "next_action": "Fix anything marked blocked, then run a practice scan.",
+        "next_action": "Fix anything marked blocked, then run an AI review.",
     },
     {
         "action_id": "sources_validate",
@@ -207,7 +242,7 @@ DESK_ACTIONS: tuple[dict, ...] = (
         "detail": "Test whether enabled sources can be resolved and read by the local Telegram session. Message text is not stored.",
         "run_mode": "execute",
         "display_command": "Signal Desk source access check",
-        "next_action": "Pause inaccessible sources or run a practice scan after access looks healthy.",
+        "next_action": "Pause inaccessible sources or run an AI review after access looks healthy.",
     },
     {
         "action_id": "sources_pause_inaccessible",
@@ -216,7 +251,7 @@ DESK_ACTIONS: tuple[dict, ...] = (
         "detail": "Disable sources from the latest access check that Telegram could not resolve or read.",
         "run_mode": "confirm_execute",
         "display_command": "Signal Desk: pause inaccessible sources",
-        "next_action": "Run a fresh practice scan after pausing inaccessible sources.",
+        "next_action": "Run a fresh AI review after pausing inaccessible sources.",
     },
     {
         "action_id": "sources_keep_accessible",
@@ -225,7 +260,7 @@ DESK_ACTIONS: tuple[dict, ...] = (
         "detail": "Disable inaccessible and quiet sources from the latest access check. Quiet sources are readable, but had no recent messages in the probe window.",
         "run_mode": "confirm_execute",
         "display_command": "Signal Desk: keep recently active sources",
-        "next_action": "Run a fresh practice scan after narrowing the source list.",
+        "next_action": "Run a fresh AI review after narrowing the source list.",
     },
     {
         "action_id": "sources_import_jobs",
@@ -235,28 +270,28 @@ DESK_ACTIONS: tuple[dict, ...] = (
         "run_mode": "execute",
         "display_command": "tgcs sources import channel_lists/jobs.txt --topic jobs",
         "argv": ["sources", "import", "channel_lists/jobs.txt", "--topic", "jobs", "--format", "json"],
-        "next_action": "Check setup again, then run a practice scan.",
+        "next_action": "Check setup again, then run an AI review.",
     },
     {
         "action_id": "monitor_jobs_dry_run",
         "group": "Run",
-        "title": "Run fresh practice scan",
-        "detail": "Fetch latest source messages and create local Review cards without sending Telegram alerts.",
+        "title": "Run AI review",
+        "detail": "Fetch latest source messages, create Review cards, and send Telegram alerts when notifications are enabled.",
         "run_mode": "execute",
-        "display_command": "tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run",
+        "display_command": "tgcs monitor run --profile-id jobs-fast --delivery-mode live",
         "argv": [
             "monitor",
             "run",
             "--profile-id",
             "jobs-fast",
             "--delivery-mode",
-            "dry-run",
+            "live",
             "--format",
             "json",
         ],
         "artifact_keys": ["html_path", "report_path", "manifest_path"],
         "timeout": 300,
-        "next_action": "Review the new cards or open the generated report.",
+        "next_action": "Review the new cards in Signal Desk or act on the Telegram alert buttons.",
     },
     {
         "action_id": "feedback_export",
@@ -272,10 +307,10 @@ DESK_ACTIONS: tuple[dict, ...] = (
     {
         "action_id": "schedule_preview",
         "group": "Schedule",
-        "title": "Preview auto scan",
-        "detail": "Preview the automatic practice-scan cadence before turning it on.",
+        "title": "Preview auto review",
+        "detail": "Preview the automatic AI-review cadence before turning it on.",
         "run_mode": "execute",
-        "display_command": "tgcs schedule print --profile-id jobs-fast --interval-minutes 15 --delivery-mode dry-run",
+        "display_command": "tgcs schedule print --profile-id jobs-fast --interval-minutes 15 --delivery-mode live",
         "argv": [
             "schedule",
             "print",
@@ -284,27 +319,27 @@ DESK_ACTIONS: tuple[dict, ...] = (
             "--interval-minutes",
             "15",
             "--delivery-mode",
-            "dry-run",
+            "live",
         ],
-        "next_action": "Turn on automatic practice scans from Signal Desk when ready.",
+        "next_action": "Turn on automatic AI reviews from Signal Desk when ready.",
     },
     {
         "action_id": "schedule_install_dry_run",
         "group": "Schedule",
-        "title": "Turn on auto scan",
-        "detail": "Create a Windows Task Scheduler task for local practice scans. It sends no live alerts.",
+        "title": "Turn on auto review",
+        "detail": "Create a local scheduler task for AI reviews and Telegram alerts when notifications are enabled.",
         "run_mode": "confirm_execute",
-        "display_command": "Windows Task Scheduler: jobs-fast dry-run",
-        "next_action": "Signal Desk will run local practice scans automatically every 15 minutes.",
+        "display_command": "Local scheduler: jobs-fast AI review",
+        "next_action": "Signal Desk will run local AI reviews automatically every 15 minutes.",
     },
     {
         "action_id": "schedule_remove_dry_run",
         "group": "Schedule",
-        "title": "Turn off auto scan",
-        "detail": "Remove the automatic practice scan task created by Signal Desk.",
+        "title": "Turn off auto review",
+        "detail": "Remove the automatic AI review task created by Signal Desk.",
         "run_mode": "confirm_execute",
-        "display_command": "Windows Task Scheduler: remove jobs-fast dry-run",
-        "next_action": "Automatic practice scans are removed. Manual scans still work in Signal Desk.",
+        "display_command": "Local scheduler: remove jobs-fast AI review",
+        "next_action": "Automatic AI reviews are removed. Manual reviews still work in Signal Desk.",
     },
     {
         "action_id": "bot_gateway_install_autostart",
@@ -411,7 +446,7 @@ def _desk_success_detail(action: dict, payload: dict | None, stdout: str) -> tup
     artifact_path = _desk_artifact_path(action, data)
     if action.get("action_id") == "schedule_preview":
         return (
-            "Automatic practice scans would run every 15 minutes. Live Telegram delivery stays off.",
+            "Automatic AI reviews would run every 15 minutes. Telegram alerts use the saved notification target.",
             "",
             action["next_action"],
         )
@@ -428,10 +463,10 @@ def _desk_success_detail(action: dict, payload: dict | None, stdout: str) -> tup
 def _desk_action_success_copy(action_id: str, fallback: str) -> str:
     return {
         "init_jobs": "Signal Desk files are ready. Next, check setup before scanning.",
-        "doctor_jobs": "Setup check finished. If no problem is shown, run a fresh practice scan.",
-        "sources_validate": "Source list check finished. If no problem is shown, run a fresh practice scan.",
-        "sources_import_jobs": "Starter channels were repaired. Next, check setup, then run a fresh practice scan.",
-        "monitor_jobs_dry_run": "Fresh practice scan finished. Open Review for cards or Runs for scan evidence.",
+        "doctor_jobs": "Setup check finished. If no problem is shown, run a fresh AI review.",
+        "sources_validate": "Source list check finished. If no problem is shown, run a fresh AI review.",
+        "sources_import_jobs": "Starter channels were repaired. Next, check setup, then run a fresh AI review.",
+        "monitor_jobs_dry_run": "Fresh AI review finished. Open Review for cards or use the Telegram alert buttons.",
     }.get(action_id, f"{fallback} finished.")
 
 def _desk_failure_detail(payload: dict | None, stdout: str, stderr: str) -> tuple[str, str]:
@@ -441,6 +476,11 @@ def _desk_failure_detail(payload: dict | None, stdout: str, stderr: str) -> tupl
         next_step = _desk_safe_result_text(error.get("next_step") or "Inspect the command output and fix the reported issue.")
         return message, next_step
     text = (stderr or stdout or "Desk action failed.").strip()
+    if text.lower().startswith("traceback (most recent call last):"):
+        return (
+            "This setup check could not finish.",
+            "Refresh Signal Desk and rerun the check. If it keeps failing, reconnect Telegram from Start.",
+        )
     return _desk_safe_result_text(text), "Inspect the command output and rerun the action when ready."
 
 def _desk_safe_result_text(*parts: object) -> str:
@@ -630,11 +670,11 @@ def _run_desk_action_unlocked(action_id: str, *, action: dict, body: dict | None
             title="Source access checked",
             detail=_source_access_health_detail(health),
             next_action=(
-                "Pause inaccessible sources, narrow to recently active sources, or run a fresh practice scan."
+                "Pause inaccessible sources, narrow to recently active sources, or run a fresh AI review."
                 if int(health.get("inaccessible_count") or 0)
-                else "Quiet sources are readable. Keep them, narrow to recently active sources, or run a fresh practice scan."
+                else "Quiet sources are readable. Keep them, narrow to recently active sources, or run a fresh AI review."
                 if int(health.get("quiet_count") or 0)
-                else "Run a fresh practice scan."
+                else "Run a fresh AI review."
             ),
             extra={"source_access": _source_access_action_summary(health)},
         )
@@ -671,7 +711,7 @@ def _run_desk_action_unlocked(action_id: str, *, action: dict, body: dict | None
     if action_id == "monitor_jobs_dry_run":
         _desk_update_action_progress(
             action_id,
-            detail="Practice scan running; scanning sources, prefiltering, and generating the local report. Keep Signal Desk open.",
+            detail="AI review running; scanning sources, matching cards, and preparing Telegram alerts. Keep Signal Desk open.",
         )
     try:
         completed = _subprocess_module().run(

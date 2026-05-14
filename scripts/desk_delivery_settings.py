@@ -98,19 +98,19 @@ def test_desk_delivery_target(conn, target_id: str, body: dict) -> dict:
     attempt = delivery.send_telegram_bot_message(
         target_id=clean_target_id,
         chat_id=chat_id,
-        text="Signal Desk notification test. No Telegram message was sent.",
-        mode="dry-run",
+        text="*Signal Desk notification test*\nIf you can read this, Telegram alerts can reach this chat.",
+        mode="live",
     ).to_dict()
     detail = (
-        "Test passed. Signal Desk can use this chat ID when live notifications are turned on."
+        "Test message sent. Signal Desk can use this chat for Telegram alerts."
         if attempt.get("ok")
-        else str(attempt.get("error") or "The test could not validate the notification target.")
+        else str(attempt.get("error") or "Signal Desk could not send the Telegram test message.")
     )
     return {
         "schema_version": "desk_delivery_test_result_v1",
         "target_id": clean_target_id,
         "target_type": "telegram_bot",
-        "mode": "dry-run",
+        "mode": "live",
         "ok": bool(attempt.get("ok")),
         "status": str(attempt.get("status") or "unknown"),
         "title": "Notification test",

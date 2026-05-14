@@ -118,7 +118,7 @@ def monitor_failure_next_step(diagnostics: list[dict[str, Any]]) -> str:
     if top_code in {"llm_output_truncated", "semantic_json_invalid"}:
         return (
             "Open Signal Desk Profiles and raise semantic_max_tokens, lower semantic_max_messages, "
-            "or narrow the source/prefilter before rerunning the practice scan."
+            "or narrow the source/prefilter before rerunning the AI review."
         )
     if top_code in {"channel_failures", "no_messages_fetched", "source_access_failed"}:
         return "Open Start > Check source access, then pause inaccessible sources or inspect scan.errors.log."

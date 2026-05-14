@@ -334,7 +334,7 @@ def llm_intent(text: str) -> BotIntent | None:
         f"Allowed actions: {', '.join(sorted(LLM_ROUTABLE_ACTIONS))}. "
         "Never return commands, file paths, shell, argv, tokens, chat ids, or raw Telegram message data. "
         "For readiness, health, setup, configured, or 有没有配置好 questions, use action status. "
-        "For dry scans, practice runs, or non-live scan requests, use action scan_profile_dry_run with "
+        "For AI review, scan, or run-now requests, use action scan_profile_dry_run with "
         "args.profile_id exactly jobs-fast. "
         "For source changes, set action sources_plan, keep the original instruction, and infer a topic only "
         "when the user clearly names one."

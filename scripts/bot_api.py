@@ -29,7 +29,7 @@ BOT_COMMANDS = [
     {"command": "help", "description": "Show commands and safe actions"},
     {"command": "status", "description": "Show setup, source, run, and inbox status"},
     {"command": "latest", "description": "Show the latest actionable results"},
-    {"command": "scan", "description": "Run a dry scan for jobs-fast"},
+    {"command": "scan", "description": "Run an AI review for jobs-fast"},
     {"command": "sources", "description": "Show or adjust saved sources"},
     {"command": "profiles", "description": "List enabled profiles"},
     {"command": "settings", "description": "Show local setup guidance"},
@@ -37,7 +37,7 @@ BOT_COMMANDS = [
 BOT_DISPLAY_NAME = "T-Sense"
 BOT_DESCRIPTION = (
     "T-Sense is a local-first Telegram signal desk. It shows status, latest review cards, "
-    "dry-run scans, profiles, and source controls only while your local gateway is running."
+    "AI reviews, profiles, and source controls only while your local gateway is running."
 )
 BOT_SHORT_DESCRIPTION = "Local-first Telegram signal desk."
 BOT_AVATAR_PATH = PROJECT_ROOT / "docs" / "brand" / "bot-avatar.jpg"
@@ -129,7 +129,14 @@ class TelegramBotApi:
         updates = result.get("result")
         return [item for item in updates if isinstance(item, dict)] if isinstance(updates, list) else []
 
-    def send_message(self, chat_id: str, text: str, *, reply_markup: dict[str, Any] | None = None) -> None:
+    def send_message(
+        self,
+        chat_id: str,
+        text: str,
+        *,
+        reply_markup: dict[str, Any] | None = None,
+        parse_mode: str | None = "Markdown",
+    ) -> None:
         chunks = split_telegram_text(bot_actions.redact_telegram_reply(text))
         for index, chunk in enumerate(chunks):
             payload: dict[str, Any] = {
@@ -137,6 +144,8 @@ class TelegramBotApi:
                 "text": chunk,
                 "disable_web_page_preview": True,
             }
+            if parse_mode:
+                payload["parse_mode"] = parse_mode
             if reply_markup and index == len(chunks) - 1:
                 payload["reply_markup"] = reply_markup
             self.request("sendMessage", payload)

@@ -39,24 +39,35 @@ class DashboardProfileTests(unittest.TestCase):
             root = Path(tmp)
             conn = monitor_state.connect(root / "tgcs.db")
             try:
+                ai_payload = {
+                    "title": "Patched Profile",
+                    "goal": "Monitor patched profile brief.",
+                    "search_rules": ["Include matching patched profile signals."],
+                    "rejection_rules": ["Reject unrelated signals."],
+                    "keywords": ["patched", "profile"],
+                    "topic": "patched-profile",
+                }
                 with patch.object(dashboard_server, "PROJECT_ROOT", root):
-                    with patch.object(
-                        dashboard_server,
-                        "_profile_text_from_base64_file",
-                        return_value="Patched profile brief",
-                    ) as text_mock:
-                        with patch.object(dashboard_server, "_unique_profile_id", return_value="patched-profile") as id_mock:
-                            with patch.object(dashboard_server, "_append_profile_config") as append_mock:
-                                with patch.object(dashboard_server, "DESK_DELIVERY_TARGET_ID", "custom-target"):
-                                    result = dashboard_server.create_profile_from_brief(
-                                        conn,
-                                        {"source_base64": "not-base64", "source_filename": "brief.txt"},
-                                    )
+                    with patch.object(dashboard_server.report, "llm_key_available", return_value=True):
+                        with patch.object(dashboard_server, "_profile_ai_payload_from_text", return_value=ai_payload, create=True) as ai_mock:
+                            with patch.object(
+                                dashboard_server,
+                                "_profile_text_from_base64_file",
+                                return_value="Patched profile brief",
+                            ) as text_mock:
+                                with patch.object(dashboard_server, "_unique_profile_id", return_value="patched-profile") as id_mock:
+                                    with patch.object(dashboard_server, "_append_profile_config") as append_mock:
+                                        with patch.object(dashboard_server, "DESK_DELIVERY_TARGET_ID", "custom-target"):
+                                            result = dashboard_server.create_profile_from_brief(
+                                                conn,
+                                                {"source_base64": "not-base64", "source_filename": "brief.txt"},
+                                            )
                 profile_exists = (root / "profiles" / "desk" / "patched-profile.md").exists()
             finally:
                 conn.close()
 
         text_mock.assert_called_once_with("not-base64", "brief.txt")
+        ai_mock.assert_called_once_with("Patched profile brief")
         id_mock.assert_called_once()
         append_mock.assert_called_once()
         self.assertEqual(result["profile_id"], "patched-profile")
@@ -74,6 +85,56 @@ class DashboardProfileTests(unittest.TestCase):
                 conn.close()
 
         self.assertIn("5 characters or fewer", str(raised.exception))
+
+    def test_profile_create_requires_ai_key_before_writing_profile(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            conn = monitor_state.connect(root / "tgcs.db")
+            try:
+                with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                    with patch.object(dashboard_server.report, "llm_key_available", return_value=False):
+                        with self.assertRaises(ValueError) as raised:
+                            dashboard_server.create_profile_from_brief(conn, {"brief": "Find senior AI roles."})
+            finally:
+                conn.close()
+
+        self.assertIn("AI API key", str(raised.exception))
+        self.assertFalse((root / "profiles" / "desk").exists())
+
+    def test_profile_create_uses_ai_generated_matching_rules(self):
+        ai_payload = {
+            "title": "Senior AI Roles",
+            "goal": "Find senior paid AI engineering roles with clear next steps.",
+            "search_rules": [
+                "Include only senior AI engineering roles with a paid engagement.",
+                "Prefer posts with a clear contact path and work format.",
+            ],
+            "rejection_rules": ["Reject unpaid internships and vague promotion posts."],
+            "keywords": ["ai", "senior", "remote", "agent"],
+            "topic": "ai-roles",
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            conn = monitor_state.connect(root / "tgcs.db")
+            try:
+                with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                    with patch.object(dashboard_server.report, "llm_key_available", return_value=True):
+                        with patch.object(dashboard_server, "_profile_ai_payload_from_text", return_value=ai_payload, create=True) as ai_mock:
+                            result = dashboard_server.create_profile_from_brief(
+                                conn,
+                                {"brief": "I want remote AI jobs. Avoid unpaid internships."},
+                            )
+                profile_text = (root / result["profile_path"]).read_text(encoding="utf-8")
+                config_text = (root / ".tgcs" / "profiles.toml").read_text(encoding="utf-8")
+            finally:
+                conn.close()
+
+        ai_mock.assert_called_once()
+        self.assertEqual(result["display_name"], "Senior AI Roles")
+        self.assertIn("Include only senior AI engineering roles", profile_text)
+        self.assertIn("Reject unpaid internships", profile_text)
+        self.assertIn('source_topics = ["ai-roles"]', config_text)
+        self.assertIn('prefilter_keywords = ["ai", "senior", "remote", "agent"]', config_text)
 
     def test_profile_enabled_http_endpoint_updates_runtime_override(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -474,14 +535,24 @@ class DashboardProfileTests(unittest.TestCase):
                     self.status = status
                     self.payload = payload
 
+            ai_payload = {
+                "title": "Senior AI Roles",
+                "goal": "Find senior remote AI engineering roles.",
+                "search_rules": ["Include senior remote AI engineering roles with clear paid work."],
+                "rejection_rules": ["Reject unpaid internships and vague promos."],
+                "keywords": ["senior", "remote", "ai", "engineering"],
+                "topic": "senior-ai",
+            }
             with patch.object(dashboard_server, "PROJECT_ROOT", root):
-                handler = FakeHandler()
-                dashboard_server.DashboardHandler.do_POST(handler)
-                conn = monitor_state.connect(db_path)
-                try:
-                    snapshot = monitor_state.dashboard_snapshot(conn)
-                finally:
-                    conn.close()
+                with patch.object(dashboard_server.report, "llm_key_available", return_value=True):
+                    with patch.object(dashboard_server, "_profile_ai_payload_from_text", return_value=ai_payload, create=True):
+                        handler = FakeHandler()
+                        dashboard_server.DashboardHandler.do_POST(handler)
+                        conn = monitor_state.connect(db_path)
+                        try:
+                            snapshot = monitor_state.dashboard_snapshot(conn)
+                        finally:
+                            conn.close()
 
             profile = handler.payload["profile"]
             profile_path = root / profile["profile_path"]
@@ -491,7 +562,7 @@ class DashboardProfileTests(unittest.TestCase):
 
         self.assertEqual(handler.status, HTTPStatus.OK)
         self.assertEqual(profile["schema_version"], "desk_profile_create_result_v1")
-        self.assertIn("Senior remote AI engineering roles", profile_body)
+        self.assertIn("Include senior remote AI engineering roles", profile_body)
         self.assertIn("scan_concurrency = 3", config_text)
         self.assertIn("scan_delay_seconds = 0.2", config_text)
         self.assertIn("semantic_max_messages = 40", config_text)

@@ -15,6 +15,7 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlparse
 
 from scripts.item_display import display_item_title
 from scripts import local_credentials
@@ -138,6 +139,26 @@ def _source_refs(item: dict[str, Any]) -> str:
     return ", ".join(rendered) if rendered else "source refs unavailable"
 
 
+def _telegram_markdown_escape(value: object) -> str:
+    text = _clean_text(value, max_len=1000)
+    for char in ("\\", "_", "*", "`", "["):
+        text = text.replace(char, "\\" + char)
+    return text
+
+
+def _public_telegram_link(value: object) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    parsed = urlparse(text)
+    if parsed.scheme not in {"http", "https"}:
+        return ""
+    host = (parsed.hostname or "").casefold()
+    if host in {"localhost", "127.0.0.1", "::1"}:
+        return ""
+    return text
+
+
 def build_telegram_alert_text(
     *,
     item: dict[str, Any],
@@ -148,8 +169,9 @@ def build_telegram_alert_text(
     """Build a redacted Telegram alert body.
 
     The alert intentionally excludes raw Telegram message text.  It carries
-    enough provenance to get the user back to the local report/dashboard where
-    raw context can be expanded under local control.
+    enough provenance and a compact reason to decide on the phone. Local-only
+    report paths or loopback dashboard URLs are omitted because they are not
+    useful inside Telegram notifications.
     """
 
     state = item.get("decision_state") if isinstance(item.get("decision_state"), dict) else {}
@@ -159,18 +181,20 @@ def build_telegram_alert_text(
     card_id = _clean_text((card or {}).get("card_id") or "", max_len=80)
 
     lines = [
-        f"T-Sense alert: {_item_title(item)}",
-        f"Rating: {rating} / State: {status}",
+        f"*T-Sense alert*: {_telegram_markdown_escape(_item_title(item))}",
+        f"*Rating*: {_telegram_markdown_escape(rating)} / *State*: {_telegram_markdown_escape(status)}",
     ]
     if why:
-        lines.append(f"Why: {why}")
-    lines.append(f"Sources: {_source_refs(item)}")
+        lines.append(f"*Why*: {_telegram_markdown_escape(why)}")
+    lines.append(f"*Sources*: {_telegram_markdown_escape(_source_refs(item))}")
     if card_id:
-        lines.append(f"Card: {card_id}")
-    if report_url:
-        lines.append(f"Report: {report_url}")
-    if dashboard_url:
-        lines.append(f"Dashboard: {dashboard_url}")
+        lines.append(f"*Card*: {_telegram_markdown_escape(card_id)}")
+    public_report = _public_telegram_link(report_url)
+    public_dashboard = _public_telegram_link(dashboard_url)
+    if public_report:
+        lines.append(f"*Report*: {public_report}")
+    if public_dashboard:
+        lines.append(f"*Dashboard*: {public_dashboard}")
     return "\n".join(lines)
 
 
@@ -182,6 +206,8 @@ def send_telegram_bot_message(
     mode: str = "dry-run",
     token_env: str = TELEGRAM_BOT_TOKEN_ENV,
     timeout_seconds: int = 15,
+    reply_markup: dict[str, Any] | None = None,
+    parse_mode: str | None = "Markdown",
 ) -> DeliveryAttempt:
     if mode not in {"dry-run", "live"}:
         raise ValueError("mode must be dry-run or live")
@@ -215,13 +241,16 @@ def send_telegram_bot_message(
         )
 
     url = f"https://api.telegram.org/bot{token_status.token}/sendMessage"
-    body = json.dumps(
-        {
-            "chat_id": chat_id,
-            "text": text,
-            "disable_web_page_preview": True,
-        }
-    ).encode("utf-8")
+    payload: dict[str, Any] = {
+        "chat_id": chat_id,
+        "text": text,
+        "disable_web_page_preview": True,
+    }
+    if parse_mode:
+        payload["parse_mode"] = parse_mode
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
+    body = json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(
         url,
         data=body,

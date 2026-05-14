@@ -613,9 +613,9 @@ def validation_summary(
             first_decision_minutes = max(0, round((first_decision_at - first_run).total_seconds() / 60))
     if runs_count == 0:
         next_action = {
-            "label": "Start validation",
-            "detail": f"Run {default_profile_label} once in dry-run mode to begin the local validation window.",
-            "command": f"tgcs monitor run --profile-id {default_profile_id} --delivery-mode dry-run",
+            "label": "Run AI review",
+            "detail": f"Run {default_profile_label} once to begin the local validation window.",
+            "command": f"tgcs monitor run --profile-id {default_profile_id} --delivery-mode live",
         }
     elif action_count == 0:
         next_action = {

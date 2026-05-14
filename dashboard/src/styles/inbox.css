@@ -725,6 +725,7 @@ button.source-chip:focus-visible,
   background:
     linear-gradient(180deg, color-mix(in oklch, var(--paper-2) 56%, transparent), transparent 82%),
     color-mix(in oklch, var(--surface-action) 82%, var(--ink-2));
+  color: var(--ink);
 }
 
 .action-cluster {
@@ -900,7 +901,7 @@ button.source-chip:focus-visible,
 
 .action-cluster-label,
 .follow-up-head > label {
-  color: var(--ink-warm);
+  color: color-mix(in oklch, var(--ink) 82%, var(--ink-link));
   font-size: 11px;
   font-weight: var(--label-weight);
   line-height: 1;
@@ -925,7 +926,7 @@ button.source-chip:focus-visible,
 }
 
 .follow-up-group-label {
-  color: var(--ink-warm);
+  color: color-mix(in oklch, var(--ink) 78%, var(--ink-link));
   font-size: 10px;
   font-weight: var(--label-weight);
   line-height: 1;
@@ -1031,7 +1032,7 @@ button.source-chip:focus-visible,
   min-width: 0;
   flex: 1 1 auto;
   max-width: 440px;
-  color: var(--ink-warm);
+  color: color-mix(in oklch, var(--ink) 72%, var(--ink-warm));
   font-size: 11px;
   font-weight: var(--label-weight);
   line-height: 1.35;

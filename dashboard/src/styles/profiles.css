@@ -8,6 +8,14 @@
   grid-template-columns: minmax(0, 1fr);
 }
 
+.profiles-section[data-has-drafts="true"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.profile-drafts-panel {
+  width: 100%;
+}
+
 .card-main {
   display: grid;
   gap: 10px;
@@ -681,6 +689,33 @@
   overflow-wrap: anywhere;
 }
 
+.profile-match-section textarea {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 128px;
+  resize: vertical;
+  border: 1px solid color-mix(in oklch, var(--teal) 26%, var(--paper-3));
+  background: color-mix(in oklch, var(--ink) 58%, transparent);
+  color: var(--paper);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.42;
+  padding: 9px;
+  caret-color: var(--paper);
+}
+
+.profile-match-section textarea:focus-visible {
+  border-color: var(--amber);
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--signal-medium) 18%, transparent);
+  outline: none;
+}
+
+.profile-match-section textarea::placeholder {
+  color: color-mix(in oklch, var(--paper) 58%, var(--muted));
+  opacity: 1;
+}
+
 .profile-match-section li::before,
 .profile-matching-more li::before {
   position: absolute;
@@ -715,10 +750,66 @@
   gap: 8px;
 }
 
+.profile-matching-editor {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding-top: 8px;
+  border-top: 1px dashed color-mix(in oklch, var(--paper) 16%, transparent);
+}
+
+.profile-matching-editor > strong {
+  width: max-content;
+  max-width: 100%;
+  color: var(--amber);
+  font-size: 11px;
+  font-weight: var(--badge-weight);
+  text-transform: uppercase;
+}
+
+.profile-matching-preview-action {
+  width: max-content;
+  max-width: 100%;
+  justify-content: center;
+  min-height: 36px;
+}
+
+.profile-draft-ai-card .card-main {
+  gap: 12px;
+}
+
+.profile-draft-suggestion-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.profile-draft-suggestion-field span {
+  color: var(--ink-link);
+  font-size: 12px;
+  font-weight: var(--badge-weight);
+  text-transform: uppercase;
+}
+
+.profile-draft-suggestion-field textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 180px;
+  resize: vertical;
+  border: 1px solid color-mix(in oklch, var(--paper-3) 72%, var(--ink-warm));
+  background: var(--field-bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.42;
+  padding: 10px;
+  caret-color: var(--ink);
+}
+
 .profile-control-groups {
   display: grid;
-  grid-template-columns: minmax(96px, auto) minmax(220px, 1fr);
-  gap: 9px;
+  grid-template-columns: 1fr;
+  gap: 10px;
   min-width: 0;
 }
 
@@ -766,6 +857,128 @@
   overflow-wrap: anywhere;
 }
 
+.profile-notification-details {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  width: 100%;
+}
+
+.profile-notification-details > summary {
+  width: max-content;
+  max-width: 100%;
+  min-height: 34px;
+  padding: 0 9px;
+  border: 1px dashed color-mix(in oklch, var(--paper) 24%, transparent);
+  background: color-mix(in oklch, var(--paper) 5%, transparent);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: var(--badge-weight);
+  list-style: none;
+  text-transform: uppercase;
+}
+
+.profile-notification-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.profile-notification-details > summary::after {
+  color: var(--amber);
+  content: " +";
+}
+
+.profile-notification-details[open] > summary::after {
+  content: " -";
+}
+
+.profile-notification-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  align-items: start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.profile-notification-detail-grid label,
+.profile-notification-weekdays {
+  display: grid;
+  gap: 5px;
+  align-self: start;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid color-mix(in oklch, var(--signal-high) 18%, transparent);
+  background: color-mix(in oklch, var(--ink) 22%, transparent);
+}
+
+.profile-notification-weekdays {
+  grid-column: 1 / -1;
+}
+
+.profile-notification-detail-grid label span,
+.profile-notification-weekdays > span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: var(--badge-weight);
+  line-height: 1;
+}
+
+.profile-notification-detail-grid select {
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+  min-height: 40px;
+  padding: 0 9px;
+  border: 1px solid color-mix(in oklch, var(--paper-3) 72%, var(--ink-warm));
+  background: var(--field-bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  caret-color: var(--ink);
+}
+
+.profile-notification-presets,
+.profile-notification-day-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+
+.profile-notification-presets button,
+.profile-notification-day-grid button {
+  min-height: 32px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in oklch, var(--paper) 22%, transparent);
+  background: color-mix(in oklch, var(--paper) 6%, transparent);
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  font-weight: var(--badge-weight);
+  text-transform: uppercase;
+}
+
+.profile-notification-presets button[aria-pressed="true"],
+.profile-notification-day-grid button.active {
+  border-color: var(--teal);
+  background: color-mix(in oklch, var(--signal-high) 48%, transparent);
+  color: var(--ink);
+}
+
+.profile-notification-presets button:disabled,
+.profile-notification-day-grid button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.profile-notification-save {
+  width: max-content;
+  max-width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+}
+
 .profile-edit-settings {
   justify-content: center;
   width: max-content;
@@ -805,8 +1018,8 @@
   grid-template-columns: minmax(280px, 0.34fr) minmax(0, 1fr);
   grid-template-areas:
     "head actions"
-    "scope notify"
-    "rules rules";
+    "rules rules"
+    "details details";
   align-items: start;
   gap: 12px;
   min-width: 0;
@@ -870,6 +1083,54 @@
 
 .profile-runtime-matching {
   grid-area: rules;
+}
+
+.profile-runtime-details {
+  display: grid;
+  grid-area: details;
+  gap: 10px;
+  min-width: 0;
+}
+
+.profile-runtime-details > summary {
+  width: max-content;
+  max-width: 100%;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px dashed color-mix(in oklch, var(--paper) 24%, transparent);
+  background: color-mix(in oklch, var(--paper) 5%, transparent);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: var(--badge-weight);
+  list-style: none;
+  text-transform: uppercase;
+}
+
+.profile-runtime-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.profile-runtime-details > summary::after {
+  content: " +";
+  color: var(--amber);
+}
+
+.profile-runtime-details[open] > summary::after {
+  content: " -";
+}
+
+.profile-runtime-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.34fr) minmax(0, 1fr);
+  gap: 12px;
+  min-width: 0;
+  margin-top: 10px;
+}
+
+.profile-runtime-detail-grid .profile-runtime-scope,
+.profile-runtime-detail-grid .profile-runtime-notify {
+  grid-area: auto;
 }
 
 .profile-visual-control {
@@ -1240,7 +1501,8 @@
   padding: 0;
 }
 
-.profile-runtime-settings label {
+.profile-runtime-settings label,
+.profile-matching-editor label {
   display: grid;
   grid-template-columns: 1fr;
   align-items: start;
@@ -1264,8 +1526,10 @@
 }
 
 .profile-runtime-settings label span,
+.profile-matching-editor label span,
 .profile-weekday-block > span,
 .profile-runtime-settings label small,
+.profile-matching-editor label small,
 .profile-workdays-default {
   color: var(--muted);
   font-size: 11px;

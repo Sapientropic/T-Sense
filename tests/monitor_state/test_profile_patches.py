@@ -408,7 +408,7 @@ class MonitorStateProfilePatchTests(unittest.TestCase):
             self.assertEqual(outside_profile.read_text(encoding="utf-8"), original)
 
 
-    def test_apply_profile_patch_refuses_when_profile_changed_after_suggestion(self):
+    def test_apply_profile_patch_snapshots_current_file_when_profile_changed_after_suggestion(self):
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row
         monitor_state.init_db(conn)
@@ -445,17 +445,20 @@ class MonitorStateProfilePatchTests(unittest.TestCase):
             manually_edited = original + "\nManual edit before apply.\n"
             profile_path.write_text(manually_edited, encoding="utf-8")
 
-            with self.assertRaisesRegex(monitor_state.MonitorStateError, "Profile changed after patch was suggested"):
-                monitor_state.apply_profile_patch(conn, patch_id=patch["patch_id"], profile_path=profile_path)
-            remaining_text = profile_path.read_text(encoding="utf-8")
+            result = monitor_state.apply_profile_patch(conn, patch_id=patch["patch_id"], profile_path=profile_path)
+            applied_text = profile_path.read_text(encoding="utf-8")
+            monitor_state.revert_profile_patch(conn, patch_id=patch["patch_id"], profile_path=profile_path)
+            reverted_text = profile_path.read_text(encoding="utf-8")
 
-        self.assertEqual(remaining_text, manually_edited)
+        self.assertEqual(result["status"], "applied")
+        self.assertIn("Follow-up Preferences", applied_text)
+        self.assertEqual(reverted_text, manually_edited)
         self.assertEqual(
             conn.execute(
                 "SELECT status FROM profile_patch_suggestions WHERE patch_id = ?",
                 (patch["patch_id"],),
             ).fetchone()[0],
-            "pending",
+            "reverted",
         )
 
 
@@ -494,6 +497,41 @@ class MonitorStateProfilePatchTests(unittest.TestCase):
             )
             patch = card["profile_patch_suggestion"]
             monitor_state.apply_profile_patch(conn, patch_id=patch["patch_id"], profile_path=profile_path)
+
+            result = monitor_state.revert_profile_patch(conn, patch_id=patch["patch_id"], profile_path=profile_path)
+            reverted_text = profile_path.read_text(encoding="utf-8")
+
+        self.assertEqual(result["status"], "reverted")
+        self.assertEqual(reverted_text, original)
+        self.assertEqual(
+            conn.execute(
+                "SELECT status FROM profile_patch_suggestions WHERE patch_id = ?",
+                (patch["patch_id"],),
+            ).fetchone()[0],
+            "reverted",
+        )
+
+
+    def test_pending_profile_patch_can_clear_without_apply_step(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        monitor_state.init_db(conn)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            profile_path = Path(tmp) / "profile.md"
+            original = "# Profile\n\n## Search Rules\n1. Keep useful items.\n"
+            profile_path.write_text(original, encoding="utf-8")
+            monitor_state.upsert_profile(
+                conn,
+                {"id": "market-news", "path": str(profile_path), "enabled": True},
+            )
+            patch = monitor_state.create_profile_patch_suggestion(
+                conn,
+                profile_id="market-news",
+                card_id=None,
+                note="Prefer official incident updates.",
+                profile_path=profile_path,
+            )
 
             result = monitor_state.revert_profile_patch(conn, patch_id=patch["patch_id"], profile_path=profile_path)
             reverted_text = profile_path.read_text(encoding="utf-8")
@@ -654,14 +692,14 @@ class MonitorStateProfilePatchTests(unittest.TestCase):
         self.assertEqual(patch["card_title"], "AI Engineer")
         self.assertEqual(patch["card_id"], cards[0]["card_id"])
         self.assertEqual(patch["apply_readiness"]["status"], "ready")
-        self.assertEqual(patch["apply_readiness"]["label"], "Safe to apply")
+        self.assertEqual(patch["apply_readiness"]["label"], "Ready")
         self.assertEqual(len(patch["base_profile_short_hash"]), 12)
         self.assertEqual(patch["source_card_count"], 1)
         self.assertEqual(patch["source_card_titles"], ["AI Engineer"])
 
         changed_patch = changed_snapshot["profile_patch_suggestions"][0]
-        self.assertEqual(changed_patch["apply_readiness"]["status"], "blocked")
-        self.assertIn("changed since this diff was suggested", changed_patch["apply_readiness"]["detail"])
+        self.assertEqual(changed_patch["apply_readiness"]["status"], "ready")
+        self.assertNotIn("changed since this diff was suggested", changed_patch["apply_readiness"]["detail"])
 
 
 

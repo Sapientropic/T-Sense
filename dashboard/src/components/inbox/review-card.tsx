@@ -197,7 +197,7 @@ function alertProofLabel(card: ReviewCard) {
     return "Sent";
   }
   if (summary.latest_delivery_ok && deliveryStatus === "dry_run") {
-    return "Dry run";
+    return "Checked";
   }
   if (summary.latest_delivery_ok) {
     return titleCaseLabel(deliveryStatus || "Delivered");
@@ -210,10 +210,24 @@ function alertProofTitle(card: ReviewCard) {
   if (!summary?.alert_count) {
     return "No alert event has been recorded for this card";
   }
-  const mode = summary.latest_delivery_mode ? `/${summary.latest_delivery_mode}` : "";
+  const mode = deliveryModeSuffix(summary.latest_delivery_mode);
   const target = summary.latest_target_type || summary.latest_target_id || "delivery target";
   const when = summary.latest_alerted_at ? ` at ${formatDate(summary.latest_alerted_at)}` : "";
   return `${summary.alert_count} alert event${summary.alert_count === 1 ? "" : "s"} via ${target}${mode}${when}`;
+}
+
+function deliveryModeSuffix(mode: unknown) {
+  const normalized = String(mode || "").trim().toLowerCase().replace(/_/g, "-");
+  if (!normalized || normalized === "live") {
+    return "";
+  }
+  if (normalized === "dry-run") {
+    return " (checked without sending)";
+  }
+  if (normalized === "off") {
+    return " (notifications off)";
+  }
+  return ` (${titleCaseLabel(normalized)})`;
 }
 
 function opportunityStatusLabel(status: string) {
@@ -276,6 +290,7 @@ function MobileActionStrip({
             title="Mark opportunity applied"
             type="button"
             data-review-action="applied"
+            data-review-tone="positive"
             onClick={() => act(card.card_id, "applied")}
             disabled={busy}
           >
@@ -287,6 +302,7 @@ function MobileActionStrip({
             title="Save opportunity for later"
             type="button"
             data-review-action="saved"
+            data-review-tone="supportive"
             onClick={() => act(card.card_id, "saved")}
             disabled={busy}
           >
@@ -300,6 +316,7 @@ function MobileActionStrip({
           title="Reopen opportunity"
           type="button"
           data-review-action="reopen"
+          data-review-tone="supportive"
           onClick={() => act(card.card_id, "reopen")}
           disabled={busy}
         >
@@ -314,6 +331,7 @@ function MobileActionStrip({
           title={`Undo ${reviewStatusLabel(card.status)} review decision`}
           type="button"
           data-review-action="undo_decision"
+          data-review-tone="caution"
           onClick={() => act(card.card_id, "undo_decision")}
           disabled={busy}
         >
@@ -325,6 +343,7 @@ function MobileActionStrip({
         aria-label={showFollowUp ? "Hide feedback tools" : "Explain why this is not a fit or tune the profile"}
         className="secondary-action"
         data-review-action="tune"
+        data-review-tone="negative"
         title={showFollowUp ? "Hide feedback tools" : "Explain why this is not a fit or tune the profile"}
         type="button"
         onClick={() => setShowFollowUp((value) => !value)}
@@ -408,17 +427,38 @@ function CardActions({
         <span className="action-cluster-label">Opportunity</span>
         {isOpenOpportunity(card) ? (
           <>
-            <button title="Mark opportunity applied" type="button" data-review-action="applied" onClick={() => act(card.card_id, "applied")} disabled={busy}>
+            <button
+              title="Mark opportunity applied"
+              type="button"
+              data-review-action="applied"
+              data-review-tone="positive"
+              onClick={() => act(card.card_id, "applied")}
+              disabled={busy}
+            >
               <Check size={16} />
               <span>Applied</span>
             </button>
-            <button title="Save opportunity for later" type="button" data-review-action="saved" onClick={() => act(card.card_id, "saved")} disabled={busy}>
+            <button
+              title="Save opportunity for later"
+              type="button"
+              data-review-action="saved"
+              data-review-tone="supportive"
+              onClick={() => act(card.card_id, "saved")}
+              disabled={busy}
+            >
               <Bookmark size={16} />
               <span>Saved</span>
             </button>
           </>
         ) : (
-          <button title="Reopen opportunity" type="button" data-review-action="reopen" onClick={() => act(card.card_id, "reopen")} disabled={busy}>
+          <button
+            title="Reopen opportunity"
+            type="button"
+            data-review-action="reopen"
+            data-review-tone="supportive"
+            onClick={() => act(card.card_id, "reopen")}
+            disabled={busy}
+          >
             <Play size={16} />
             <span>Reopen</span>
           </button>
@@ -430,6 +470,7 @@ function CardActions({
             <button
               className="decision-undo-trigger"
               data-review-action="undo_decision"
+              data-review-tone="caution"
               title={`Undo ${reviewStatusLabel(card.status)} review decision`}
               type="button"
               onClick={() => act(card.card_id, "undo_decision")}
@@ -443,6 +484,7 @@ function CardActions({
           <button
             className="tune-profile-trigger"
             data-review-action="tune"
+            data-review-tone="negative"
             title="Explain why this is not a fit or tune the profile"
             type="button"
             onClick={() => setShowFollowUp(true)}
@@ -477,6 +519,7 @@ function CardActions({
                 title="Close this opportunity because it is not a fit"
                 type="button"
                 data-review-action="dismissed"
+                data-review-tone="negative"
                 onClick={() => act(card.card_id, "dismissed")}
                 disabled={busy}
               >
@@ -488,6 +531,7 @@ function CardActions({
                 title="Close this opportunity as a duplicate"
                 type="button"
                 data-review-action="duplicate"
+                data-review-tone="neutral"
                 onClick={() => act(card.card_id, "duplicate")}
                 disabled={busy}
               >
@@ -504,6 +548,7 @@ function CardActions({
                 title="Prefer similar future matches"
                 type="button"
                 data-review-action="keep"
+                data-review-tone="positive"
                 onClick={() => act(card.card_id, "keep")}
                 disabled={busy}
               >
@@ -515,6 +560,7 @@ function CardActions({
                 title="Deprioritize similar future matches"
                 type="button"
                 data-review-action="skip"
+                data-review-tone="caution"
                 onClick={() => act(card.card_id, "skip")}
                 disabled={busy}
               >
@@ -524,6 +570,7 @@ function CardActions({
               <button
                 className="follow-up-signal"
                 data-review-action="avoid"
+                data-review-tone="negative"
                 title="Mark as wrong match and avoid similar future matches"
                 type="button"
                 onClick={() => act(card.card_id, "false_positive")}
@@ -549,6 +596,7 @@ function CardActions({
             <small>Creates a reviewable profile change. The note stays local and is not included in exports.</small>
             <button
               className="follow-up-submit"
+              data-review-tone="supportive"
               title={note.trim() ? "Create profile change" : "Add a note first"}
               type="button"
               onClick={() => act(card.card_id, "follow_up", note.trim())}

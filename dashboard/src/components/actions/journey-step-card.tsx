@@ -1,6 +1,5 @@
-import { AlertTriangle, Bell, CheckCircle2, CircleDashed, LockKeyhole, Play, ShieldAlert, Wrench } from "lucide-react";
+import { AlertTriangle, Bell, CheckCircle2, CircleDashed, LockKeyhole, Play, Settings, ShieldAlert, Wrench } from "lucide-react";
 
-import { CopyableCommand } from "../common";
 import type { DeskAction, DeskActionResult, DeskActiveAction } from "../../domain/types";
 import { JourneyResults } from "./journey-results";
 import type { JourneyState, JourneyStep } from "./journey-model";
@@ -29,19 +28,14 @@ export function JourneyStepCard({
   telegram: TelegramControls;
 }) {
   const disabled = step.state === "blocked";
-  const visibleButtons = step.buttons.filter((button) => actionMap.has(button.actionId));
+  const visibleButtons = step.buttons.filter((button) => actionMap.has(button.actionId) || button.actionId.startsWith("settings_"));
   const quickButtons = quickJourneyButtons(step, visibleButtons);
   const quickActionIds = new Set(quickButtons.map((button) => button.actionId));
   const extraButtons = visibleButtons.filter((button) => !quickActionIds.has(button.actionId));
-  const visibleAdvanced = step.advancedActionIds.map((actionId) => actionMap.get(actionId)).filter(Boolean) as DeskAction[];
+  const resultActionIds = visibleJourneyResultActionIds(step, telegram, results);
   const activeAction = step.advancedActionIds
     .map((actionId) => activeActions.find((item) => item.action_id === actionId))
     .find(Boolean);
-  const hasProblemResult = step.advancedActionIds.some((actionId) => {
-    const status = results[actionId]?.status;
-    return status === "failed" || status === "blocked";
-  });
-  const showAdvancedReference = visibleAdvanced.length > 0 && (step.state === "manual" || hasProblemResult);
   return (
     <article className={`journey-step is-${step.state}`} aria-label={`${index}. ${step.title}`}>
       <div className="journey-marker" aria-hidden="true">
@@ -54,18 +48,8 @@ export function JourneyStepCard({
         </div>
         <p title={step.detailTitle || step.detail}>{step.detail}</p>
         {activeAction && <ActiveActionProgress action={activeAction} />}
-        <JourneyResults actionIds={step.advancedActionIds} results={results} />
+        <JourneyResults actionIds={resultActionIds} results={results} />
         {step.key === "telegram" && <TelegramLoginPanel telegram={telegram} />}
-        {showAdvancedReference && (
-          <details className="advanced-command">
-            <summary>Advanced command</summary>
-            <div>
-              {visibleAdvanced.map((action) => (
-                <CopyableCommand command={action.display_command} label={action.title} key={action.action_id} compact />
-              ))}
-            </div>
-          </details>
-        )}
       </div>
       <aside className="journey-controls">
         <JourneyIcon state={step.state} />
@@ -103,6 +87,46 @@ export function JourneyStepCard({
         </div>
       </aside>
     </article>
+  );
+}
+
+function visibleJourneyResultActionIds(
+  step: JourneyStep,
+  telegram: TelegramControls,
+  results: Record<string, DeskActionResult>,
+) {
+  const telegramReady = Boolean(telegram.status?.credentials_ready && telegram.status?.session_ready);
+  return step.advancedActionIds.filter((actionId) => {
+    const result = results[actionId];
+    if (!result) {
+      return true;
+    }
+    if (step.state === "done" && isProblemResult(result)) {
+      return false;
+    }
+    if (step.key === "telegram" && telegramReady && isProblemResult(result)) {
+      return false;
+    }
+    if (step.key === "workspace" && telegramReady && isTelegramPrerequisiteResult(result)) {
+      return false;
+    }
+    return true;
+  });
+}
+
+function isProblemResult(result: DeskActionResult) {
+  const status = String(result.status || "").toLowerCase();
+  return status !== "success" && status !== "needs_human";
+}
+
+function isTelegramPrerequisiteResult(result: DeskActionResult) {
+  const text = `${result.title} ${result.detail} ${result.next_action}`.toLowerCase();
+  return (
+    text.includes("telegram api credentials") ||
+    text.includes("app credentials") ||
+    text.includes("telegram login") ||
+    text.includes("connect telegram") ||
+    text.includes("finish telegram")
   );
 }
 
@@ -146,6 +170,7 @@ function JourneyActionButton({
   const action = actionMap.get(button.actionId);
   const busy = busyActionId === button.actionId;
   const isNotificationShortcut = action?.action_id === "live_delivery_human";
+  const isSettingsShortcut = button.actionId.startsWith("settings_");
   const isHuman = action?.run_mode === "needs_human" && !isNotificationShortcut;
   return (
     <button
@@ -155,7 +180,7 @@ function JourneyActionButton({
       title={button.label}
       type="button"
     >
-      {isHuman ? <ShieldAlert size={15} /> : isNotificationShortcut ? <Bell size={15} /> : <Play size={15} />}
+      {isHuman ? <ShieldAlert size={15} /> : isNotificationShortcut ? <Bell size={15} /> : isSettingsShortcut ? <Settings size={15} /> : <Play size={15} />}
       <span>{busy ? "Working" : button.label}</span>
     </button>
   );

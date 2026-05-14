@@ -11,27 +11,27 @@
         "detail": "Test whether enabled sources can be resolved and read by the local Telegram session. Message text is not stored.",
         "run_mode": "execute",
         "display_command": "Signal Desk source access check",
-        "next_action": "Pause inaccessible sources or run a practice scan after access looks healthy."
+        "next_action": "Pause inaccessible sources or run an AI review after access looks healthy."
       },
       {
         "schema_version": "desk_action_v1",
         "action_id": "monitor_jobs_dry_run",
         "group": "Run",
-        "title": "Run fresh practice scan",
-        "detail": "Fetch latest source messages and create local Review cards without sending Telegram alerts.",
+        "title": "Run AI review",
+        "detail": "Fetch latest source messages, create Review cards, and send Telegram alerts when notifications are enabled.",
         "run_mode": "execute",
-        "display_command": "tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run",
-        "next_action": "Review the new cards or open the generated report."
+        "display_command": "tgcs monitor run --profile-id jobs-fast --delivery-mode live",
+        "next_action": "Review the new cards in Signal Desk or act on the Telegram alert buttons."
       },
       {
         "schema_version": "desk_action_v1",
         "action_id": "schedule_install_dry_run",
         "group": "Schedule",
-        "title": "Turn on auto scan",
-        "detail": "Create a Windows Task Scheduler task for local practice scans. It sends no live alerts.",
+        "title": "Turn on auto review",
+        "detail": "Create a local scheduler task for AI reviews and Telegram alerts when notifications are enabled.",
         "run_mode": "confirm_execute",
-        "display_command": "Windows Task Scheduler: jobs-fast dry-run",
-        "next_action": "Signal Desk will run local practice scans automatically every 15 minutes."
+        "display_command": "Local scheduler: jobs-fast AI review",
+        "next_action": "Signal Desk will run local AI reviews automatically every 15 minutes."
       },
       {
         "schema_version": "desk_action_v1",
@@ -59,9 +59,9 @@
     "schema_version": "desk_action_result_v1",
     "action_id": "monitor_jobs_dry_run",
     "status": "success",
-    "title": "Practice scan complete",
+    "title": "AI review complete",
     "detail": "Report ready.",
-    "display_command": "tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run",
+    "display_command": "tgcs monitor run --profile-id jobs-fast --delivery-mode live",
     "exit_code": 0,
     "artifact_path": "output/runs/run-desk-contract/report.html",
     "next_action": "Open the generated report."
@@ -103,11 +103,11 @@
           "schema_version": "desk_action_v1",
           "action_id": "monitor_jobs_dry_run",
           "group": "Run",
-          "title": "Run fresh practice scan",
-          "detail": "Fetch latest source messages and create local Review cards without sending Telegram alerts.",
+          "title": "Run AI review",
+          "detail": "Fetch latest source messages, create Review cards, and send Telegram alerts when notifications are enabled.",
           "run_mode": "execute",
-          "display_command": "tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run",
-          "next_action": "Review the new cards or open the generated report.",
+          "display_command": "tgcs monitor run --profile-id jobs-fast --delivery-mode live",
+          "next_action": "Review the new cards in Signal Desk or act on the Telegram alert buttons.",
           "argv": ["tgcs", "monitor", "run"],
           "token": "SECRET_DESK_BOUNDARY_TOKEN_SHOULD_NOT_SURFACE"
         }
@@ -117,9 +117,9 @@
       "schema_version": "desk_action_result_v1",
       "action_id": "monitor_jobs_dry_run",
       "status": "success",
-      "title": "Practice scan complete",
+      "title": "AI review complete",
       "detail": "Report ready.",
-      "display_command": "tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run",
+      "display_command": "tgcs monitor run --profile-id jobs-fast --delivery-mode live",
       "exit_code": 0,
       "artifact_path": "output/runs/run-desk-contract/report.html",
       "next_action": "Open the generated report.",
@@ -154,20 +154,20 @@
         "schema_version": "desk_action_v1",
         "action_id": "monitor_jobs_dry_run",
         "group": "Run",
-        "title": "Run fresh practice scan",
-        "detail": "Fetch latest source messages and create local Review cards without sending Telegram alerts.",
+        "title": "Run AI review",
+        "detail": "Fetch latest source messages, create Review cards, and send Telegram alerts when notifications are enabled.",
         "run_mode": "execute",
-        "display_command": "tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run",
-        "next_action": "Review the new cards or open the generated report."
+        "display_command": "tgcs monitor run --profile-id jobs-fast --delivery-mode live",
+        "next_action": "Review the new cards in Signal Desk or act on the Telegram alert buttons."
       }
     ],
     "desk_action_result": {
       "schema_version": "desk_action_result_v1",
       "action_id": "monitor_jobs_dry_run",
       "status": "success",
-      "title": "Practice scan complete",
+      "title": "AI review complete",
       "detail": "Report ready.",
-      "display_command": "tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run",
+      "display_command": "tgcs monitor run --profile-id jobs-fast --delivery-mode live",
       "exit_code": 0,
       "artifact_path": "output/runs/run-desk-contract/report.html",
       "next_action": "Open the generated report.",

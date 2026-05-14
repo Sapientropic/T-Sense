@@ -107,11 +107,17 @@ export function useSourceSettings({
     }
   }
 
-  async function previewSourceAssistant(instruction: string, topic: string, confirmExternalAi = false) {
+  async function previewSourceAssistant(
+    instruction: string,
+    topic: string,
+    confirmExternalAi = false,
+    profileId?: string,
+    folderName?: string,
+  ) {
     setBusy(true);
     setNotice(null);
     try {
-      const result = await previewSourceAssistantRequest(instruction, topic, confirmExternalAi);
+      const result = await previewSourceAssistantRequest(instruction, topic, confirmExternalAi, profileId, folderName);
       setSourceImportResult(result);
       setNotice({ tone: "success", text: result.detail || result.title || "Source plan ready" });
       return result;
@@ -128,11 +134,13 @@ export function useSourceSettings({
     topic: string,
     confirmExternalAi = false,
     resolvedPlan?: SourceImportResult["resolved_plan"],
+    profileId?: string,
+    folderName?: string,
   ) {
     setBusy(true);
     setNotice(null);
     try {
-      const result = await applySourceAssistantRequest(instruction, topic, confirmExternalAi, resolvedPlan);
+      const result = await applySourceAssistantRequest(instruction, topic, confirmExternalAi, resolvedPlan, profileId, folderName);
       setSourceImportResult(result);
       await refresh();
       await refreshDeskSources();

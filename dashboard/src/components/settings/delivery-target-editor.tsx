@@ -104,7 +104,7 @@ export function DeliveryTargetEditor({
           <span>Test without sending</span>
         </button>
       </div>
-      <p className="delivery-note">The dry run checks the saved target without sending a Telegram message.</p>
+      <p className="delivery-note">This checks the saved target without sending a Telegram message.</p>
       {hasUnsavedChanges && <span className="delivery-dirty">Unsaved changes</span>}
       {testResult && (
         <div className={`delivery-test-result ${testResult.ok ? "ok" : "failed"}`} role="status">

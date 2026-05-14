@@ -28,7 +28,7 @@ export function RunsView({
   onOpenProfiles,
 }: {
   runs: Run[];
-  onRunDeskAction?: (actionId: string) => void;
+  onRunDeskAction?: (actionId: string, body?: Record<string, unknown>) => void;
   onOpenReview?: () => void;
   onOpenProfiles?: () => void;
 }) {
@@ -36,7 +36,7 @@ export function RunsView({
     return (
       <RunsEmptyState
         title="No runs yet"
-        detail="Run a local practice scan before judging source quality."
+        detail="Run a local AI review before judging source quality."
         onRunDeskAction={onRunDeskAction}
       />
     );

@@ -15,7 +15,10 @@ import {
   sourceTopicsEditState,
 } from "./settings";
 import { NotificationsPanel } from "./settings/notifications-panel";
-import type { DeskBotIdentityResult, DeskBotGatewayStatus, DeskSource, SourceStat } from "../domain/types";
+import { DeliveryTargetEditor } from "./settings/delivery-target-editor";
+import { SourceImportPanel } from "./settings/source-import-panel";
+import { SourceInsightsPanel } from "./settings/source-insights-panel";
+import type { DeliveryTarget, DeskBotIdentityResult, DeskBotGatewayStatus, DeskSource, Profile, SourceStat } from "../domain/types";
 
 function source(overrides: Partial<DeskSource>): DeskSource {
   return {
@@ -42,6 +45,32 @@ function sourceStat(overrides: Partial<SourceStat>): SourceStat {
     false_positive_count: 0,
     alert_count: 0,
     high_rate: 0,
+    ...overrides,
+  };
+}
+
+function profile(overrides: Partial<Profile> = {}): Profile {
+  return {
+    profile_id: "ai-roles",
+    display_name: "AI Roles",
+    enabled: true,
+    source_topics: ["ai-roles"],
+    updated_at: "2026-05-14T00:00:00Z",
+    ...overrides,
+  };
+}
+
+function deliveryTarget(overrides: Partial<DeliveryTarget> = {}): DeliveryTarget {
+  return {
+    schema_version: "delivery_target_v1",
+    target_id: "telegram-bot-default",
+    type: "telegram_bot",
+    enabled: false,
+    config: { chat_id: "@desk_signal" },
+    display_name: "Telegram Bot",
+    status_label: "Muted",
+    detail: "Delivery is muted.",
+    updated_at: "2026-05-14T00:00:00Z",
     ...overrides,
   };
 }
@@ -121,6 +150,169 @@ describe("Settings source topic editor", () => {
       sourceStat({ channel: "risk", scan_incomplete: true }),
     ])).toBe("2 latest cards · 1 alert · 3 tracked · 1 risk");
     expect(sourceLibraryActivityLabel([])).toBe("");
+  });
+
+  it("keeps source evidence panels collapsible", () => {
+    const html = renderToStaticMarkup(
+      <SourceInsightsPanel
+        sourceStats={[
+          sourceStat({
+            display_name: "Remote Jobs",
+            card_count: 4,
+            high_count: 2,
+            latest_card_count: 1,
+          }),
+        ]}
+        sourceInsights={[
+          {
+            kind: "promote",
+            channel: "remote_jobs",
+            label: "Promote",
+            reason: "High signal source.",
+            priority: 1,
+            stats: sourceStat({ high_count: 2 }),
+          },
+        ]}
+      />,
+    );
+
+    expect(html).toContain("<details");
+    expect(html).toContain("Yield History");
+    expect(html).toContain("Source Actions");
+    expect(html).toContain("Source yield details");
+    expect(html).toContain("Source action details");
+  });
+
+  it("frames source setup as Telegram discovery plus AI profile filtering, not pasted channels", () => {
+    const html = renderToStaticMarkup(
+      <SourceImportPanel
+        result={null}
+        previewSourceImport={async () => {
+          throw new Error("manual import should not be the primary flow");
+        }}
+        importSources={async () => {
+          throw new Error("manual import should not be the primary flow");
+        }}
+        importStarterSources={async () => {
+          throw new Error("starter import should not be the primary flow");
+        }}
+        previewSourceAssistant={async () => ({
+          dry_run: true,
+          written: false,
+          topic: "ai-roles",
+          added_count: 0,
+          updated_count: 0,
+          unchanged_count: 0,
+          source_count: 0,
+          registry_path: ".tgcs/sources.json",
+          preview_sources: [],
+          preview_truncated_count: 0,
+        })}
+        applySourceAssistant={async () => ({
+          dry_run: false,
+          written: true,
+          topic: "ai-roles",
+          added_count: 0,
+          updated_count: 0,
+          unchanged_count: 0,
+          source_count: 0,
+          registry_path: ".tgcs/sources.json",
+          preview_sources: [],
+          preview_truncated_count: 0,
+        })}
+        busy={false}
+        hasSavedSources={false}
+        profiles={[profile()]}
+      />,
+    );
+
+    expect(html).toContain("Discover Sources");
+    expect(html).toContain("AI filters your Telegram channels against the selected profile.");
+    expect(html).toContain("Telegram folder");
+    expect(html).toContain("Scan all channels");
+    expect(html).not.toContain("<span>Telegram channels</span>");
+    expect(html).not.toContain("Paste channel handles");
+    expect(html).not.toContain("@remote_jobs");
+    expect(html).not.toContain("Use starter set");
+  });
+
+  it("keeps source refresh guidance behind a closed disclosure after sources exist", () => {
+    const html = renderToStaticMarkup(
+      <SourceImportPanel
+        result={null}
+        previewSourceImport={async () => {
+          throw new Error("manual import should not be the primary flow");
+        }}
+        importSources={async () => {
+          throw new Error("manual import should not be the primary flow");
+        }}
+        importStarterSources={async () => {
+          throw new Error("starter import should not be the primary flow");
+        }}
+        previewSourceAssistant={async () => ({
+          dry_run: true,
+          written: false,
+          topic: "ai-roles",
+          added_count: 0,
+          updated_count: 0,
+          unchanged_count: 0,
+          source_count: 0,
+          registry_path: ".tgcs/sources.json",
+          preview_sources: [],
+          preview_truncated_count: 0,
+        })}
+        applySourceAssistant={async () => ({
+          dry_run: false,
+          written: true,
+          topic: "ai-roles",
+          added_count: 0,
+          updated_count: 0,
+          unchanged_count: 0,
+          source_count: 0,
+          registry_path: ".tgcs/sources.json",
+          preview_sources: [],
+          preview_truncated_count: 0,
+        })}
+        busy={false}
+        hasSavedSources={true}
+        profiles={[profile()]}
+      />,
+    );
+
+    expect(html).toContain("<details class=\"table-section source-import-panel source-import-details\">");
+    expect(html).toContain("Discover Sources");
+    expect(html).toContain("AI filters your Telegram channels against the selected profile.");
+    expect(html).not.toContain("Open when refreshing the AI-selected list");
+  });
+
+  it("keeps notification target checks free of dry-run wording", () => {
+    const html = renderToStaticMarkup(
+      <DeliveryTargetEditor
+        busy={false}
+        detectionResult={null}
+        detectDeliveryChatId={async () => ({
+          schema_version: "desk_delivery_chat_detection_v1",
+          ok: false,
+          target_id: "telegram-bot-default",
+          target_type: "telegram_bot",
+          status: "missing",
+          source: "updates",
+          title: "No chat found",
+          detail: "Send a message first.",
+          chat_id: "",
+          chat_type: "",
+        })}
+        saveDeliveryTarget={async () => undefined}
+        target={deliveryTarget()}
+        testDeliveryTarget={async () => undefined}
+        testResult={null}
+      />,
+    );
+
+    expect(html).toContain("Test without sending");
+    expect(html).toContain("This checks the saved target without sending a Telegram message.");
+    expect(html).not.toContain("dry run");
+    expect(html).not.toContain("dry-run");
   });
 
   it("summarizes Bot Gateway readiness without exposing identifiers", () => {

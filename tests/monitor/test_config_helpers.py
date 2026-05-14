@@ -223,6 +223,49 @@ class MonitorConfigHelperTests(unittest.TestCase):
         self.assertEqual(alert_count, 1)
         self.assertEqual(events, [])
 
+    def test_live_delivery_attaches_card_actions_to_telegram_alerts(self):
+        class FakeAttempt:
+            ok = True
+            status = "sent"
+
+            @staticmethod
+            def to_dict():
+                return {"status": "sent"}
+
+        card = {
+            "card_id": "card-1",
+            "status": "pending",
+            "decision_status": "open",
+            "item_key": "item-1",
+            "item": {
+                "topic": "Fast role",
+                "rating": "high",
+                "decision_state": {"status": "new"},
+            },
+        }
+
+        with patch.object(monitor_delivery.delivery, "send_telegram_bot_message", return_value=FakeAttempt()) as send_mock:
+            with patch.object(monitor_delivery.monitor_state, "record_alert_event", return_value={"status": "sent"}):
+                alert_count, events = monitor.run_delivery(
+                    conn=None,
+                    run_id_value="run-1",
+                    profile_id="jobs-fast",
+                    cards=[card],
+                    targets=[{"id": "telegram-bot-default", "type": "telegram_bot", "enabled": True, "chat_id": "123"}],
+                    mode="live",
+                    alert_rule={"name": "high_new_or_changed"},
+                    delivery_enabled=True,
+                    report_path=None,
+                    dashboard_url="http://127.0.0.1:8765",
+                )
+
+        self.assertEqual(alert_count, 1)
+        self.assertEqual(events, [{"status": "sent"}])
+        reply_markup = send_mock.call_args.kwargs["reply_markup"]
+        rendered = json.dumps(reply_markup, ensure_ascii=False)
+        self.assertIn("card:applied:card-1", rendered)
+        self.assertIn("card:saved:card-1", rendered)
+
 
 
 if __name__ == "__main__":

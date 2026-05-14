@@ -25,7 +25,7 @@
     "display_command": "Signal Desk source access check",
     "exit_code": 0,
     "artifact_path": "",
-    "next_action": "Pause inaccessible sources or run a practice scan after access looks healthy.",
+    "next_action": "Pause inaccessible sources or run an AI review after access looks healthy.",
     "finished_at": "2026-05-13T00:00:00Z",
     "source_access": {
       "schema_version": "desk_source_access_health_v1",
@@ -62,7 +62,7 @@
     "display_command": "Signal Desk source access check",
     "exit_code": 0,
     "artifact_path": "",
-    "next_action": "Pause inaccessible sources or run a practice scan after access looks healthy.",
+    "next_action": "Pause inaccessible sources or run an AI review after access looks healthy.",
     "finished_at": "2026-05-13T00:00:00Z",
     "source_access": {
       "schema_version": "desk_source_access_health_v1",

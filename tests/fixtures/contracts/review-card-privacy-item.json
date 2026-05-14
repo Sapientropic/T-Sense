@@ -112,7 +112,7 @@
     ],
     "setup_status": {
       "stage": "ready",
-      "next_step": "Run a practice scan.",
+      "next_step": "Run an AI review.",
       "has_profiles": true,
       "has_runs": false,
       "delivery_configured": true,

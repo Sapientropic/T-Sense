@@ -101,7 +101,7 @@ echo 1. Open Signal Desk:
 echo    Signal Desk.bat
 echo.
 echo 2. In the Start tab, save your Telegram app ID/hash, connect Telegram,
-echo    run the offline demo, and start the first dry-run scan.
+echo    run the offline demo, and start the first AI review.
 echo    Telegram app credentials come from: https://my.telegram.org/apps
 echo    ^(If the form shows ERROR, see docs\getting-api-credentials.md^)
 goto config_done

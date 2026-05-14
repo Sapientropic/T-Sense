@@ -1,4 +1,14 @@
-export type InboxFilter = "actionable" | "all" | "high" | "new_changed" | "low_medium" | "saved" | "handled" | "duplicate";
+export type InboxFilter =
+  | "actionable"
+  | "all"
+  | "high"
+  | "new_changed"
+  | "medium"
+  | "low"
+  | "low_medium"
+  | "saved"
+  | "handled"
+  | "duplicate";
 
 export type InboxCardLike = {
   rating?: unknown;
@@ -61,7 +71,15 @@ export function filterInboxCards<T extends InboxCardLike>(cards: T[], filter: In
     return reviewQueueCards.filter((card) => normalizeInboxToken(card.rating) === "high");
   }
   if (filter === "new_changed") {
-    return reviewQueueCards.filter((card) => ["new", "changed"].includes(normalizeInboxToken(card.decision_status)));
+    return reviewQueueCards.filter(
+      (card) => ["new", "changed"].includes(normalizeInboxToken(card.decision_status)) && normalizeInboxToken(card.rating) !== "low",
+    );
+  }
+  if (filter === "medium") {
+    return reviewQueueCards.filter((card) => normalizeInboxToken(card.rating) === "medium");
+  }
+  if (filter === "low") {
+    return reviewQueueCards.filter((card) => normalizeInboxToken(card.rating) === "low");
   }
   if (filter === "low_medium") {
     return reviewQueueCards.filter((card) => ["low", "medium"].includes(normalizeInboxToken(card.rating)));
@@ -90,9 +108,9 @@ export function inboxFilterOptions<T extends InboxCardLike>(cards: T[], latestRu
   const baseOptions = [
     { id: "actionable" as const, label: "Priority now", count: filterInboxCards(cards, "actionable", latestRunId).length },
     { id: "all" as const, label: "All cards", count: cards.length },
-    { id: "high" as const, label: "High", count: filterInboxCards(cards, "high", latestRunId).length },
     { id: "new_changed" as const, label: "New/Updated", count: filterInboxCards(cards, "new_changed", latestRunId).length },
-    { id: "low_medium" as const, label: "Lower priority", count: filterInboxCards(cards, "low_medium", latestRunId).length },
+    { id: "medium" as const, label: "Middle", count: filterInboxCards(cards, "medium", latestRunId).length },
+    { id: "low" as const, label: "Low", count: filterInboxCards(cards, "low", latestRunId).length },
   ];
   return [
     ...baseOptions,

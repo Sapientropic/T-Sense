@@ -96,14 +96,14 @@ class BotActionRegistry:
         profile_id = intent.profile_id
         if profile_id != "jobs-fast":
             return BotActionResult(
-                "Telegram dry-run scans are limited to jobs-fast in v1. Open Signal Desk for other profiles.",
+                "Telegram AI reviews are limited to jobs-fast in v1. Open Signal Desk for other profiles.",
                 error_category="unsupported_request",
             )
         try:
             result = dashboard_server.run_desk_action("monitor_jobs_dry_run")
         except Exception:
             return BotActionResult(
-                "Local scan failed. Open Signal Desk Runs or Settings for details.",
+                "Local AI review failed. Open Signal Desk Runs or Settings for details.",
                 error_category="local_failure",
             )
         status = str(result.get("status") or "")
@@ -112,10 +112,10 @@ class BotActionRegistry:
             next_action = str(result.get("next_action") or "Wait for the current action to finish, then retry.")
             return BotActionResult(redact_telegram_reply(f"{detail}\n\nNext: {next_action}"), error_category="action_busy")
         if status != "success":
-            detail = str(result.get("detail") or "Local scan failed.")
+            detail = str(result.get("detail") or "Local AI review failed.")
             next_action = str(result.get("next_action") or "Open Signal Desk Runs or Settings.")
             return BotActionResult(redact_telegram_reply(f"{detail}\n\nNext: {next_action}"), error_category="local_failure")
-        detail = str(result.get("detail") or result.get("title") or "Dry scan finished.")
+        detail = str(result.get("detail") or result.get("title") or "AI review finished.")
         next_action = str(result.get("next_action") or "")
         text = detail if not next_action else f"{detail}\n\nNext: {next_action}"
         return BotActionResult(redact_telegram_reply(text))

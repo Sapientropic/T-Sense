@@ -100,7 +100,7 @@ class BotGateway:
         api: TelegramBotApi,
         *,
         db_path: Path = DEFAULT_DB_PATH,
-        use_llm: bool = False,
+        use_llm: bool = True,
         allowed: set[str] | None = None,
         extra_allowed: list[str] | None = None,
     ):
@@ -121,8 +121,20 @@ class BotGateway:
         self.refresh_allowed()
         return chat_is_allowed(chat_id, allowed=self.allowed)
 
-    def send_message(self, chat_id: str, text: str, *, reply_markup: dict[str, Any] | None = None) -> None:
-        self.api.send_message(chat_id, bot_actions.redact_telegram_reply(text), reply_markup=reply_markup)
+    def send_message(
+        self,
+        chat_id: str,
+        text: str,
+        *,
+        reply_markup: dict[str, Any] | None = None,
+        parse_mode: str | None = "Markdown",
+    ) -> None:
+        self.api.send_message(
+            chat_id,
+            bot_actions.redact_telegram_reply(text),
+            reply_markup=reply_markup,
+            parse_mode=parse_mode,
+        )
 
     def prune_pending_source_plans(self) -> None:
         now = time.time()
@@ -161,7 +173,7 @@ class BotGateway:
             return
         if intent.action in {"scan", "scan_profile_dry_run"}:
             if intent.profile_id == "jobs-fast":
-                self.send_message(chat_id, f"Running {intent.profile_id} as dry-run. This can take a minute.")
+                self.send_message(chat_id, f"Running an AI review for {intent.profile_id}. This can take a minute.")
             result = self.action_registry.execute(
                 BotIntent(action="scan_profile_dry_run", args={"profile_id": intent.profile_id})
             )
@@ -226,7 +238,7 @@ class BotGateway:
             self.dispatch_intent(chat_id, BotIntent(action="settings"))
             return
         if data.startswith("scan:"):
-            self.api.answer_callback_query(callback_query_id, "Starting dry scan")
+            self.api.answer_callback_query(callback_query_id, "Starting AI review")
             self.dispatch_intent(
                 chat_id,
                 BotIntent(action="scan_profile_dry_run", args={"profile_id": data.split(":", 1)[1] or "jobs-fast"}),
@@ -312,7 +324,7 @@ def run_loop(args: argparse.Namespace) -> int:
             else:
                 commands_installed = True
         extra_allowed = args.allow_chat_id or []
-        gateway = BotGateway(api, db_path=Path(args.db), use_llm=bool(args.llm) and not args.no_llm, extra_allowed=extra_allowed)
+        gateway = BotGateway(api, db_path=Path(args.db), use_llm=not bool(args.no_llm), extra_allowed=extra_allowed)
         state_path = Path(args.state)
         state = load_state(state_path)
         offset = state.get("offset") if isinstance(state.get("offset"), int) else None

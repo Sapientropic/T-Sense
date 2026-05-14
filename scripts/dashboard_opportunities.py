@@ -49,9 +49,9 @@ def opportunity_summary(
             "all_clear": False,
             "top_items": [],
             "next_action": {
-                "label": "Run monitor",
-                "detail": "Start with a dry-run monitor run.",
-                "command": "tgcs monitor run --profile-id market-news --delivery-mode dry-run",
+                "label": "Run AI review",
+                "detail": "Start with an AI review run.",
+                "command": "tgcs monitor run --profile-id market-news --delivery-mode live",
             },
         }
 

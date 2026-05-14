@@ -133,10 +133,10 @@ def quickstart_jobs_status() -> dict[str, Any]:
         next_app_step = "Open Signal Desk Start and finish Telegram login with the code sent to your account."
         why = "Telegram credentials exist, but the local session file is missing."
     elif not has_runs:
-        stage = "dry_run_required"
-        next_command = "tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run"
-        next_app_step = "Open Signal Desk Start and run the first dry-run scan."
-        why = "Jobs sources and Telegram login are ready; run one safe dry-run before live alerts."
+        stage = "first_review_required"
+        next_command = "tgcs monitor run --profile-id jobs-fast --delivery-mode live"
+        next_app_step = "Open Signal Desk Start and run the first AI review."
+        why = "Jobs sources and Telegram login are ready; run one AI review so Signal Desk can create Review cards and send alerts when notifications are enabled."
     else:
         stage = "dashboard_ready"
         next_command = "tgcs dashboard"
@@ -149,7 +149,7 @@ def quickstart_jobs_status() -> dict[str, Any]:
             ("jobs_sources", jobs_sources),
             ("telegram_credentials", credentials),
             ("telegram_login", session),
-            ("first_dry_run", has_runs),
+            ("first_ai_review", has_runs),
         ]
         for current_id, is_done in order:
             if current_id == check_id:
@@ -188,11 +188,11 @@ def quickstart_jobs_status() -> dict[str, Any]:
             "tgcs login",
         ),
         _quickstart_check(
-            "first_dry_run",
-            "First dry-run",
-            status_for("first_dry_run"),
-            "Run jobs-fast once in dry-run delivery mode before enabling live alerts.",
-            "tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run",
+            "first_ai_review",
+            "First AI review",
+            status_for("first_ai_review"),
+            "Run jobs-fast once so Signal Desk can create Review cards and send enabled Telegram alerts.",
+            "tgcs monitor run --profile-id jobs-fast --delivery-mode live",
         ),
         _quickstart_check(
             "dashboard",

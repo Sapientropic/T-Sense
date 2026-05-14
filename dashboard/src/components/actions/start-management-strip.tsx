@@ -43,7 +43,7 @@ export function StartManagementStrip({
       ? [
           {
             key: "automation",
-            label: scheduler?.installed ? "Auto scan on" : "Automation",
+            label: scheduler?.installed ? "Auto review on" : "Automation",
             detail: scheduler?.installed ? "Every 15 min" : "Set schedule",
             icon: <Bell size={15} />,
             disabled: anyBusy,

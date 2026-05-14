@@ -129,11 +129,30 @@ describe("run health decision", () => {
       run({ run_id: "run-2", review_card_count: 2 }),
       run({ run_id: "run-3", review_card_count: 0, alert_count: 0 }),
     ]);
-    expect(groups.map((group) => group.key)).toEqual(["attention", "review", "clean"]);
-    expect(groups[0].title).toBe("Earlier failed scans");
-    expect(groups[0].tone).toBe("quiet");
-    expect(groups[1].title).toBe("Cards to review");
-    expect(groups[1].detail).toBe("2 cards / 0 alerts");
+    expect(groups.map((group) => group.key)).toEqual(["review", "clean"]);
+    expect(groups[0].title).toBe("Cards to review");
+    expect(groups[0].detail).toBe("2 cards / 0 alerts");
+  });
+
+  it("replaces noisy run history blocks with manual scan settings", () => {
+    const html = renderToStaticMarkup(
+      <RunsView
+        runs={[
+          run({ run_id: "run-1", status: "failed", started_at: "2026-05-09T08:00:00Z" }),
+          run({ run_id: "run-2", status: "complete", review_card_count: 2, started_at: "2026-05-10T08:00:00Z" }),
+        ]}
+      />,
+    );
+
+    expect(html).toContain("Manual scan");
+    expect(html).toContain("One-off scan window");
+    expect(html).toContain("2 hours");
+    expect(html).toContain("12 hours");
+    expect(html).toContain("24 hours");
+    expect(html).toContain("Run one-off scan");
+    expect(html).not.toContain("Past 7 days scan health");
+    expect(html).not.toContain('aria-label="Earlier failed scans"');
+    expect(html).not.toMatch(/<details[^>]*aria-label="Cards to review"[^>]*open/);
   });
 
   it("clusters repeated same-day run outcomes into one evidence row", () => {
@@ -205,7 +224,7 @@ describe("run health decision", () => {
   it("gives empty run history direct app actions", () => {
     const html = renderToStaticMarkup(<RunsView runs={[]} onRunDeskAction={() => undefined} />);
 
-    expect(html).toContain("Run first scan");
+    expect(html).toContain("Run first AI review");
     expect(html).toContain("Check setup");
     expect(html).not.toContain("Run history is empty in this database.");
   });

@@ -1,8 +1,16 @@
-import { percentWidth } from "../../domain/display";
+import { useState } from "react";
+
 import { formatPercent } from "../../domain/format";
-import { runBucketSignalScore, runDayWindowBuckets } from "../../domain/projections";
 import type { Run } from "../../domain/types";
 import { buildRunHealthDecision, type RunHealthDecision } from "./model";
+
+const MANUAL_SCAN_WINDOWS = [
+  { hours: 2, label: "2 hours", detail: "Fresh check" },
+  { hours: 12, label: "12 hours", detail: "Catch-up scan" },
+  { hours: 24, label: "24 hours", detail: "Full day" },
+] as const;
+
+type RunDeskActionHandler = (actionId: string, body?: Record<string, unknown>) => void;
 
 export function RunHealthChart({
   runs,
@@ -11,12 +19,11 @@ export function RunHealthChart({
   onOpenProfiles,
 }: {
   runs: Run[];
-  onRunDeskAction?: (actionId: string) => void;
+  onRunDeskAction?: RunDeskActionHandler;
   onOpenReview?: () => void;
   onOpenProfiles?: () => void;
 }) {
   const recentRuns = runs.slice(0, 80);
-  const buckets = runDayWindowBuckets(recentRuns, 7);
   const completeRuns = recentRuns.filter((run) => run.status.toLowerCase() === "complete").length;
   const failedRuns = recentRuns.filter((run) => run.status.toLowerCase() === "failed").length;
   const runningRuns = recentRuns.filter((run) => ["running", "pending"].includes(run.status.toLowerCase())).length;
@@ -48,23 +55,42 @@ export function RunHealthChart({
           />
         </div>
       </div>
-      <div className="run-health-week" aria-label="Past 7 days scan health">
-        {buckets.map((bucket) => (
-          <div
-            className={`run-health-day ${bucket.failed ? "is-warn" : bucket.runs ? "is-ok" : "is-quiet"}`}
-            key={bucket.key}
-            title={`${bucket.label} · ${bucket.complete} complete · ${bucket.failed} failed · ${bucket.cards} cards · ${bucket.alerts} alerts`}
+      <ManualScanSettings onRunDeskAction={onRunDeskAction} />
+    </div>
+  );
+}
+
+function ManualScanSettings({ onRunDeskAction }: { onRunDeskAction?: RunDeskActionHandler }) {
+  const [hours, setHours] = useState(24);
+  return (
+    <section className="manual-scan-panel" aria-label="Manual scan settings">
+      <div className="manual-scan-heading">
+        <small>Manual scan</small>
+        <strong>One-off scan window</strong>
+      </div>
+      <div className="manual-scan-options" role="group" aria-label="Scan window">
+        {MANUAL_SCAN_WINDOWS.map((option) => (
+          <button
+            aria-pressed={hours === option.hours}
+            className={`manual-scan-option ${hours === option.hours ? "is-selected" : ""}`}
+            key={option.hours}
+            onClick={() => setHours(option.hours)}
+            type="button"
           >
-            <span>{bucket.label}</span>
-            <strong>{bucket.failed > 0 ? `Fix ${bucket.failed}` : bucket.runs ? "OK" : "No scan"}</strong>
-            <small>{bucket.runs ? `${bucket.cards} cards · ${bucket.alerts} alerts` : "No run"}</small>
-            <div className="run-health-day-meter" aria-hidden="true">
-              <i style={{ width: percentWidth(bucket.failed > 0 ? 1 : runBucketSignalScore(bucket)) }} />
-            </div>
-          </div>
+            <b>{option.label}</b>
+            <span>{option.detail}</span>
+          </button>
         ))}
       </div>
-    </div>
+      <button
+        className="manual-scan-run"
+        disabled={!onRunDeskAction}
+        onClick={() => onRunDeskAction?.("monitor_jobs_dry_run", { scan_window_hours: hours })}
+        type="button"
+      >
+        Run one-off scan
+      </button>
+    </section>
   );
 }
 
@@ -75,7 +101,7 @@ function RunHealthDecisionActions({
   onOpenProfiles,
 }: {
   decision: RunHealthDecision;
-  onRunDeskAction?: (actionId: string) => void;
+  onRunDeskAction?: RunDeskActionHandler;
   onOpenReview?: () => void;
   onOpenProfiles?: () => void;
 }) {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
 
 import { buildJourneySteps, buildStartSummary, notificationReadiness } from "./actions";
 import {
@@ -6,6 +7,7 @@ import {
   buildStartSummary as buildStartSummaryFromModel,
   notificationReadiness as notificationReadinessFromModel,
 } from "./actions/journey-model";
+import { JourneyStepCard } from "./actions/journey-step-card";
 import type { DeliveryTarget, DeskAction, DeskActionResult, DeskSchedulerStatus } from "../domain/types";
 
 function action(actionId: string, runMode = "execute"): DeskAction {
@@ -44,8 +46,8 @@ function schedulerStatus(installed: boolean): DeskSchedulerStatus {
     status: installed ? "installed" : "not_installed",
     task_label: "jobs-fast dry-run",
     interval_minutes: 15,
-    detail: installed ? "Automatic practice scans are on every 15 minutes." : "Automatic practice scans are off.",
-    next_action: installed ? "You can turn them off." : "Turn on auto scan.",
+    detail: installed ? "Automatic AI reviews are on every 15 minutes." : "Automatic AI reviews are off.",
+    next_action: installed ? "You can turn them off." : "Turn on auto review.",
     checked_at: "2026-05-10T00:00:00Z",
   };
 }
@@ -125,6 +127,24 @@ describe("Signal Desk journey", () => {
     expect(firstRun?.state).toBe("blocked");
   });
 
+  it("starts with AI API setup before profile or source work", () => {
+    const steps = buildJourneySteps(actions, {}, { stage: "needs_ai_key", has_profiles: false, has_runs: false }, telegramReady);
+    const summary = buildStartSummary(steps, { stage: "needs_ai_key", has_profiles: false, has_runs: false }, telegramReady);
+
+    expect(steps[0]).toMatchObject({
+      key: "ai",
+      title: "Connect AI matching",
+      state: "active",
+      stateLabel: "Start here",
+    });
+    expect(steps.find((step) => step.key === "workspace")?.state).toBe("blocked");
+    expect(summary.find((item) => item.label === "Next")).toMatchObject({
+      value: "Connect AI matching",
+      actionId: "settings_ai",
+      actionLabel: "Add AI API key",
+    });
+  });
+
   it("promotes first scan after workspace exists", () => {
     const steps = buildJourneySteps(actions, {}, { stage: "needs_first_run", has_profiles: true, has_runs: false }, telegramReady);
 
@@ -139,7 +159,7 @@ describe("Signal Desk journey", () => {
     const steps = buildJourneySteps(actions, {}, { stage: "ready", has_profiles: true, has_runs: true }, telegramReady);
 
     expect(steps.map((step) => step.key)).toEqual([
-      "demo",
+      "ai",
       "telegram",
       "workspace",
       "first-run",
@@ -147,10 +167,176 @@ describe("Signal Desk journey", () => {
       "feedback",
     ]);
     expect(steps.find((step) => step.key === "feedback")?.buttons[0]).toMatchObject({
-      label: "Generate profile suggestions",
+      label: "Suggest rules",
     });
-    expect(steps.find((step) => step.key === "telegram")?.detail).toContain("Telegram is connected");
+    expect(steps.find((step) => step.key === "telegram")?.detail).toContain("Telegram is ready");
     expect(steps.find((step) => step.key === "telegram")?.detail).not.toContain("Connect Telegram first");
+    expect(steps.find((step) => step.key === "demo")).toBeUndefined();
+    expect(steps.find((step) => step.key === "ai")?.buttons[0]).toMatchObject({
+      actionId: "settings_ai",
+      label: "AI API settings",
+    });
+  });
+
+  it("keeps the completed AI step actionable as a Settings shortcut", () => {
+    const aiStep = buildJourneySteps(actions, {}, { stage: "ready", has_profiles: true, has_runs: true }, telegramReady).find(
+      (step) => step.key === "ai",
+    )!;
+    const html = renderToStaticMarkup(
+      <JourneyStepCard
+        activeActions={[]}
+        actionMap={new Map(actions.map((item) => [item.action_id, item]))}
+        anyBusy={false}
+        busyActionId=""
+        index={1}
+        onRun={async () => undefined}
+        results={{}}
+        step={aiStep}
+        telegram={{
+          status: telegramReady,
+          busy: "",
+          error: "",
+          saveCredentials: async () => telegramReady,
+          sendCode: async () => telegramReady,
+          verifyCode: async () => telegramReady,
+          refresh: async () => telegramReady,
+          cancelLogin: async () => telegramReady,
+        }}
+      />,
+    );
+
+    expect(html).toContain("AI API settings");
+    expect(html).toContain('title="AI API settings"');
+  });
+
+  it("requires both app credentials and Telegram login before calling Telegram ready", () => {
+    const setup = { stage: "needs_first_run", has_profiles: true, has_runs: false };
+    const sessionOnly = {
+      ...telegramReady,
+      credentials_ready: false,
+      session_ready: true,
+      login_state: "credentials_missing",
+      detail: "Telegram login is saved, but app credentials are missing.",
+    };
+    const steps = buildJourneySteps(actions, {}, setup, sessionOnly);
+    const summary = buildStartSummary(steps, setup, sessionOnly);
+
+    expect(steps.find((step) => step.key === "telegram")).toMatchObject({
+      state: "active",
+      stateLabel: "Check before scan",
+      detail: expect.stringContaining("app credentials are missing"),
+    });
+    expect(steps.find((step) => step.key === "first-run")).toMatchObject({
+      state: "blocked",
+      stateLabel: "Connect Telegram first",
+    });
+    expect(summary.find((item) => item.label === "Telegram")).toMatchObject({
+      value: "Missing app details",
+    });
+  });
+
+  it("does not expose copied commands inside Start journey steps", () => {
+    const step = buildJourneySteps(
+      actions,
+      {
+        doctor_jobs: {
+          ...result("doctor_jobs", "failed"),
+          detail: "Setup check could not finish.",
+        },
+      },
+      { stage: "ready", has_profiles: true, has_runs: true },
+      telegramReady,
+    ).find((item) => item.key === "telegram")!;
+    const html = renderToStaticMarkup(
+      <JourneyStepCard
+        activeActions={[]}
+        actionMap={new Map(actions.map((item) => [item.action_id, item]))}
+        anyBusy={false}
+        busyActionId=""
+        index={2}
+        onRun={async () => undefined}
+        results={{ doctor_jobs: result("doctor_jobs", "failed") }}
+        step={step}
+        telegram={{
+          status: telegramReady,
+          busy: "",
+          error: "",
+          saveCredentials: async () => telegramReady,
+          sendCode: async () => telegramReady,
+          verifyCode: async () => telegramReady,
+          refresh: async () => telegramReady,
+          cancelLogin: async () => telegramReady,
+        }}
+      />,
+    );
+
+    expect(html).not.toContain("Advanced command");
+    expect(html).not.toContain("COPY COMMAND");
+    expect(html).not.toContain("tgcs doctor");
+    expect(html).not.toContain("doctor_jobs detail");
+  });
+
+  it("hides stale setup failures after the current journey state has recovered", () => {
+    const sourceAccessBlocked = {
+      ...result("sources_probe_access", "blocked"),
+      title: "Source access check blocked",
+      detail: "Telegram API credentials are not configured.",
+      next_action: "Connect Telegram from Start, then check source access again.",
+    };
+    const step = buildJourneySteps(
+      actions,
+      { sources_probe_access: sourceAccessBlocked },
+      {
+        stage: "ready",
+        has_profiles: true,
+        has_runs: true,
+        checks: [
+          {
+            check_id: "source_access",
+            label: "Source access",
+            status: "done",
+            detail: "Access check: 2 recently active, 1 quiet in the last 24h.",
+            source_access: {
+              schema_version: "desk_source_access_health_v1",
+              source_count: 3,
+              checked_count: 3,
+              accessible_count: 2,
+              quiet_count: 1,
+              inaccessible_count: 0,
+              truncated_count: 0,
+              probe_window_hours: 24,
+            },
+          },
+        ],
+      },
+      telegramReady,
+    ).find((item) => item.key === "workspace")!;
+    const html = renderToStaticMarkup(
+      <JourneyStepCard
+        activeActions={[]}
+        actionMap={new Map(actions.map((item) => [item.action_id, item]))}
+        anyBusy={false}
+        busyActionId=""
+        index={3}
+        onRun={async () => undefined}
+        results={{ sources_probe_access: sourceAccessBlocked }}
+        step={step}
+        telegram={{
+          status: telegramReady,
+          busy: "",
+          error: "",
+          saveCredentials: async () => telegramReady,
+          sendCode: async () => telegramReady,
+          verifyCode: async () => telegramReady,
+          refresh: async () => telegramReady,
+          cancelLogin: async () => telegramReady,
+        }}
+      />,
+    );
+
+    expect(html).toContain("Some saved channels are quiet");
+    expect(html).not.toContain("Source access check blocked");
+    expect(html).not.toContain("Telegram API credentials are not configured");
   });
 
   it("separates source syntax checks from real Telegram access checks", () => {
@@ -185,15 +371,15 @@ describe("Signal Desk journey", () => {
 
     const workspace = steps.find((step) => step.key === "workspace");
 
-    expect(workspace?.detail).toBe("Some saved channels cannot be read. Check channels, then pause unreadable ones.");
+    expect(workspace?.detail).toBe("Some saved channels cannot be read. Check access, then pause unreadable ones.");
     expect(workspace?.detailTitle).toContain("2 recently active");
     expect(workspace?.buttons.map((button) => button.label)).toEqual([
       "Refresh files",
       "Fix channels",
-      "Check channels",
+      "Check access",
       "Pause unreadable",
-      "Keep active only",
-      "Check file format",
+      "Active only",
+      "File check",
     ]);
   });
 
@@ -221,10 +407,10 @@ describe("Signal Desk journey", () => {
 
     const workspace = steps.find((step) => step.key === "workspace");
 
-    expect(workspace?.detail).toBe("Some saved channels cannot be read. Check channels, then pause unreadable ones.");
+    expect(workspace?.detail).toBe("Some saved channels cannot be read. Check access, then pause unreadable ones.");
     expect(workspace?.detailTitle).toContain("2 inaccessible");
     expect(workspace?.buttons.map((button) => button.label)).toContain("Pause unreadable");
-    expect(workspace?.buttons.map((button) => button.label)).toContain("Keep active only");
+    expect(workspace?.buttons.map((button) => button.label)).toContain("Active only");
   });
 
   it("keeps commands as advanced fallback data instead of primary controls", () => {
@@ -233,8 +419,8 @@ describe("Signal Desk journey", () => {
     const automation = steps.find((step) => step.key === "automation");
 
     expect(automation?.buttons.map((button) => button.label)).toEqual([
-      "Preview schedule",
-      "Turn on auto scan",
+      "Preview",
+      "Turn on",
       "Notifications",
     ]);
     expect(automation?.buttons.map((button) => button.label)).not.toContain("Turn off");
@@ -266,7 +452,7 @@ describe("Signal Desk journey", () => {
     expect(automation?.stateLabel).toBe("Manual");
     expect(automation?.detail).toContain("manual schedule preview");
     expect(automation?.buttons.map((button) => button.label)).toEqual([
-      "Preview schedule",
+      "Preview",
       "Notifications",
     ]);
   });
@@ -282,8 +468,8 @@ describe("Signal Desk journey", () => {
     const automation = steps.find((step) => step.key === "automation");
 
     expect(automation?.buttons.map((button) => button.label)).toEqual([
-      "Preview schedule",
-      "Turn off auto scan",
+      "Preview",
+      "Turn off",
       "Notifications",
     ]);
   });
@@ -301,12 +487,12 @@ describe("Signal Desk journey", () => {
 
     expect(automation).toMatchObject({
       title: "Automation",
-      stateLabel: "Auto scan on",
-      detail: expect.stringContaining("Automatic practice scans are on"),
+      stateLabel: "Auto review on",
+      detail: expect.stringContaining("Automatic AI reviews are on"),
     });
     expect(automation?.buttons.map((button) => button.label)).toEqual([
-      "Preview schedule",
-      "Turn off auto scan",
+      "Preview",
+      "Turn off",
       "Notifications",
     ]);
   });
@@ -395,9 +581,9 @@ describe("Signal Desk journey", () => {
     const sourceSummary = buildStartSummary(sourceSteps, sourceSetup, telegramReady);
 
     expect(firstRunSummary.find((item) => item.label === "Next")).toMatchObject({
-      value: "Run the first scan",
+      value: "Run first AI review",
       actionId: "monitor_jobs_dry_run",
-      actionLabel: "Run first scan",
+      actionLabel: "Run review",
     });
     expect(sourceSummary.find((item) => item.label === "Next")).toMatchObject({
       value: "Fix saved channels",

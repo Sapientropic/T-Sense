@@ -43,7 +43,7 @@ def _print_init_next_steps(starter: str = "default") -> None:
     print("- Next: tgcs doctor")
     if starter == "jobs":
         print("- Check jobs setup: tgcs doctor --profile jobs")
-        print("- Run jobs monitor: tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run")
+        print("- Run jobs AI review: tgcs monitor run --profile-id jobs-fast --delivery-mode live")
     print("- Manage sources: tgcs dashboard (Settings > Sources: Use starter set or Source assistant)")
     print("- Login: tgcs login")
     print("- Run report: tgcs run")

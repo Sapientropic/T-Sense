@@ -309,6 +309,112 @@ class DashboardSourcesTests(unittest.TestCase):
         self.assertEqual(preview["resolved_plan"]["disable"], ["telegram:web3_jobs"])
 
 
+    def test_source_assistant_discovers_all_channels_and_ai_filters_by_profile(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profile_path = root / "profiles" / "desk" / "ai-roles.md"
+            profile_path.parent.mkdir(parents=True)
+            profile_path.write_text("# Senior AI Roles\n\nInclude paid agent engineering roles.\n", encoding="utf-8")
+            config_path = root / ".tgcs" / "profiles.toml"
+            config_path.parent.mkdir(parents=True)
+            config_path.write_text(
+                "\n".join(
+                    [
+                        'schema_version = "profile_run_config_v1"',
+                        "",
+                        "[[profiles]]",
+                        'id = "ai-roles"',
+                        'path = "profiles/desk/ai-roles.md"',
+                        "enabled = true",
+                        'source_topics = ["ai-roles"]',
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            discovered = [
+                {"channel": "remote_ai_jobs", "label": "Remote AI Jobs", "title": "Remote AI Jobs"},
+                {"channel": "coupon_spam", "label": "Coupon Spam", "title": "Daily coupons"},
+            ]
+            ai_plan = {"add": ["remote_ai_jobs"], "remove": [], "disable": [], "enable": []}
+            with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                with patch.object(dashboard_server.report, "llm_key_available", return_value=True):
+                    with patch.object(dashboard_server, "_discover_source_channels", return_value=discovered, create=True) as discover_mock:
+                        with patch.object(dashboard_server, "_source_assistant_llm_plan", return_value=ai_plan) as planner:
+                            preview = dashboard_server.run_source_assistant(
+                                {
+                                    "instruction": "scan all Telegram channels for this profile",
+                                    "profile_id": "ai-roles",
+                                    "topic": "ai-roles",
+                                    "dry_run": True,
+                                    "confirm_external_ai": True,
+                                }
+                            )
+                            applied = dashboard_server.apply_source_assistant_resolved_plan(preview["resolved_plan"], "ai-roles")
+
+        discover_mock.assert_called_once()
+        self.assertEqual(discover_mock.call_args.kwargs.get("folder_name"), "")
+        planner.assert_called_once()
+        self.assertIn("Senior AI Roles", planner.call_args.kwargs["profile_text"])
+        self.assertEqual([item["channel"] for item in planner.call_args.kwargs["candidates"]], ["remote_ai_jobs", "coupon_spam"])
+        self.assertTrue(preview["llm_used"])
+        self.assertEqual(preview["added_count"], 1)
+        self.assertEqual(preview["resolved_plan"]["add"], ["remote_ai_jobs"])
+        self.assertTrue(applied["written"])
+
+
+    def test_source_assistant_discovers_named_telegram_folder_before_ai_filtering(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profile_path = root / "profiles" / "desk" / "ai-roles.md"
+            profile_path.parent.mkdir(parents=True)
+            profile_path.write_text("# Senior AI Roles\n", encoding="utf-8")
+            config_path = root / ".tgcs" / "profiles.toml"
+            config_path.parent.mkdir(parents=True)
+            config_path.write_text(
+                "\n".join(
+                    [
+                        'schema_version = "profile_run_config_v1"',
+                        "",
+                        "[[profiles]]",
+                        'id = "ai-roles"',
+                        'path = "profiles/desk/ai-roles.md"',
+                        "enabled = true",
+                        'source_topics = ["ai-roles"]',
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                with patch.object(dashboard_server.report, "llm_key_available", return_value=True):
+                    with patch.object(
+                        dashboard_server,
+                        "_discover_source_channels",
+                        return_value=[{"channel": "ai_folder_jobs", "label": "AI Folder Jobs"}],
+                        create=True,
+                    ) as discover_mock:
+                        with patch.object(
+                            dashboard_server,
+                            "_source_assistant_llm_plan",
+                            return_value={"add": ["ai_folder_jobs"], "remove": [], "disable": [], "enable": []},
+                        ):
+                            preview = dashboard_server.run_source_assistant(
+                                {
+                                    "instruction": "use my Jobs folder",
+                                    "folder_name": "Jobs",
+                                    "profile_id": "ai-roles",
+                                    "topic": "ai-roles",
+                                    "dry_run": True,
+                                    "confirm_external_ai": True,
+                                }
+                            )
+
+        discover_mock.assert_called_once()
+        self.assertEqual(discover_mock.call_args.kwargs.get("folder_name"), "Jobs")
+        self.assertEqual(preview["resolved_plan"]["add"], ["ai_folder_jobs"])
+
+
     def test_desk_source_topics_updates_default_registry_without_accepting_paths_or_commands(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

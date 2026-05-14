@@ -152,6 +152,20 @@ class DashboardCredentialsSettingsTests(unittest.TestCase):
             self.assertEqual(status["login_state"], "authorized")
 
 
+    def test_telegram_status_requires_credentials_and_session_for_scan_ready(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "config.toml"
+            session_path = Path(tmp) / "session"
+            session_path.write_text("session-string", encoding="utf-8")
+
+            status = dashboard_server.telegram_status(config_path=config_path, session_path=session_path)
+
+        self.assertFalse(status["credentials_ready"])
+        self.assertTrue(status["session_ready"])
+        self.assertEqual(status["login_state"], "credentials_missing")
+        self.assertIn("credentials are missing", status["detail"])
+
+
     def test_telegram_credentials_reject_invalid_values(self):
         with tempfile.TemporaryDirectory() as tmp:
             config_path = Path(tmp) / "config.toml"
@@ -406,7 +420,7 @@ class DashboardCredentialsSettingsTests(unittest.TestCase):
         self.assertNotIn("token", json.dumps(target, ensure_ascii=False).lower())
 
 
-    def test_desk_delivery_target_test_is_dry_run_only(self):
+    def test_desk_delivery_target_test_sends_live_test_message(self):
         with tempfile.TemporaryDirectory() as tmp:
             conn = monitor_state.connect(Path(tmp) / "tgcs.db")
             dashboard_server.save_desk_delivery_target(
@@ -421,9 +435,9 @@ class DashboardCredentialsSettingsTests(unittest.TestCase):
                     return_value=dashboard_server.delivery.DeliveryAttempt(
                         target_id="telegram-bot-default",
                         target_type="telegram_bot",
-                        mode="dry-run",
+                        mode="live",
                         ok=True,
-                        status="dry_run",
+                        status="sent",
                     ),
                 ) as send_mock:
                     result = dashboard_server.test_desk_delivery_target(
@@ -435,10 +449,10 @@ class DashboardCredentialsSettingsTests(unittest.TestCase):
                 conn.close()
 
         self.assertTrue(result["ok"])
-        self.assertEqual(result["mode"], "dry-run")
+        self.assertEqual(result["mode"], "live")
         send_mock.assert_called_once()
         self.assertEqual(send_mock.call_args.kwargs["chat_id"], "654321")
-        self.assertEqual(send_mock.call_args.kwargs["mode"], "dry-run")
+        self.assertEqual(send_mock.call_args.kwargs["mode"], "live")
 
 
     def test_desk_delivery_target_test_rejects_user_controlled_mode(self):
