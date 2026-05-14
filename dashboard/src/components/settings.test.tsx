@@ -1,3 +1,5 @@
+import { createRef } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -11,6 +13,7 @@ import {
   sourceLibraryCountLabel,
   sourceTopicsEditState,
 } from "./settings";
+import { NotificationsPanel } from "./settings/notifications-panel";
 import type { DeskBotIdentityResult, DeskBotGatewayStatus, DeskSource, SourceStat } from "../domain/types";
 
 function source(overrides: Partial<DeskSource>): DeskSource {
@@ -165,5 +168,45 @@ describe("Settings source topic editor", () => {
 
     expect(botIdentityResultLine(result)).toBe("T-Sense identity applied · photo pending");
     expect(botIdentityResultLine({ ...result, profile_photo_updated: true })).toBe("T-Sense identity applied · photo updated");
+  });
+
+  it("keeps an editable default notification target when none is saved yet", () => {
+    const html = renderToStaticMarkup(
+      <NotificationsPanel
+        applyBotIdentity={async () => undefined}
+        botGatewayError={null}
+        botGatewayStatus={null}
+        botIdentityResult={null}
+        busy={false}
+        clearNotificationToken={async () => undefined}
+        deliveryChatDetection={null}
+        deliveryTest={null}
+        detectDeliveryChatId={async () => ({
+          schema_version: "desk_delivery_chat_detection_v1",
+          target_id: "telegram-bot-default",
+          target_type: "telegram_bot",
+          ok: true,
+          status: "detected",
+          source: "telegram_session",
+          chat_id: "123456",
+          chat_type: "private",
+        })}
+        installBotGatewayAutostart={async () => undefined}
+        notificationTokenError={null}
+        notificationTokenStatus={null}
+        panelRef={createRef<HTMLDivElement>()}
+        removeBotGatewayAutostart={async () => undefined}
+        saveDeliveryTarget={async () => undefined}
+        saveNotificationToken={async () => undefined}
+        targets={[]}
+        testDeliveryTarget={async () => undefined}
+      />,
+    );
+
+    expect(html).toContain("Default notification chat");
+    expect(html).toContain("Add a Telegram chat ID to create the default private bot notification target.");
+    expect(html).toContain("Telegram chat ID");
+    expect(html).toContain("Detect chat ID");
+    expect(html).not.toContain("No notification channels set up");
   });
 });

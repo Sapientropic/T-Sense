@@ -3,7 +3,7 @@ import { Bell, KeyRound, Save, Trash2 } from "lucide-react";
 
 import { BotGatewayPanel } from "./bot-gateway-panel";
 import { DeliveryTargetEditor } from "./delivery-target-editor";
-import { InlineEmpty, PanelHeader } from "../common";
+import { PanelHeader } from "../common";
 import type {
   DeskBotGatewayStatus,
   DeskBotIdentityResult,
@@ -12,6 +12,8 @@ import type {
   DeliveryTarget,
   DeliveryTestResult,
 } from "../../domain/types";
+
+const DEFAULT_TELEGRAM_TARGET_ID = "telegram-bot-default";
 
 export function NotificationsPanel({
   targets,
@@ -52,6 +54,7 @@ export function NotificationsPanel({
   busy: boolean;
   panelRef: RefObject<HTMLDivElement | null>;
 }) {
+  const editableTargets = targets.length ? targets : [defaultTelegramDeliveryTarget()];
   return (
     <div className="table-section delivery-targets-panel" ref={panelRef} tabIndex={-1} aria-label="Notifications">
       <PanelHeader icon={<Bell size={18} />} title="Notifications" count={targets.length} />
@@ -71,26 +74,36 @@ export function NotificationsPanel({
         removeBotGatewayAutostart={removeBotGatewayAutostart}
         status={botGatewayStatus}
       />
-      {targets.length ? (
-        <div className="delivery-target-list">
-          {targets.map((target) => (
-            <DeliveryTargetEditor
-              busy={busy}
-              detectionResult={deliveryChatDetection?.target_id === target.target_id ? deliveryChatDetection : null}
-              detectDeliveryChatId={detectDeliveryChatId}
-              key={target.target_id}
-              saveDeliveryTarget={saveDeliveryTarget}
-              target={target}
-              testDeliveryTarget={testDeliveryTarget}
-              testResult={deliveryTest?.target_id === target.target_id ? deliveryTest : null}
-            />
-          ))}
-        </div>
-      ) : (
-        <InlineEmpty title="No notification channels set up" />
-      )}
+      <div className="delivery-target-list">
+        {editableTargets.map((target) => (
+          <DeliveryTargetEditor
+            busy={busy}
+            detectionResult={deliveryChatDetection?.target_id === target.target_id ? deliveryChatDetection : null}
+            detectDeliveryChatId={detectDeliveryChatId}
+            key={target.target_id}
+            saveDeliveryTarget={saveDeliveryTarget}
+            target={target}
+            testDeliveryTarget={testDeliveryTarget}
+            testResult={deliveryTest?.target_id === target.target_id ? deliveryTest : null}
+          />
+        ))}
+      </div>
     </div>
   );
+}
+
+function defaultTelegramDeliveryTarget(): DeliveryTarget {
+  return {
+    schema_version: "delivery_target_v1",
+    target_id: DEFAULT_TELEGRAM_TARGET_ID,
+    type: "telegram_bot",
+    enabled: false,
+    config: {},
+    display_name: "Default notification chat",
+    status_label: "Not saved",
+    detail: "Add a Telegram chat ID to create the default private bot notification target.",
+    updated_at: "",
+  };
 }
 
 function NotificationTokenPanel({

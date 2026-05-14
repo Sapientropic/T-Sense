@@ -1,4 +1,4 @@
-state: active_quality_iteration_review_followthrough_checkpoint
+state: active_quality_iteration_notification_target_checkpoint
 mode: Standard
 run_shape: continuous_until_deadline
 slice_goal: "Continue the technical-debt SPEC with high-value dashboard/backend slices, including Inbox/Runs concentration cleanup, sanitizer test ownership cleanup, dashboard profile-creation facade cleanup, monitor/tgcs CLI test concentration cleanup, monitor delivery runtime cleanup, dashboard profile projection cleanup, monitor command execution cleanup, monitor manifest/result projection cleanup, dashboard opportunity projection cleanup, dashboard setup projection cleanup, Desk server selection cleanup, Desk HTTP security cleanup, Desk profile route mutation cleanup, report HTML link-rendering cleanup, Desk source assistant planning cleanup, Desk source access cleanup, Settings source-library UI cleanup, profile runtime-settings UI cleanup, Bot Gateway background/autostart cleanup, and local secret-settings cleanup, while preserving public props, review/run action names, sanitizer behavior, route contracts, monitor/tgcs CLI behavior, dashboard state contracts, run manifest contracts, monitor result contracts, report link safety, loopback safety, pre-state-access private input rejection, source assistant external-AI confirmation gates, source access cached-health repair semantics, quiet-source semantics, source library topic-editor behavior, runtime-settings save/reset/draft behavior, Bot Gateway token/confirm gating, fixed scheduler argv, secret redaction, env-over-local precedence, and local-first privacy boundaries."
@@ -6,10 +6,10 @@ stop_condition: "Do not enter final closeout before 2026-05-14 14:00 Asia/Shangh
 handoff_policy: after_deadline_closeout
 continuation_policy: "Use docs/technical-debt-cleanup-spec.md as the debt authority; continue with one remaining boundary at a time and keep old facade exports until downstream callers move."
 intake_status: explicit_user_request
-gate_status: review_followthrough_gates_passed
+gate_status: notification_target_gates_passed
 blockers: []
 needs_human: []
-residual_risk: "This checkpoint improves Review follow-through after Latest action is empty: remaining open backlog buckets are preferred before saved/duplicate/handled cards, so users are not routed back to the card they just processed while useful open cards remain. Browser smoke covers the High backlog path after a handled latest card. It does not change review-card mutation endpoints or card classification rules."
+residual_risk: "This checkpoint removes a notification setup dead-end by rendering an editable default telegram-bot-default target when no delivery target is saved yet. Browser smoke covers filling the empty-state chat field and saving through the default target endpoint. It does not change backend target validation, token storage, live delivery semantics, or enabled-by-default behavior."
 completed_slices:
   - "dashboard_server artifact helpers moved to scripts/desk_artifacts.py with dashboard_server re-export compatibility."
   - "dashboard_server git helpers moved to scripts/desk_git.py with dashboard_server wrapper compatibility."
@@ -70,6 +70,7 @@ completed_slices:
   - "Runs repair routing: failed scans with llm_output_truncated, semantic_json_invalid, or all_filtered_out now point the health card and evidence panel to profile/semantic tuning instead of source repair; source_access_failed now maps to source-access repair in diagnostic copy."
   - "Start first-session action clarity: the Start summary Next tile now exposes a direct button for the active local setup/scan step, skips Telegram because login remains an embedded form, and non-ready Start views promote the current active journey card above completed/optional cards while keeping original step numbers."
   - "Review follow-through: when Latest action has no cards, the fallback bucket now prefers open High/New/Low backlog before Saved/Duplicate/Handled, preventing a just-handled card from taking focus while useful open opportunities remain."
+  - "Notification target setup: Settings > Alerts now renders an editable default Telegram notification target when no target row exists, so users can create telegram-bot-default from the app instead of hitting a dead empty state."
 verification:
   - "python -m pytest tests/dashboard -q -> 149 passed, 71 subtests passed"
   - "python -m pytest tests/monitor_state -q -> 81 passed, 24 subtests passed"
@@ -368,6 +369,10 @@ verification:
   - "Review follow-through frontend full/build gates: cd dashboard; npm test -- --run -> 25 files, 157 tests passed; cd dashboard; npm run build -> passed."
   - "Review follow-through Playwright smoke against Vite with mocked local API -> after Latest action is empty with one handled latest card and one older open high card, real React state switches the toolbar to High (1) and the main Review card is Old High Backlog. Screenshot written under ignored output/playwright/inbox-followthrough-high-desktop.png; Vite server stopped after smoke."
   - "Review follow-through diff gate: git diff --check -> passed."
+  - "Notification target targeted frontend gate: cd dashboard; npm test -- --run settings -> 4 files, 21 tests passed."
+  - "Notification target frontend full/build gates: cd dashboard; npm test -- --run -> 25 files, 158 tests passed; cd dashboard; npm run build -> passed."
+  - "Notification target Playwright smoke against Vite with mocked local API -> empty delivery_targets renders Default notification chat, filling Telegram chat ID and saving posts to /api/desk/delivery-targets/telegram-bot-default with chat_id=123456 and enabled=false, then shows Notification target saved muted. Screenshot written under ignored output/playwright/notification-default-target-empty.png; Vite server stopped after smoke."
+  - "Notification target diff gate: git diff --check -> passed."
 reviewer_status:
   - "Explorer review of the proposed split recommended a搬运式拆分: keep InboxView as facade, move filters/backlog, review-card/actions/source refs, and setup checklist into focused submodules."
   - "Post-diff reviewer found no blocking issues. Remaining risks were untracked new files, SSR-only test coverage, and preserving existing link sanitizer boundaries; untracked files are included in the checkpoint plan and the browser smoke covers the main interaction path."
@@ -414,11 +419,11 @@ operator_checks:
   - "Live Windows Task Scheduler dry-run task with random name -> install exit 0, status installed, remove exit 0, final status not_installed."
   - "Live Windows Credential Manager smoke -> random secret write/read/delete passed; post-delete read returned empty."
   - "Live LLM structured call -> provider=deepseek, model=deepseek-v4-flash, JSON response status=TGCS_LIVE_LLM_OK, total_tokens=58."
-next_action: "Commit the Review follow-through checkpoint, then continue with another high-impact product slice. Prefer Settings/Bot setup dead-end removal or SPEC/ROADMAP-backed differentiation over small wording-only fixes."
+next_action: "Commit the Notification target checkpoint, then continue with another high-impact product slice. Prefer Bot Gateway readiness ordering, SPEC/ROADMAP-backed differentiation, or refreshed competitor/user-pain research over small wording-only fixes."
 candidate_slices:
-  - "Inspect Settings/Bot setup for remaining app-first dead ends, especially notification token/chat-id/gateway readiness paths."
+  - "Inspect Bot Gateway readiness ordering for remaining confusion between token, chat, menu, and background state."
   - "Tighten remaining Bot Gateway setup guidance only if it removes a real setup dead-end; do not add broad free-form bot actions."
   - "Inspect scripts/desk_sources.py only for compatibility-facade cleanup if downstream callers can move off old helper names; do not delete facade names while dashboard_server.py still re-exports them."
   - "Inspect scripts/desk_credentials.py only for compatibility-facade cleanup if downstream callers can move off old helper names; do not delete facade names while dashboard_server.py still re-exports them."
-last_update: "2026-05-14T13:09:00+08:00"
+last_update: "2026-05-14T13:14:00+08:00"
 checkpoint_ready: true
