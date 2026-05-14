@@ -44,6 +44,7 @@ try:
         desk_profile_routes,
         desk_scheduler,
         desk_server_selection,
+        desk_settings_routes,
         desk_state_payload,
         desk_sources as _desk_sources_module,
         local_credentials as local_credentials,
@@ -76,6 +77,7 @@ except ModuleNotFoundError:
         desk_profile_routes,
         desk_scheduler,
         desk_server_selection,
+        desk_settings_routes,
         desk_state_payload,
         desk_sources as _desk_sources_module,
         local_credentials as local_credentials,
@@ -852,55 +854,24 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 action_id = unquote(parsed.path.removeprefix("/api/desk/actions/").removesuffix("/run").strip("/"))
                 self._json(HTTPStatus.OK, {"ok": True, "result": run_desk_action(action_id, body=body)})
                 return
-            if parsed.path == "/api/desk/telegram-credentials":
-                DashboardHandler._require_loopback_access(self, "Telegram setup")
-                result = save_telegram_credentials(body.get("api_id"), body.get("api_hash"))
-                self._json(HTTPStatus.OK, {"ok": True, "telegram": result})
+            if desk_settings_routes.handle_settings_post_route(
+                self,
+                parsed.path,
+                body,
+                require_loopback_access=DashboardHandler._require_loopback_access,
+                close_after_use=close_after_use,
+                save_telegram_credentials=save_telegram_credentials,
+                telegram_send_code=telegram_send_code,
+                telegram_verify_code=telegram_verify_code,
+                telegram_cancel_login=telegram_cancel_login,
+                update_desk_notification_token=update_desk_notification_token,
+                apply_desk_bot_identity=apply_desk_bot_identity,
+                update_desk_ai_settings=update_desk_ai_settings,
+                save_desk_delivery_target=save_desk_delivery_target,
+                test_desk_delivery_target=test_desk_delivery_target,
+                detect_desk_delivery_chat_id=detect_desk_delivery_chat_id,
+            ):
                 return
-            if parsed.path == "/api/desk/telegram-login/send-code":
-                DashboardHandler._require_loopback_access(self, "Telegram setup")
-                result = telegram_send_code(body.get("phone"))
-                self._json(HTTPStatus.OK, {"ok": True, "telegram": result})
-                return
-            if parsed.path == "/api/desk/telegram-login/verify-code":
-                DashboardHandler._require_loopback_access(self, "Telegram setup")
-                result = telegram_verify_code(body.get("code"), body.get("password") or "")
-                self._json(HTTPStatus.OK, {"ok": True, "telegram": result})
-                return
-            if parsed.path == "/api/desk/telegram-login/cancel":
-                DashboardHandler._require_loopback_access(self, "Telegram setup")
-                self._json(HTTPStatus.OK, {"ok": True, "telegram": telegram_cancel_login()})
-                return
-            if parsed.path == "/api/desk/notification-token":
-                DashboardHandler._require_loopback_access(self, "Notification token settings")
-                self._json(HTTPStatus.OK, {"ok": True, "token": update_desk_notification_token(body)})
-                return
-            if parsed.path == "/api/desk/bot-identity/apply":
-                DashboardHandler._require_loopback_access(self, "Bot identity settings")
-                self._json(HTTPStatus.OK, {"ok": True, "identity": apply_desk_bot_identity()})
-                return
-            if parsed.path == "/api/desk/ai-settings":
-                DashboardHandler._require_loopback_access(self, "AI API settings")
-                self._json(HTTPStatus.OK, {"ok": True, "ai": update_desk_ai_settings(body)})
-                return
-            if parsed.path.startswith("/api/desk/delivery-targets/"):
-                DashboardHandler._require_loopback_access(self, "Notification settings")
-                parts = [unquote(part) for part in parsed.path.strip("/").split("/")]
-                if len(parts) == 4:
-                    with close_after_use(self._connect()) as conn:
-                        target = save_desk_delivery_target(conn, parts[3], body)
-                    self._json(HTTPStatus.OK, {"ok": True, "target": target})
-                    return
-                if len(parts) == 5 and parts[4] == "test":
-                    with close_after_use(self._connect()) as conn:
-                        result = test_desk_delivery_target(conn, parts[3], body)
-                    self._json(HTTPStatus.OK, {"ok": True, "result": result})
-                    return
-                if len(parts) == 5 and parts[4] == "detect-chat-id":
-                    result = detect_desk_delivery_chat_id(parts[3], body)
-                    self._json(HTTPStatus.OK, {"ok": True, "result": result})
-                    return
-                raise ValueError("Unsupported notification settings path.")
             if parsed.path == "/api/desk/sources/preview":
                 DashboardHandler._require_loopback_access(self, "Source import")
                 self._json(HTTPStatus.OK, {"ok": True, "result": preview_desk_source_import(body)})
