@@ -4,7 +4,7 @@ from http import HTTPStatus
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts import dashboard_server, desk_profiles, monitor_state
+from scripts import dashboard_server, desk_profile_routes, desk_profiles, monitor_state
 
 
 class DashboardProfileTests(unittest.TestCase):
@@ -12,6 +12,27 @@ class DashboardProfileTests(unittest.TestCase):
         self.assertIs(dashboard_server.create_profile_from_brief, desk_profiles.create_profile_from_brief)
         self.assertIs(dashboard_server._profile_create_input_text, desk_profiles._profile_create_input_text)
         self.assertEqual(dashboard_server.PROFILE_CREATE_MAX_TEXT_LENGTH, desk_profiles.PROFILE_CREATE_MAX_TEXT_LENGTH)
+
+    def test_profile_route_helpers_accept_dashboard_server_patch_paths(self):
+        class FakeConnection:
+            pass
+
+        conn = FakeConnection()
+        with patch.object(
+            dashboard_server.monitor_state,
+            "update_profile_enabled",
+            return_value={"profile_id": "jobs-fast", "enabled": False},
+        ) as update_mock:
+            payload = desk_profile_routes.profile_enabled_payload(
+                conn,
+                path="/api/profiles/jobs-fast/enabled",
+                body={"enabled": False},
+                monitor_state_module=dashboard_server.monitor_state,
+                allowed_fields=dashboard_server.PROFILE_ENABLED_ALLOWED_FIELDS,
+            )
+
+        update_mock.assert_called_once_with(conn, profile_id="jobs-fast", enabled=False)
+        self.assertEqual(payload["profile"]["enabled"], False)
 
     def test_profile_create_facade_helper_patches_still_affect_creation(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -369,6 +390,31 @@ class DashboardProfileTests(unittest.TestCase):
 
                 self.assertEqual(handler.status, HTTPStatus.BAD_REQUEST)
                 self.assertIn(error_fragment, handler.payload["error"])
+
+
+    def test_profile_draft_note_http_endpoint_uses_facade_length_patch(self):
+        class FakeHandler:
+            path = "/api/profiles/jobs-fast/draft-note"
+            status = None
+            payload = None
+            client_address = ("127.0.0.1", 51000)
+
+            def _connect(self):
+                raise AssertionError("oversized note should be rejected before state access")
+
+            def _read_json_body(self):
+                return {"note": "123456"}
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        with patch.object(dashboard_server, "PROFILE_DRAFT_NOTE_MAX_LENGTH", 5):
+            handler = FakeHandler()
+            dashboard_server.DashboardHandler.do_POST(handler)
+
+        self.assertEqual(handler.status, HTTPStatus.BAD_REQUEST)
+        self.assertIn("5 characters or fewer", handler.payload["error"])
 
 
     def test_profile_matching_preferences_http_endpoint_rejects_private_fragments(self):

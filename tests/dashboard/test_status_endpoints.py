@@ -170,6 +170,43 @@ class DashboardStatusEndpointTests(unittest.TestCase):
         self.assertEqual(handler.payload["result"]["status"], "reverted")
 
 
+    def test_profile_patch_apply_endpoint_calls_monitor_state(self):
+        class FakeConnection:
+            closed = False
+
+            def close(self):
+                self.closed = True
+
+        class FakeHandler:
+            path = "/api/profile-patches/patch_123/apply"
+            status = None
+            payload = None
+            conn = FakeConnection()
+
+            def _read_json_body(self):
+                return {}
+
+            def _connect(self):
+                return self.conn
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        with patch.object(
+            dashboard_server.monitor_state,
+            "apply_profile_patch",
+            return_value={"patch_id": "patch_123", "status": "applied"},
+        ) as apply_mock:
+            handler = FakeHandler()
+            dashboard_server.DashboardHandler.do_POST(handler)
+
+        apply_mock.assert_called_once_with(handler.conn, patch_id="patch_123")
+        self.assertTrue(handler.conn.closed)
+        self.assertEqual(handler.status, HTTPStatus.OK)
+        self.assertEqual(handler.payload["result"]["status"], "applied")
+
+
     def test_profile_patch_replay_endpoint_calls_monitor_state(self):
         class FakeConnection:
             closed = False

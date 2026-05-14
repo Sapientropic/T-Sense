@@ -40,6 +40,7 @@ try:
         desk_git,
         desk_http_security,
         desk_profiles,
+        desk_profile_routes,
         desk_scheduler,
         desk_server_selection,
         desk_sources as _desk_sources_module,
@@ -69,6 +70,7 @@ except ModuleNotFoundError:
         desk_git,
         desk_http_security,
         desk_profiles,
+        desk_profile_routes,
         desk_scheduler,
         desk_server_selection,
         desk_sources as _desk_sources_module,
@@ -1015,109 +1017,116 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 return
             if parsed.path.startswith("/api/profiles/") and parsed.path.endswith("/alert-mode"):
                 DashboardHandler._require_loopback_access(self, "Profile settings")
-                profile_id = unquote(parsed.path.split("/")[3])
                 with close_after_use(self._connect()) as conn:
-                    profile = monitor_state.update_profile_alert_mode(
+                    payload = desk_profile_routes.profile_alert_mode_payload(
                         conn,
-                        profile_id=profile_id,
-                        mode=str(body.get("mode") or ""),
+                        path=parsed.path,
+                        body=body,
+                        monitor_state_module=monitor_state,
                     )
-                self._json(HTTPStatus.OK, {"ok": True, "profile": profile})
+                self._json(HTTPStatus.OK, payload)
                 return
             if parsed.path.startswith("/api/profiles/") and parsed.path.endswith("/enabled"):
                 DashboardHandler._require_loopback_access(self, "Profile settings")
-                unexpected = sorted(str(key) for key in body.keys() if key not in PROFILE_ENABLED_ALLOWED_FIELDS)
-                if unexpected:
-                    raise ValueError(f"Unsupported profile setting field: {', '.join(unexpected)}")
-                enabled = body.get("enabled")
-                if not isinstance(enabled, bool):
-                    raise ValueError("Profile enabled value must be true or false.")
-                profile_id = unquote(parsed.path.split("/")[3])
+                # Keep request-shape rejection before DB access; tests rely on
+                # this to prevent unsafe profile text/fields from touching state.
+                desk_profile_routes.validate_profile_enabled_body(body, allowed_fields=PROFILE_ENABLED_ALLOWED_FIELDS)
                 with close_after_use(self._connect()) as conn:
-                    profile = monitor_state.update_profile_enabled(conn, profile_id=profile_id, enabled=enabled)
-                self._json(HTTPStatus.OK, {"ok": True, "profile": profile})
+                    payload = desk_profile_routes.profile_enabled_payload(
+                        conn,
+                        path=parsed.path,
+                        body=body,
+                        monitor_state_module=monitor_state,
+                        allowed_fields=PROFILE_ENABLED_ALLOWED_FIELDS,
+                    )
+                self._json(HTTPStatus.OK, payload)
                 return
             if parsed.path.startswith("/api/profiles/") and parsed.path.endswith("/runtime-settings"):
                 DashboardHandler._require_loopback_access(self, "Profile settings")
-                unexpected = sorted(str(key) for key in body.keys() if key not in PROFILE_RUNTIME_SETTINGS_ALLOWED_FIELDS)
-                if unexpected:
-                    raise ValueError(f"Unsupported profile setting field: {', '.join(unexpected)}")
-                profile_id = unquote(parsed.path.split("/")[3])
+                desk_profile_routes.validate_profile_runtime_settings_body(
+                    body,
+                    allowed_fields=PROFILE_RUNTIME_SETTINGS_ALLOWED_FIELDS,
+                )
                 with close_after_use(self._connect()) as conn:
-                    profile = monitor_state.update_profile_runtime_settings(
+                    payload = desk_profile_routes.profile_runtime_settings_payload(
                         conn,
-                        profile_id=profile_id,
-                        settings=body,
+                        path=parsed.path,
+                        body=body,
+                        monitor_state_module=monitor_state,
+                        allowed_fields=PROFILE_RUNTIME_SETTINGS_ALLOWED_FIELDS,
                     )
-                self._json(HTTPStatus.OK, {"ok": True, "profile": profile})
+                self._json(HTTPStatus.OK, payload)
                 return
             if parsed.path.startswith("/api/profiles/") and parsed.path.endswith("/draft-note"):
                 DashboardHandler._require_loopback_access(self, "Profile draft note")
-                unexpected = sorted(str(key) for key in body.keys() if key not in PROFILE_DRAFT_NOTE_ALLOWED_FIELDS)
-                if unexpected:
-                    raise ValueError(f"Unsupported profile draft field: {', '.join(unexpected)}")
-                note = " ".join(str(body.get("note") or "").split())
-                if not note:
-                    raise ValueError("Profile note is required.")
-                if len(note) > PROFILE_DRAFT_NOTE_MAX_LENGTH:
-                    raise ValueError(f"Profile note must be {PROFILE_DRAFT_NOTE_MAX_LENGTH} characters or fewer.")
-                note = monitor_state.require_profile_text_without_private_fragments("Profile note", note)
-                profile_id = unquote(parsed.path.split("/")[3])
+                desk_profile_routes.validate_profile_draft_note_text(
+                    body,
+                    monitor_state_module=monitor_state,
+                    allowed_fields=PROFILE_DRAFT_NOTE_ALLOWED_FIELDS,
+                    max_length=PROFILE_DRAFT_NOTE_MAX_LENGTH,
+                )
                 with close_after_use(self._connect()) as conn:
-                    patch = monitor_state.create_profile_patch_suggestion(
+                    payload = desk_profile_routes.profile_draft_note_payload(
                         conn,
-                        profile_id=profile_id,
-                        card_id=None,
-                        note=note,
-                        profile_path=None,
+                        path=parsed.path,
+                        body=body,
+                        monitor_state_module=monitor_state,
+                        allowed_fields=PROFILE_DRAFT_NOTE_ALLOWED_FIELDS,
+                        max_length=PROFILE_DRAFT_NOTE_MAX_LENGTH,
                     )
-                    conn.commit()
-                self._json(HTTPStatus.OK, {"ok": True, "patch": patch})
+                self._json(HTTPStatus.OK, payload)
                 return
             if parsed.path.startswith("/api/profiles/") and parsed.path.endswith("/matching-preferences"):
                 DashboardHandler._require_loopback_access(self, "Profile matching preferences")
-                unexpected = sorted(str(key) for key in body.keys() if key not in PROFILE_MATCHING_PREFERENCES_ALLOWED_FIELDS)
-                if unexpected:
-                    raise ValueError(f"Unsupported profile matching field: {', '.join(unexpected)}")
-                preferences = str(body.get("preferences") or "").strip()
-                if not preferences:
-                    raise ValueError("Profile matching preferences are required.")
-                if len(preferences) > PROFILE_MATCHING_PREFERENCES_MAX_LENGTH:
-                    raise ValueError(f"Profile matching preferences must be {PROFILE_MATCHING_PREFERENCES_MAX_LENGTH} characters or fewer.")
-                preferences = monitor_state.require_profile_text_without_private_fragments(
-                    "Profile matching preferences",
-                    preferences,
+                desk_profile_routes.validate_profile_matching_preferences_text(
+                    body,
+                    monitor_state_module=monitor_state,
+                    allowed_fields=PROFILE_MATCHING_PREFERENCES_ALLOWED_FIELDS,
+                    max_length=PROFILE_MATCHING_PREFERENCES_MAX_LENGTH,
                 )
-                profile_id = unquote(parsed.path.split("/")[3])
                 with close_after_use(self._connect()) as conn:
-                    patch = monitor_state.create_profile_preferences_patch_suggestion(
+                    payload = desk_profile_routes.profile_matching_preferences_payload(
                         conn,
-                        profile_id=profile_id,
-                        preferences_text=preferences,
+                        path=parsed.path,
+                        body=body,
+                        monitor_state_module=monitor_state,
+                        allowed_fields=PROFILE_MATCHING_PREFERENCES_ALLOWED_FIELDS,
+                        max_length=PROFILE_MATCHING_PREFERENCES_MAX_LENGTH,
                     )
-                    conn.commit()
-                self._json(HTTPStatus.OK, {"ok": True, "patch": patch})
+                self._json(HTTPStatus.OK, payload)
                 return
             if parsed.path.startswith("/api/profile-patches/") and parsed.path.endswith("/apply"):
                 DashboardHandler._require_loopback_access(self, "Profile patch actions")
-                patch_id = unquote(parsed.path.split("/")[3])
                 with close_after_use(self._connect()) as conn:
-                    result = monitor_state.apply_profile_patch(conn, patch_id=patch_id)
-                self._json(HTTPStatus.OK, {"ok": True, "result": result})
+                    payload = desk_profile_routes.profile_patch_action_payload(
+                        conn,
+                        path=parsed.path,
+                        action="apply",
+                        monitor_state_module=monitor_state,
+                    )
+                self._json(HTTPStatus.OK, payload)
                 return
             if parsed.path.startswith("/api/profile-patches/") and parsed.path.endswith("/revert"):
                 DashboardHandler._require_loopback_access(self, "Profile patch actions")
-                patch_id = unquote(parsed.path.split("/")[3])
                 with close_after_use(self._connect()) as conn:
-                    result = monitor_state.revert_profile_patch(conn, patch_id=patch_id)
-                self._json(HTTPStatus.OK, {"ok": True, "result": result})
+                    payload = desk_profile_routes.profile_patch_action_payload(
+                        conn,
+                        path=parsed.path,
+                        action="revert",
+                        monitor_state_module=monitor_state,
+                    )
+                self._json(HTTPStatus.OK, payload)
                 return
             if parsed.path.startswith("/api/profile-patches/") and parsed.path.endswith("/replay"):
                 DashboardHandler._require_loopback_access(self, "Profile patch actions")
-                patch_id = unquote(parsed.path.split("/")[3])
                 with close_after_use(self._connect()) as conn:
-                    result = monitor_state.replay_profile_patch(conn, patch_id=patch_id)
-                self._json(HTTPStatus.OK, {"ok": True, "result": result})
+                    payload = desk_profile_routes.profile_patch_action_payload(
+                        conn,
+                        path=parsed.path,
+                        action="replay",
+                        monitor_state_module=monitor_state,
+                    )
+                self._json(HTTPStatus.OK, payload)
                 return
             self._json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "not_found"})
         except (
