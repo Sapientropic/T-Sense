@@ -303,6 +303,7 @@
       "title"
       "actions"
       "reason"
+      "proof"
       "meta"
       "sources"
       "report";
@@ -336,10 +337,19 @@
   }
 
   .review-card .meta-row span,
+  .review-card .action-proof-chip,
   .review-card .source-chip.muted {
     border: 1px solid var(--wash-paper-14);
     background: var(--wash-paper-7);
     color: var(--muted);
+  }
+
+  .review-card .action-proof-chip strong {
+    color: color-mix(in oklch, var(--paper) 66%, var(--muted));
+  }
+
+  .review-card .action-proof-chip span {
+    color: color-mix(in oklch, var(--paper) 82%, var(--muted));
   }
 
   .review-card .source-chip,
@@ -748,6 +758,7 @@
   }
 
   .review-card .meta-row,
+  .review-card .action-proof-strip,
   .review-card .source-row {
     gap: 5px;
   }

@@ -116,6 +116,7 @@ export function InboxView({
               busy={busy}
               card={card}
               key={card.card_id}
+              latestRunId={latestRunId}
               profileReportNames={profileReportNames}
             />
           ))}

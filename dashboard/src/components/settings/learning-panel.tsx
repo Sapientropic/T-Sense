@@ -161,6 +161,10 @@ function FeedbackFlow({ summary }: { summary?: DashboardState["feedback_summary"
         <strong>{summary?.applied_profile_diff_count ?? 0}</strong>
         applied
       </span>
+      <span title="Reverted preference drafts">
+        <strong>{summary?.reverted_profile_diff_count ?? 0}</strong>
+        reverted
+      </span>
     </div>
   );
 }
@@ -173,18 +177,20 @@ function FeedbackBreakdown({
   exportableCount: number;
 }) {
   const items = [
-    { label: "Keep", value: summary?.by_action?.keep ?? 0 },
-    { label: "Skip", value: summary?.by_action?.skip ?? 0 },
-    { label: "False", value: summary?.by_action?.false_positive ?? 0 },
-    { label: "Draft", value: summary?.non_exportable_follow_up_count ?? 0 },
-    { label: "High", value: summary?.by_rating?.high ?? 0 },
+    { label: "Preferred", value: summary?.by_action?.keep ?? 0 },
+    { label: "Deprioritized", value: summary?.by_action?.skip ?? 0 },
+    { label: "Wrong match", value: summary?.by_action?.false_positive ?? 0 },
+    { label: "Draft notes", value: summary?.non_exportable_follow_up_count ?? 0 },
+    { label: "High signal", value: summary?.by_rating?.high ?? 0 },
     { label: "Changed", value: summary?.by_decision_status?.changed ?? 0 },
+    { label: "Applied diffs", value: summary?.applied_profile_diff_count ?? 0 },
+    { label: "Reverted diffs", value: summary?.reverted_profile_diff_count ?? 0 },
   ].filter((item) => item.value > 0);
   if (!items.length) {
     return <InlineEmpty title={exportableCount > 0 ? "Feedback rows need action labels" : "No learning decisions yet"} />;
   }
   return (
-    <div className="feedback-breakdown" aria-label="Feedback action counts">
+    <div className="feedback-breakdown" aria-label="Feedback calibration evidence">
       {items.map((item) => (
         <span className={item.value > 0 ? "" : "muted"} key={item.label}>
           {item.label} {item.value}

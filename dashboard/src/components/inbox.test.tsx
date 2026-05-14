@@ -148,6 +148,44 @@ describe("InboxView", () => {
     expect(html).not.toContain('data-review-action="follow_up"');
   });
 
+  it("renders an action proof strip from existing review-card evidence", () => {
+    const html = renderToStaticMarkup(
+      <InboxView
+        cards={[
+          card({
+            status: "false_positive",
+            item: {
+              why: "Matches the target profile.",
+              decision_state: {
+                status: "changed",
+                signals: ["salary_range"],
+                material_change_fields: ["compensation"],
+              },
+            },
+          }),
+        ]}
+        latestRunId="run-1"
+        profileReportNames={{ "jobs-fast": "Jobs Report" }}
+        act={vi.fn()}
+        busy={false}
+      />,
+    );
+
+    expect(html).toContain('aria-label="Action proof"');
+    expect(html).toContain("Profile");
+    expect(html).toContain("Jobs Report");
+    expect(html).toContain("Decision");
+    expect(html).toContain("Changed");
+    expect(html).toContain("Review");
+    expect(html).toContain("Wrong match");
+    expect(html).toContain("Evidence");
+    expect(html).toContain("1 source ref");
+    expect(html).toContain("Run");
+    expect(html).toContain("Latest + report");
+    expect(html).toContain("Salary Range");
+    expect(html).toContain("Compensation");
+  });
+
   it("renders source references as safe links with a capped overflow count", () => {
     const html = renderToStaticMarkup(
       <InboxView

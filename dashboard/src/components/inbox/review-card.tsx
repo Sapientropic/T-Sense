@@ -2,17 +2,19 @@ import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 
 import { Archive, Ban, Bookmark, Check, ExternalLink, FileDiff, Play, Send, X } from "lucide-react";
 
 import { artifactFormatFromPath, artifactHref, reportProfileName, toneClass } from "../../domain/display";
-import { decisionStatusLabel, formatDate, profileDisplayName, sourceRefLabel } from "../../domain/format";
+import { decisionStatusLabel, formatDate, profileDisplayName, sourceRefLabel, titleCaseLabel } from "../../domain/format";
 import { sourceRefUrl, telegramMessageUrl } from "../../domain/inbox";
 import type { ReviewCard, SourceRef } from "../../domain/types";
 
 export function ReviewCardArticle({
   card,
+  latestRunId,
   profileReportNames,
   act,
   busy,
 }: {
   card: ReviewCard;
+  latestRunId?: string;
   profileReportNames: Record<string, string>;
   act: (cardId: string, action: string, note?: string) => void;
   busy: boolean;
@@ -36,6 +38,7 @@ export function ReviewCardArticle({
           showFollowUp={showFollowUp}
         />
         <p className="reason">{card.item.why || "Decision reason unavailable."}</p>
+        <ActionProofStrip card={card} latestRunId={latestRunId} profileReportNames={profileReportNames} />
         <div className="meta-row">
           <span>{reportProfileName(card.profile_id, profileReportNames)}</span>
           <span>{decisionStatusLabel(card.decision_status)}</span>
@@ -57,6 +60,128 @@ export function ReviewCardArticle({
       <CardActions card={card} act={act} busy={busy} setShowFollowUp={setShowFollowUp} showFollowUp={showFollowUp} />
     </article>
   );
+}
+
+function ActionProofStrip({
+  card,
+  latestRunId,
+  profileReportNames,
+}: {
+  card: ReviewCard;
+  latestRunId?: string;
+  profileReportNames: Record<string, string>;
+}) {
+  const decisionState = card.item.decision_state ?? {};
+  const proofItems = [
+    {
+      label: "Profile",
+      value: reportProfileName(card.profile_id, profileReportNames),
+      title: "Profile that evaluated this card",
+    },
+    {
+      label: "Decision",
+      value: decisionStatusLabel(card.decision_status),
+      title: decisionProofTitle(decisionState),
+    },
+    {
+      label: "Review",
+      value: reviewStatusLabel(card.status),
+      title: "Current local review decision",
+    },
+    {
+      label: "Evidence",
+      value: sourceRefCountLabel(card.source_refs.length),
+      title: sourceRefProofTitle(card.source_refs),
+    },
+    {
+      label: "Run",
+      value: runProofLabel(card, latestRunId),
+      title: runProofTitle(card, latestRunId),
+    },
+  ];
+  const signals = (decisionState.signals ?? []).slice(0, 2);
+  signals.forEach((signal) => {
+    proofItems.push({
+      label: "Signal",
+      value: titleCaseLabel(signal),
+      title: "Decision signal carried by this review card",
+    });
+  });
+  const materialChangeFields = (decisionState.material_change_fields ?? []).slice(0, 2);
+  materialChangeFields.forEach((field) => {
+    proofItems.push({
+      label: "Changed",
+      value: titleCaseLabel(field),
+      title: "Material field that changed since earlier review memory",
+    });
+  });
+
+  return (
+    <div className="action-proof-strip" aria-label="Action proof">
+      {proofItems.map((item) => (
+        <span className="action-proof-chip" key={`${item.label}-${item.value}`} title={item.title}>
+          <strong>{item.label}</strong>
+          <span>{item.value}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function decisionProofTitle(decisionState: NonNullable<ReviewCard["item"]["decision_state"]>) {
+  const parts = [
+    decisionState.seen_count ? `Seen ${decisionState.seen_count} time${decisionState.seen_count === 1 ? "" : "s"}` : "",
+    decisionState.first_seen_at ? `First seen ${formatDate(decisionState.first_seen_at)}` : "",
+    decisionState.last_seen_at ? `Last seen ${formatDate(decisionState.last_seen_at)}` : "",
+  ].filter(Boolean);
+  return parts.join(" · ") || "Novelty state from local decision memory";
+}
+
+function reviewStatusLabel(status?: string) {
+  const normalized = String(status || "pending").toLowerCase();
+  const labels: Record<string, string> = {
+    false_positive: "Wrong match",
+    follow_up: "Profile draft",
+    kept: "Preferred",
+    pending: "Needs decision",
+    skipped: "Deprioritized",
+  };
+  return labels[normalized] || titleCaseLabel(normalized);
+}
+
+function sourceRefCountLabel(count: number) {
+  if (count <= 0) {
+    return "No source ref";
+  }
+  return `${count} source ref${count === 1 ? "" : "s"}`;
+}
+
+function sourceRefProofTitle(refs: SourceRef[]) {
+  if (!refs.length) {
+    return "No Telegram source reference was saved for this card";
+  }
+  return refs
+    .slice(0, 3)
+    .map((ref) => `@${String(ref.channel || "").replace(/^@+/, "")} #${String(ref.id || "")}`)
+    .join(" · ");
+}
+
+function runProofLabel(card: ReviewCard, latestRunId?: string) {
+  if (!card.last_run_id) {
+    return "Run unknown";
+  }
+  if (latestRunId && card.last_run_id === latestRunId) {
+    return card.report_path ? "Latest + report" : "Latest run";
+  }
+  return card.report_path ? "Prior + report" : "Prior run";
+}
+
+function runProofTitle(card: ReviewCard, latestRunId?: string) {
+  if (!card.last_run_id) {
+    return "No run id is attached to this card";
+  }
+  const relation = latestRunId && card.last_run_id === latestRunId ? "latest dashboard run" : "earlier run";
+  return `From ${relation}: ${card.last_run_id}${card.report_path ? " with report artifact" : ""}`;
 }
 
 function opportunityStatusLabel(status: string) {

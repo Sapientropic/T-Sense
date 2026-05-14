@@ -305,6 +305,7 @@
   grid-template-areas:
     "title title"
     "reason sources"
+    "proof proof"
     "meta report";
   grid-template-columns: minmax(0, 1fr) minmax(300px, 0.32fr);
   gap: 10px 16px;
@@ -345,6 +346,41 @@
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+}
+
+.action-proof-strip {
+  grid-area: proof;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.action-proof-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  max-width: 100%;
+  gap: 6px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in oklch, var(--teal) 22%, var(--paper-3));
+  background: color-mix(in oklch, var(--teal) 8%, var(--surface-warm));
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.action-proof-chip strong {
+  flex: 0 0 auto;
+  color: var(--ink-warm);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.action-proof-chip span {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.2;
 }
 
 .meta-row,
@@ -772,4 +808,3 @@ a.source-chip:focus-visible {
     transform: translateX(120%);
   }
 }
-

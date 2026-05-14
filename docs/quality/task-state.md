@@ -1,4 +1,4 @@
-state: active_quality_iteration_research_refresh_checkpoint
+state: active_quality_iteration_action_proof_checkpoint
 mode: Standard
 run_shape: continuous_until_deadline
 slice_goal: "Continue the technical-debt SPEC with high-value dashboard/backend slices, including Inbox/Runs concentration cleanup, sanitizer test ownership cleanup, dashboard profile-creation facade cleanup, monitor/tgcs CLI test concentration cleanup, monitor delivery runtime cleanup, dashboard profile projection cleanup, monitor command execution cleanup, monitor manifest/result projection cleanup, dashboard opportunity projection cleanup, dashboard setup projection cleanup, Desk server selection cleanup, Desk HTTP security cleanup, Desk profile route mutation cleanup, report HTML link-rendering cleanup, Desk source assistant planning cleanup, Desk source access cleanup, Settings source-library UI cleanup, profile runtime-settings UI cleanup, Bot Gateway background/autostart cleanup, and local secret-settings cleanup, while preserving public props, review/run action names, sanitizer behavior, route contracts, monitor/tgcs CLI behavior, dashboard state contracts, run manifest contracts, monitor result contracts, report link safety, loopback safety, pre-state-access private input rejection, source assistant external-AI confirmation gates, source access cached-health repair semantics, quiet-source semantics, source library topic-editor behavior, runtime-settings save/reset/draft behavior, Bot Gateway token/confirm gating, fixed scheduler argv, secret redaction, env-over-local precedence, and local-first privacy boundaries."
@@ -6,10 +6,10 @@ stop_condition: "Do not enter final closeout before 2026-05-14 14:00 Asia/Shangh
 handoff_policy: after_deadline_closeout
 continuation_policy: "Use docs/technical-debt-cleanup-spec.md as the debt authority; continue with one remaining boundary at a time and keep old facade exports until downstream callers move."
 intake_status: explicit_user_request
-gate_status: research_refresh_docs_diff_check_passed
+gate_status: action_proof_frontend_gates_passed
 blockers: []
 needs_human: []
-residual_risk: "This checkpoint is a product-direction research refresh after the monitor auxiliary CLI command split. It updates tracked ROADMAP direction around native Telegram AI summaries, digest competitors, explainable action cards, and feedback calibration. The detailed v0.5 alert/review inbox design file is intentionally gitignored local planning state; it was updated locally but should not be force-staged without an explicit policy change. No production code changed in this checkpoint."
+residual_risk: "This checkpoint is a frontend product-surface improvement. Inbox action-proof chips expose profile, decision status, review status, source-ref count, run/report relation, and decision-state signals from existing review-card JSON without changing backend schema. The Learning panel now labels feedback counts as calibration evidence and includes reverted profile diffs. It does not yet add per-card delivery-attempt health or new backend next-run comparison fields."
 completed_slices:
   - "dashboard_server artifact helpers moved to scripts/desk_artifacts.py with dashboard_server re-export compatibility."
   - "dashboard_server git helpers moved to scripts/desk_git.py with dashboard_server wrapper compatibility."
@@ -61,6 +61,7 @@ completed_slices:
   - "Operation POST route split: scripts/desk_operation_routes.py now owns POST dispatch for Desk action run, Git update/pull, feedback export/clear/profile-suggestions, and review-card action/undo routes; scripts/dashboard_server.py preserves do_POST JSON integrity, body parsing, exception mapping, and old monkeypatch-compatible run_desk_action/Git/feedback/monitor_state injection."
   - "Monitor CLI command split: scripts/monitor_cli_commands.py now owns init-config, feedback-export, and delivery-test telegram-bot; scripts/monitor_runner.py preserves old helper names and old monitor_runner patch surfaces before delegating."
   - "Research refresh: ROADMAP.md now treats native Telegram AI summaries as baseline competition, points v0.5 toward profile-driven explainable action cards and feedback calibration, and records refreshed competitor/source notes for Telegram digest tools, Feedly/Inoreader, Bot privacy mode, and content licensing. The ignored local v0.5 design note was updated in parallel as planning context."
+  - "Signal Desk action-proof slice: Inbox review cards now render a compact proof strip from existing card evidence, and Settings Learning now presents feedback counts as calibration evidence with reverted diff visibility."
 verification:
   - "python -m pytest tests/dashboard -q -> 149 passed, 71 subtests passed"
   - "python -m pytest tests/monitor_state -q -> 81 passed, 24 subtests passed"
@@ -317,6 +318,10 @@ verification:
   - "CI-list py_compile including scripts/monitor_cli_commands.py -> passed"
   - "git diff --check -> passed"
   - "Research refresh docs gate: git diff --check -> passed; no production code changed."
+  - "Action-proof frontend targeted gate: cd dashboard; npm test -- --run inbox learning-panel -> 3 files, 21 tests passed."
+  - "Action-proof frontend build gate: cd dashboard; npm run build -> passed."
+  - "Action-proof frontend full Vitest gate: cd dashboard; npm test -- --run -> 25 files, 152 tests passed."
+  - "Action-proof Playwright smoke against Vite with mocked local API -> proof strip visible on desktop and 390px mobile; screenshots written under ignored output/playwright/action-proof-desktop.png and action-proof-mobile.png; Vite server stopped after smoke."
 reviewer_status:
   - "Explorer review of the proposed split recommended a搬运式拆分: keep InboxView as facade, move filters/backlog, review-card/actions/source refs, and setup checklist into focused submodules."
   - "Post-diff reviewer found no blocking issues. Remaining risks were untracked new files, SSR-only test coverage, and preserving existing link sanitizer boundaries; untracked files are included in the checkpoint plan and the browser smoke covers the main interaction path."
@@ -363,11 +368,11 @@ operator_checks:
   - "Live Windows Task Scheduler dry-run task with random name -> install exit 0, status installed, remove exit 0, final status not_installed."
   - "Live Windows Credential Manager smoke -> random secret write/read/delete passed; post-delete read returned empty."
   - "Live LLM structured call -> provider=deepseek, model=deepseek-v4-flash, JSON response status=TGCS_LIVE_LLM_OK, total_tokens=58."
-next_action: "Commit the ROADMAP/task-state research refresh checkpoint, then continue with the next product-facing implementation slice: expose clearer alert/card match reason and feedback calibration evidence in Signal Desk if the existing API already carries enough data; otherwise tighten the projection/backend first."
+next_action: "Commit the action-proof frontend checkpoint, then inspect whether backend dashboard projection should add per-card alert/delivery health or next-run feedback calibration evidence instead of stretching frontend-only derivation further."
 candidate_slices:
-  - "Inspect whether review-card projections already include enough match reason/source/run-health/feedback data to render a compact action-proof strip in Signal Desk; implement the smallest backend/frontend slice that makes the proof visible."
-  - "Inspect whether profile patch suggestions and feedback summaries can produce a calibration panel without new schema; if not, add the backend projection first with focused tests."
+  - "Add a small backend projection for per-card alert/delivery evidence if alert_events already has enough safe data; surface only status/target/mode/count, not payload text or tokens."
+  - "Add next-run feedback calibration evidence if existing runs/review-card timestamps can show post-apply yield changes without a new schema; otherwise keep it as a v0.6 research item."
   - "Inspect scripts/desk_sources.py only for compatibility-facade cleanup if downstream callers can move off old helper names; do not delete facade names while dashboard_server.py still re-exports them."
   - "Inspect scripts/desk_credentials.py only for compatibility-facade cleanup if downstream callers can move off old helper names; do not delete facade names while dashboard_server.py still re-exports them."
-last_update: "2026-05-14T12:04:17+08:00"
+last_update: "2026-05-14T12:15:32+08:00"
 checkpoint_ready: true

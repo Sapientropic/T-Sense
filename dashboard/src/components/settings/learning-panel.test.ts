@@ -56,4 +56,39 @@ describe("Learning panel copy", () => {
     expect(html).toContain("Clear learning decisions");
     expect(html).not.toMatch(/<button class="text-button secondary"[^>]*disabled[^>]*>[\s\S]*?Clear learning decisions/);
   });
+
+  it("renders calibration evidence for profile tuning decisions", () => {
+    const html = renderToStaticMarkup(
+      createElement(LearningPanel, {
+        busy: false,
+        clearFeedback: () => undefined,
+        applyPendingProfileDrafts: () => undefined,
+        exportFeedback: () => undefined,
+        exportResult: null,
+        generateProfileSuggestions: () => undefined,
+        openProfileDrafts: () => undefined,
+        runAgainWithLearning: () => undefined,
+        summary: {
+          current_decision_count: 5,
+          exportable_count: 3,
+          pending_profile_diff_count: 1,
+          applied_profile_diff_count: 2,
+          reverted_profile_diff_count: 1,
+          by_action: { keep: 1, skip: 1, false_positive: 1 },
+          by_rating: { high: 2 },
+          by_decision_status: { changed: 1 },
+        },
+        suggestionResult: null,
+        undoFeedbackDecision: () => undefined,
+      }),
+    );
+
+    expect(html).toContain('aria-label="Feedback calibration evidence"');
+    expect(html).toContain("Preferred 1");
+    expect(html).toContain("Wrong match 1");
+    expect(html).toContain("High signal 2");
+    expect(html).toContain("Applied diffs 2");
+    expect(html).toContain("Reverted diffs 1");
+    expect(html).toContain("reverted");
+  });
 });
