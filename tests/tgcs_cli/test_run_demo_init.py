@@ -218,6 +218,7 @@ class TgcsRunDemoInitTests(unittest.TestCase):
         self.assertIn("Developer Opportunity quickstart", output)
         self.assertIn("Stage: init_required", output)
         self.assertIn("Next: tgcs init --starter jobs", output)
+        self.assertIn("App: Open Signal Desk Start", output)
 
     def test_quickstart_jobs_json_points_to_login_when_credentials_exist_without_session(self):
         tgcs = load_tgcs_module(self)
@@ -249,6 +250,7 @@ class TgcsRunDemoInitTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertEqual(payload["stage"], "login_required")
         self.assertEqual(payload["next_command"], "tgcs login")
+        self.assertIn("Signal Desk Start", payload["next_app_step"])
 
     def test_quickstart_jobs_points_to_first_dry_run_after_login(self):
         tgcs = load_tgcs_module(self)
@@ -284,6 +286,7 @@ class TgcsRunDemoInitTests(unittest.TestCase):
             payload["next_command"],
             "tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run",
         )
+        self.assertEqual(payload["next_app_step"], "Open Signal Desk Start and run the first dry-run scan.")
 
     def test_login_calls_scan_login_only(self):
         tgcs = load_tgcs_module(self)

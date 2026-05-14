@@ -132,11 +132,13 @@ so the `jobs-fast` monitor lane is usable without first landing on placeholder
 example sources. If `.tgcs/sources.json` already exists, the jobs starter keeps
 the existing registry and non-destructively merges `channel_lists/jobs.txt` with
 the `jobs` topic tag.
-`tgcs quickstart jobs` is read-only and prints one current next action for the
-Developer Opportunity starter: init, Settings > Sources, doctor, login, first
-dry-run, or dashboard. It never starts login, scanning, delivery, or scheduler
-installation. `--format json` is credential-free and may be used by desktop
-smoke tests.
+`tgcs quickstart jobs` is read-only and prints one current expert command plus
+one app-first next step for the Developer Opportunity starter: init, Settings >
+Sources, doctor, login, first dry-run, or dashboard. It never starts login,
+scanning, delivery, or scheduler installation. `--format json` is
+credential-free and may be used by desktop smoke tests; consumers should treat
+`next_command` as the CLI fallback and `next_app_step` as the human Signal Desk
+guidance.
 `tgcs run` defaults to `.tgcs/sources.json` when present, the local
 `.tgcs/config.toml` profile when initialized, HTML output, `output/`, and v0.4
 decision memory at `.tgcs/state`. Without local config the built-in fallback

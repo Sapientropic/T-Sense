@@ -115,26 +115,32 @@ def quickstart_jobs_status() -> dict[str, Any]:
     if not local_defaults:
         stage = "init_required"
         next_command = "tgcs init --starter jobs"
+        next_app_step = "Open Signal Desk Start; first launch prepares the jobs starter files automatically."
         why = "Local .tgcs defaults are missing."
     elif not jobs_sources:
         stage = "source_import_required"
         next_command = "tgcs dashboard"
+        next_app_step = "Open Signal Desk Settings > Sources, then use the starter set or Source assistant."
         why = "The local source registry does not yet have enabled jobs-topic sources; use Settings > Sources to install or edit them."
     elif not credentials:
         stage = "doctor_required"
         next_command = "tgcs doctor --profile jobs"
+        next_app_step = "Open Signal Desk Start and save your Telegram app ID/hash."
         why = "Telegram API credentials are not visible to the local scanner."
     elif not session:
         stage = "login_required"
         next_command = "tgcs login"
+        next_app_step = "Open Signal Desk Start and finish Telegram login with the code sent to your account."
         why = "Telegram credentials exist, but the local session file is missing."
     elif not has_runs:
         stage = "dry_run_required"
         next_command = "tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run"
+        next_app_step = "Open Signal Desk Start and run the first dry-run scan."
         why = "Jobs sources and Telegram login are ready; run one safe dry-run before live alerts."
     else:
         stage = "dashboard_ready"
         next_command = "tgcs dashboard"
+        next_app_step = "Open Signal Desk Review and triage the latest Inbox cards."
         why = "A previous monitor run exists; open the review inbox."
 
     def status_for(check_id: str) -> str:
@@ -202,6 +208,7 @@ def quickstart_jobs_status() -> dict[str, Any]:
         "label": "Developer Opportunity quickstart",
         "stage": stage,
         "next_command": next_command,
+        "next_app_step": next_app_step,
         "why": why,
         "checks": checks,
     }
@@ -218,6 +225,7 @@ def run_quickstart(args: argparse.Namespace) -> int:
     print(payload["label"])
     print(f"Stage: {payload['stage']}")
     print(f"Next: {payload['next_command']}")
+    print(f"App: {payload['next_app_step']}")
     print(f"Why: {payload['why']}")
     print("Checklist:")
     for check in payload["checks"]:

@@ -210,19 +210,23 @@ def _node_version_satisfies_dashboard_contract(version: tuple[int, int, int]) ->
 
 
 def _dashboard_build_prerequisite_error() -> str:
+    retry = "reopen Signal Desk.bat on Windows or ./signal-desk on macOS/Linux"
     if not shutil.which("npm"):
-        return "npm was not found. Install Node.js 20.19+ or 22.12+ with npm, then run ./signal-desk again."
+        return f"npm was not found. Install Node.js 20.19+ or 22.12+ with npm, then {retry}."
     if not shutil.which("node"):
-        return "node was not found. Install Node.js 20.19+ or 22.12+ with npm, then run ./signal-desk again."
+        return f"node was not found. Install Node.js 20.19+ or 22.12+ with npm, then {retry}."
     try:
         completed = subprocess.run(["node", "--version"], check=False, capture_output=True, text=True, timeout=5)
     except (OSError, subprocess.TimeoutExpired):
-        return "Node.js version could not be checked. Install Node.js 20.19+ or 22.12+, then run ./signal-desk again."
+        return f"Node.js version could not be checked. Install Node.js 20.19+ or 22.12+, then {retry}."
     stdout = completed.stdout or ""
     version = _parse_node_version(stdout)
     if version is None or not _node_version_satisfies_dashboard_contract(version):
         found = stdout.strip() or "unknown"
-        return f"Node.js {found} does not satisfy the dashboard build requirement. Install Node.js 20.19+ or 22.12+, then run ./signal-desk again."
+        return (
+            f"Node.js {found} does not satisfy the dashboard build requirement. "
+            f"Install Node.js 20.19+ or 22.12+, then {retry}."
+        )
     return ""
 
 

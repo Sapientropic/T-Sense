@@ -1,3 +1,4 @@
+import io
 import subprocess
 import tempfile
 import unittest
@@ -125,6 +126,24 @@ class TgcsDelegateTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertEqual(len(calls), 1)
         self.assertIn("dashboard_server.py", [str(part) for part in calls[0][0]][1])
+
+    def test_dashboard_missing_node_error_points_to_app_launchers(self):
+        tgcs = load_tgcs_module(self)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stderr = io.StringIO()
+
+            with patch.object(tgcs, "PROJECT_ROOT", root):
+                with patch.object(tgcs.shutil, "which", return_value=None):
+                    with patch("sys.stderr", stderr):
+                        exit_code = tgcs.main(["dashboard"])
+
+        self.assertEqual(exit_code, 3)
+        error = stderr.getvalue()
+        self.assertIn("Node.js 20.19+", error)
+        self.assertIn("Signal Desk.bat", error)
+        self.assertIn("./signal-desk", error)
 
     def test_delivery_test_delegates_to_monitor_delivery_test(self):
         tgcs = load_tgcs_module(self)
