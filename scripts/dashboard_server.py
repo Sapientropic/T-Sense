@@ -40,6 +40,7 @@ try:
         desk_get_routes,
         desk_git,
         desk_http_security,
+        desk_operation_routes,
         desk_profiles,
         desk_profile_post_routes,
         desk_profile_routes,
@@ -75,6 +76,7 @@ except ModuleNotFoundError:
         desk_get_routes,
         desk_git,
         desk_http_security,
+        desk_operation_routes,
         desk_profiles,
         desk_profile_post_routes,
         desk_profile_routes,
@@ -853,11 +855,6 @@ class DashboardHandler(BaseHTTPRequestHandler):
         try:
             DashboardHandler._require_post_request_integrity(self)
             body = self._read_json_body()
-            if parsed.path.startswith("/api/desk/actions/") and parsed.path.endswith("/run"):
-                DashboardHandler._require_loopback_access(self, "Desk actions")
-                action_id = unquote(parsed.path.removeprefix("/api/desk/actions/").removesuffix("/run").strip("/"))
-                self._json(HTTPStatus.OK, {"ok": True, "result": run_desk_action(action_id, body=body)})
-                return
             if desk_settings_routes.handle_settings_post_route(
                 self,
                 parsed.path,
@@ -890,52 +887,19 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 remove_desk_source=remove_desk_source,
             ):
                 return
-            if parsed.path == "/api/git/check-updates":
-                DashboardHandler._require_loopback_access(self, "Git update")
-                self._json(HTTPStatus.OK, {"ok": True, "git": _git_update_status(fetch=True)})
-                return
-            if parsed.path == "/api/git/pull-latest":
-                DashboardHandler._require_loopback_access(self, "Git update")
-                if body.get("confirm") is not True:
-                    raise DashboardGitError("Pull latest requires explicit confirmation.")
-                self._json(HTTPStatus.OK, {"ok": True, "git": _git_pull_latest()})
-                return
-            if parsed.path == "/api/feedback/export":
-                DashboardHandler._require_loopback_access(self, "Feedback export")
-                with close_after_use(self._connect()) as conn:
-                    result = write_feedback_export(conn)
-                self._json(HTTPStatus.OK, {"ok": True, "export": result})
-                return
-            if parsed.path == "/api/feedback/clear":
-                DashboardHandler._require_loopback_access(self, "Feedback clear")
-                with close_after_use(self._connect()) as conn:
-                    result = monitor_state.clear_feedback_decisions(conn)
-                self._json(HTTPStatus.OK, {"ok": True, "feedback": result})
-                return
-            if parsed.path == "/api/feedback/profile-suggestions":
-                DashboardHandler._require_loopback_access(self, "Feedback profile suggestions")
-                with close_after_use(self._connect()) as conn:
-                    result = monitor_state.create_feedback_profile_patch_suggestions(conn)
-                self._json(HTTPStatus.OK, {"ok": True, "suggestions": result})
-                return
-            if parsed.path.startswith("/api/review-cards/") and parsed.path.endswith("/undo"):
-                DashboardHandler._require_loopback_access(self, "Review card actions")
-                card_id = unquote(parsed.path.split("/")[3])
-                with close_after_use(self._connect()) as conn:
-                    card = monitor_state.undo_card_action(conn, card_id=card_id)
-                self._json(HTTPStatus.OK, {"ok": True, "card": card})
-                return
-            if parsed.path.startswith("/api/review-cards/") and parsed.path.endswith("/action"):
-                DashboardHandler._require_loopback_access(self, "Review card actions")
-                card_id = unquote(parsed.path.split("/")[3])
-                with close_after_use(self._connect()) as conn:
-                    card = monitor_state.set_card_action(
-                        conn,
-                        card_id=card_id,
-                        action=str(body.get("action") or ""),
-                        note=str(body.get("note") or ""),
-                    )
-                self._json(HTTPStatus.OK, {"ok": True, "card": card})
+            if desk_operation_routes.handle_operation_post_route(
+                self,
+                parsed.path,
+                body,
+                require_loopback_access=DashboardHandler._require_loopback_access,
+                close_after_use=close_after_use,
+                monitor_state_module=monitor_state,
+                run_desk_action=run_desk_action,
+                git_update_status=_git_update_status,
+                git_pull_latest=_git_pull_latest,
+                git_confirmation_error=DashboardGitError,
+                write_feedback_export=write_feedback_export,
+            ):
                 return
             if desk_profile_post_routes.handle_profile_post_route(
                 self,

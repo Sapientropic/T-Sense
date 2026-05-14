@@ -1,4 +1,4 @@
-state: active_quality_iteration_profile_post_route_split_checkpoint
+state: active_quality_iteration_operation_post_route_split_checkpoint
 mode: Standard
 run_shape: continuous_until_deadline
 slice_goal: "Continue the technical-debt SPEC with high-value dashboard/backend slices, including Inbox/Runs concentration cleanup, sanitizer test ownership cleanup, dashboard profile-creation facade cleanup, monitor/tgcs CLI test concentration cleanup, monitor delivery runtime cleanup, dashboard profile projection cleanup, monitor command execution cleanup, monitor manifest/result projection cleanup, dashboard opportunity projection cleanup, dashboard setup projection cleanup, Desk server selection cleanup, Desk HTTP security cleanup, Desk profile route mutation cleanup, report HTML link-rendering cleanup, Desk source assistant planning cleanup, Desk source access cleanup, Settings source-library UI cleanup, profile runtime-settings UI cleanup, Bot Gateway background/autostart cleanup, and local secret-settings cleanup, while preserving public props, review/run action names, sanitizer behavior, route contracts, monitor/tgcs CLI behavior, dashboard state contracts, run manifest contracts, monitor result contracts, report link safety, loopback safety, pre-state-access private input rejection, source assistant external-AI confirmation gates, source access cached-health repair semantics, quiet-source semantics, source library topic-editor behavior, runtime-settings save/reset/draft behavior, Bot Gateway token/confirm gating, fixed scheduler argv, secret redaction, env-over-local precedence, and local-first privacy boundaries."
@@ -6,10 +6,10 @@ stop_condition: "Do not enter final closeout before 2026-05-14 14:00 Asia/Shangh
 handoff_policy: after_deadline_closeout
 continuation_policy: "Use docs/technical-debt-cleanup-spec.md as the debt authority; continue with one remaining boundary at a time and keep old facade exports until downstream callers move."
 intake_status: explicit_user_request
-gate_status: profile_post_route_split_gates_passed_review_p2_fixed
+gate_status: operation_post_route_split_gates_passed_review_clean
 blockers: []
 needs_human: []
-residual_risk: "This checkpoint is a profile POST route dispatch split. It does not change the remaining Desk action/git/feedback/review-card POST groups, live Telegram source access probes, real source quality, Docker packaging install/build commands, or human product acceptance. Tests cover the new profile POST route owner, pre-state-access request-shape/private-fragment rejection, dashboard_server facade monkeypatch compatibility for profile creation and alert-mode mutation, full dashboard backend behavior, selected Desk contract fixtures, and full Python regression. Reviewer found no P0/P1 behavior/facade/loopback/pre-state-access/import blocker; the P2 alert-mode success-path coverage gap was fixed before final gates. Staging risk is addressed by explicitly staging the new module and test before commit."
+residual_risk: "This checkpoint is an operation POST route dispatch split. It does not change live Telegram source access probes, real source quality, Docker packaging install/build commands, or human product acceptance. Tests cover the new operation POST route owner, decoded Desk action/review-card ids, Git pull confirmation rejection, feedback/review-card connection cleanup, dashboard_server facade monkeypatch compatibility for Desk action and Git helpers, full dashboard backend behavior, and full Python regression. Reviewer found no P0/P1 behavior/route-order/loopback/Git-confirmation/connection-closing/facade blocker; staging risk is addressed by explicitly staging the new module and test before commit."
 completed_slices:
   - "dashboard_server artifact helpers moved to scripts/desk_artifacts.py with dashboard_server re-export compatibility."
   - "dashboard_server git helpers moved to scripts/desk_git.py with dashboard_server wrapper compatibility."
@@ -58,6 +58,7 @@ completed_slices:
   - "Settings POST route split: scripts/desk_settings_routes.py now owns POST dispatch for Telegram credentials/login, notification token, Bot identity apply, AI settings, and delivery target save/test/detect-chat-id; scripts/dashboard_server.py preserves do_POST JSON integrity, body parsing, exception mapping, and old monkeypatch-compatible helper injection."
   - "Source POST route split: scripts/desk_source_routes.py now owns POST dispatch for source import preview/apply, starter import, source assistant, source enable/topic/remove actions; scripts/dashboard_server.py preserves do_POST JSON integrity, body parsing, exception mapping, and old monkeypatch-compatible helper injection."
   - "Profile POST route split: scripts/desk_profile_post_routes.py now owns POST dispatch for profile create/settings/draft/preference and profile patch actions; scripts/dashboard_server.py preserves do_POST JSON integrity, body parsing, exception mapping, and old monkeypatch-compatible monitor_state/profile helper/PROFILE_* injection."
+  - "Operation POST route split: scripts/desk_operation_routes.py now owns POST dispatch for Desk action run, Git update/pull, feedback export/clear/profile-suggestions, and review-card action/undo routes; scripts/dashboard_server.py preserves do_POST JSON integrity, body parsing, exception mapping, and old monkeypatch-compatible run_desk_action/Git/feedback/monitor_state injection."
 verification:
   - "python -m pytest tests/dashboard -q -> 149 passed, 71 subtests passed"
   - "python -m pytest tests/monitor_state -q -> 81 passed, 24 subtests passed"
@@ -297,6 +298,14 @@ verification:
   - "python -m ruff check . -> passed"
   - "CI-list py_compile including scripts/desk_profile_post_routes.py -> passed"
   - "git diff --check -> passed"
+  - "python -m ruff check scripts/desk_operation_routes.py scripts/dashboard_server.py tests/dashboard/test_operation_routes.py -> passed"
+  - "python -m py_compile scripts/desk_operation_routes.py scripts/dashboard_server.py tests/dashboard/test_operation_routes.py -> passed"
+  - "python -m pytest tests/dashboard/test_operation_routes.py tests/dashboard/test_http_security.py tests/dashboard/test_status_endpoints.py tests/dashboard/test_git.py -q -> 32 passed, 33 subtests passed"
+  - "python -m pytest tests/dashboard -q -> 199 passed, 97 subtests passed"
+  - "python -m pytest -q -> 547 passed, 2 skipped, 224 subtests passed"
+  - "python -m ruff check . -> passed"
+  - "CI-list py_compile including scripts/desk_operation_routes.py -> passed"
+  - "git diff --check -> passed"
 reviewer_status:
   - "Explorer review of the proposed split recommended a搬运式拆分: keep InboxView as facade, move filters/backlog, review-card/actions/source refs, and setup checklist into focused submodules."
   - "Post-diff reviewer found no blocking issues. Remaining risks were untracked new files, SSR-only test coverage, and preserving existing link sanitizer boundaries; untracked files are included in the checkpoint plan and the browser smoke covers the main interaction path."
@@ -332,6 +341,7 @@ reviewer_status:
   - "Settings POST route post-diff reviewer found no P0/P1 behavior, facade monkeypatch, request-integrity/error-mapping, or import-cycle blocker. P2 staging risk for scripts/desk_settings_routes.py and tests/dashboard/test_settings_routes.py is addressed by staging both explicitly before commit. P3 coverage feedback for delivery test/detect-chat-id was addressed with additional tests before final gates."
   - "Source POST route post-diff reviewer found no P0/P1 behavior, facade monkeypatch, request-body/error-mapping, source-id decoding, or import-cycle blocker. P2 staging risk for scripts/desk_source_routes.py and tests/dashboard/test_source_routes.py is addressed by staging both explicitly before commit."
   - "Profile POST route post-diff reviewer found no P0/P1 behavior, facade, loopback, pre-state-access validation, or import blocker. P2 alert-mode success-path coverage feedback was addressed with a dashboard-handler regression test for decoded profile id, patched monitor_state helper, connection closing, and response envelope. P2 staging risk for scripts/desk_profile_post_routes.py and tests/dashboard/test_profile_post_routes.py is addressed by staging both explicitly before commit."
+  - "Operation POST route post-diff reviewer found no P0/P1 behavior, route-order, loopback, Git confirmation, connection-closing, or facade monkeypatch blocker. P2 staging/CI risk for scripts/desk_operation_routes.py and tests/dashboard/test_operation_routes.py is addressed by staging both explicitly before commit."
 operator_checks:
   - "Docker Desktop 4.65.0 / engine 29.2.1 reachable after startup; docker build -t tgcs-local-smoke:<temp> . -> exit 0"
   - "Docker demo container -> exit 0, generated one demo report in a temporary mounted output directory; temporary directory and image removed."
@@ -341,10 +351,10 @@ operator_checks:
   - "Live Windows Task Scheduler dry-run task with random name -> install exit 0, status installed, remove exit 0, final status not_installed."
   - "Live Windows Credential Manager smoke -> random secret write/read/delete passed; post-delete read returned empty."
   - "Live LLM structured call -> provider=deepseek, model=deepseek-v4-flash, JSON response status=TGCS_LIVE_LLM_OK, total_tokens=58."
-next_action: "Stage scripts/desk_profile_post_routes.py and tests/dashboard/test_profile_post_routes.py explicitly, commit the checkpoint, then continue with the remaining non-profile POST route boundary."
+next_action: "Stage scripts/desk_operation_routes.py and tests/dashboard/test_operation_routes.py explicitly, commit the checkpoint, then inspect the next highest-value non-route backend/frontend boundary rather than shaving dashboard_server.py further."
 candidate_slices:
-  - "After the profile POST route checkpoint, inspect remaining scripts/dashboard_server.py POST dispatch for a coherent Desk action/git/feedback/review-card route group that can move with focused tests while preserving old monkeypatch paths."
+  - "After the operation POST route checkpoint, avoid more dashboard_server route-dispatch line shaving unless a real behavior owner emerges; inspect monitor_runner/dashboard_projection/report_html or a documented UX/test gap for the next coherent boundary."
   - "Inspect scripts/desk_sources.py only for compatibility-facade cleanup if downstream callers can move off old helper names; do not delete facade names while dashboard_server.py still re-exports them."
   - "Inspect scripts/desk_credentials.py only for compatibility-facade cleanup if downstream callers can move off old helper names; do not delete facade names while dashboard_server.py still re-exports them."
-last_update: "2026-05-14T11:27:29+08:00"
+last_update: "2026-05-14T11:38:34+08:00"
 checkpoint_ready: true
