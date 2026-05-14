@@ -3,16 +3,29 @@
 from __future__ import annotations
 
 import hashlib
-import html
 import json
-import re
 from datetime import UTC, datetime
 from pathlib import Path
-from urllib.parse import urlparse
 
 from scripts import report_diagnostics
 from scripts.item_display import display_item_title, display_title_parts, meaningful_text
 from scripts.profile_schema import ProfileConfig
+from scripts.report_html_links import (
+    SAFE_LINK_REL as SAFE_LINK_REL,
+    _contact_html as _contact_html,
+    _esc as _esc,
+    _inline_html_group as _inline_html_group,
+    _link_or_text as _link_or_text,
+    _safe_link_html as _safe_link_html,
+    _source_links as _source_links,
+    _split_inline_values as _split_inline_values,
+    _tg_md_to_html as _tg_md_to_html,
+    _url_field_html as _url_field_html,
+    missing_url_label as missing_url_label,
+    readable_url_label as readable_url_label,
+    safe_href as safe_href,
+    telegram_handle_to_url as telegram_handle_to_url,
+)
 from scripts.report_markdown import action_for_rating, field_label, table_value
 from scripts.report_models import ReportError, ReportResult
 from scripts.report_sources import (
@@ -26,6 +39,26 @@ from scripts.report_sources import (
     sort_items_for_report,
     source_refs_for_job,
 )
+
+__all__ = [
+    "SAFE_LINK_REL",
+    "_contact_html",
+    "_esc",
+    "_inline_html_group",
+    "_link_or_text",
+    "_render_generic_card",
+    "_render_job_card",
+    "_safe_link_html",
+    "_source_links",
+    "_split_inline_values",
+    "_tg_md_to_html",
+    "_url_field_html",
+    "missing_url_label",
+    "readable_url_label",
+    "render_html",
+    "safe_href",
+    "telegram_handle_to_url",
+]
 
 # ---------------------------------------------------------------------------
 # HTML rendering
@@ -62,204 +95,6 @@ def _load_icon_b64(job_mode: bool = True) -> str:
                 return ""
     import base64
     return base64.b64encode(icon_path.read_bytes()).decode("ascii")
-
-
-def _esc(text: str) -> str:
-    return html.escape(str(text), quote=True)
-
-
-SAFE_LINK_REL = "noopener noreferrer"
-SAFE_HREF_SCHEMES = {"http", "https", "mailto"}
-UNSAFE_HREF_CHAR_RE = re.compile(r"""[\x00-\x20"'<>`]""")
-TELEGRAM_HANDLE_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{4,31}$")
-EMAIL_RE = re.compile(r"^[^@\s<>]+@[^@\s<>]+\.[^@\s<>]+$")
-
-
-def safe_href(value: object) -> str | None:
-    """Return an escaped href attribute value, or None when it is not safe.
-
-    Reports are built from Telegram text and LLM output, so link validation must
-    happen before attribute escaping. In particular, quotes and whitespace are
-    rejected instead of merely escaped because they usually indicate attribute
-    injection attempts or pasted prose rather than a navigable URL.
-    """
-    href = str(value or "").strip()
-    if not href or UNSAFE_HREF_CHAR_RE.search(href):
-        return None
-    parsed = urlparse(href)
-    scheme = parsed.scheme.lower()
-    if scheme not in SAFE_HREF_SCHEMES:
-        return None
-    if scheme in {"http", "https"} and not parsed.netloc:
-        return None
-    if scheme == "mailto":
-        address = parsed.path
-        if not EMAIL_RE.fullmatch(address):
-            return None
-    return html.escape(href, quote=True)
-
-
-def telegram_handle_to_url(value: object) -> str | None:
-    handle = str(value or "").strip()
-    if handle.startswith("@"):
-        handle = handle[1:]
-    if not TELEGRAM_HANDLE_RE.fullmatch(handle):
-        return None
-    return f"https://t.me/{handle}"
-
-
-def _safe_link_html(href: object, label: object, *, label_is_html: bool = False) -> str | None:
-    safe = safe_href(href)
-    if safe is None:
-        return None
-    label_html = str(label) if label_is_html else _esc(label)
-    return (
-        f'<a href="{safe}" target="_blank" '
-        f'rel="{SAFE_LINK_REL}">{label_html}</a>'
-    )
-
-
-def _link_or_text(href: object, label: object, *, label_is_html: bool = False) -> str:
-    link = _safe_link_html(href, label, label_is_html=label_is_html)
-    if link:
-        return link
-    return str(label) if label_is_html else _esc(label)
-
-
-def readable_url_label(value: object, *, field_name: str = "") -> str:
-    parsed = urlparse(str(value or "").strip())
-    field = field_name.lower()
-    if field == "origin_url":
-        return "Open source"
-    if parsed.netloc:
-        host = parsed.netloc.removeprefix("www.")
-        path = parsed.path.strip("/")
-        label = host if not path else f"{host}/{path.split('/')[0]}"
-        return label[:34] + "..." if len(label) > 37 else label
-    return "Open link"
-
-
-def missing_url_label(field_name: str) -> str:
-    field = field_name.lower()
-    if field in {"apply_url", "application_url"}:
-        return "No apply link found"
-    return "No link found"
-
-
-def _url_field_html(field_name: str, values: list[str]) -> str:
-    rendered: list[str] = []
-    for value in _split_inline_values(values):
-        text = str(value or "").strip()
-        if safe_href(text):
-            rendered.append(_link_or_text(text, readable_url_label(text, field_name=field_name)))
-        elif not text or text.lower() in {"not specified", "unknown", "none", "n/a"}:
-            rendered.append(_esc(missing_url_label(field_name)))
-        else:
-            rendered.append(_esc(f"{missing_url_label(field_name)}: {text}"))
-    return _inline_html_group(rendered)
-
-
-def _tg_md_to_html(text: str) -> str:
-    """Convert Telegram-flavored markdown to safe HTML snippets.
-
-    Handles: **bold**, __italic__, `code`, [link](url), https://urls.
-    Everything else is HTML-escaped first, then patterns are restored.
-    """
-    # Escape first
-    s = html.escape(text, quote=True)
-
-    # Restore **bold**
-    s = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", s)
-    # Restore __italic__
-    s = re.sub(r"__(.+?)__", r"<em>\1</em>", s)
-    # Restore `code`
-    s = re.sub(r"`([^`]+)`", r"<code>\1</code>", s)
-    # Restore [text](url)
-    def _replace_md_link(match: re.Match[str]) -> str:
-        label_html = match.group(1)
-        href = html.unescape(match.group(2))
-        return _link_or_text(href, label_html, label_is_html=True)
-
-    s = re.sub(
-        r"\[([^\]]+)\]\(([^)]+)\)",
-        _replace_md_link,
-        s,
-    )
-    # Bare URLs
-    def _replace_bare_url(match: re.Match[str]) -> str:
-        label_html = match.group(1)
-        href = html.unescape(label_html)
-        return _link_or_text(href, label_html, label_is_html=True)
-
-    s = re.sub(
-        r"(?<!href=\")(https?://[^\s<\)]+)",
-        _replace_bare_url,
-        s,
-    )
-    # Newlines → <br>
-    s = s.replace("\n", "<br>\n")
-    return s
-
-
-def _channel_link(name: str) -> str:
-    name = name.strip()
-    telegram_url = telegram_handle_to_url(name)
-    if telegram_url:
-        return _link_or_text(telegram_url, name)
-    if safe_href(name):
-        return _link_or_text(name, name)
-    return _esc(name)
-
-
-def _source_links(sources: object) -> str:
-    return _inline_html_group([_channel_link(s) for s in _split_inline_values(as_list(sources))])
-
-
-def _inline_html_group(items: list[str]) -> str:
-    cleaned = [item for item in items if item]
-    if len(cleaned) <= 1:
-        return cleaned[0] if cleaned else ""
-    return (
-        '<span class="inline-ref-list">'
-        + "".join(f'<span class="inline-ref">{item}</span>' for item in cleaned)
-        + "</span>"
-    )
-
-
-def _split_inline_values(values: list[str]) -> list[str]:
-    """Split legacy report values that used spaced slashes as UI separators.
-
-    Fields like contact/source/link can arrive from older Markdown reports as one
-    display string ("Not specified / @handle"). Splitting only at the renderer keeps
-    parsing stable while removing the visual slash artifact from the card middle.
-    """
-    parts = []
-    for value in values:
-        text = str(value or "").strip()
-        if not text:
-            continue
-        if " / " in text and not safe_href(text):
-            parts.extend(part.strip() for part in text.split(" / ") if part.strip())
-        else:
-            parts.append(text)
-    return parts
-
-
-def _contact_html(contact: str) -> str:
-    contact = str(contact).strip()
-    if not contact or contact in ("Not specified", "Unknown"):
-        return _esc(contact)
-    if contact.startswith("@"):
-        telegram_url = telegram_handle_to_url(contact)
-        return _link_or_text(telegram_url, contact) if telegram_url else _esc(contact)
-    if EMAIL_RE.fullmatch(contact):
-        return _link_or_text(f"mailto:{contact}", contact)
-    if contact.startswith(("http://", "https://")):
-        # Shorten URL display: show domain + /... for long URLs
-        parsed = urlparse(contact)
-        display = parsed.netloc or "link"
-        return _link_or_text(contact, display)
-    return _esc(contact)
 
 
 def _render_profile_items(profile: str) -> str:
@@ -300,7 +135,7 @@ def build_report_id(meta: dict | None, profile: str) -> str:
 
 
 def _data_json(value: object) -> str:
-    return html.escape(json.dumps(value, ensure_ascii=False, separators=(",", ":")), quote=True)
+    return _esc(json.dumps(value, ensure_ascii=False, separators=(",", ":")))
 
 
 def _feedback_attrs(item: dict, item_title: str, message_lookup: dict | None) -> str:

@@ -1,10 +1,25 @@
 import unittest
 from types import SimpleNamespace
 
+from scripts import report_html, report_html_links
+
 from .helpers import load_report_module, sample_extracted_jobs, sample_messages
 
 
 class ReportHtmlTests(unittest.TestCase):
+    def test_report_html_link_helpers_stay_available_from_report_html_facade(self):
+        self.assertIs(report_html.safe_href, report_html_links.safe_href)
+        self.assertIs(report_html.telegram_handle_to_url, report_html_links.telegram_handle_to_url)
+        self.assertIs(report_html._contact_html, report_html_links._contact_html)
+        self.assertIs(report_html._source_links, report_html_links._source_links)
+        self.assertIs(report_html._tg_md_to_html, report_html_links._tg_md_to_html)
+        self.assertIs(report_html._url_field_html, report_html_links._url_field_html)
+        self.assertEqual(report_html.safe_href("https://example.com/jobs"), "https://example.com/jobs")
+        self.assertIsNone(report_html.safe_href("javascript:alert(1)"))
+        self.assertIn('href="https://t.me/remote_jobs"', report_html._source_links(["remote_jobs"]))
+        self.assertIn('href="https://safe.example/path"', report_html._tg_md_to_html("[safe](https://safe.example/path)"))
+
+
     def test_html_diagnostics_collapses_info_only_items(self):
         report = load_report_module(self)
 
