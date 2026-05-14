@@ -78,35 +78,37 @@ export function ProfileRow({
             {!profile.enabled && <span className="profile-paused-note">Resume monitoring to adjust alerts.</span>}
           </div>
         </div>
-        <ProfileRuntimeSettingsControl
-          profile={profile}
-          setProfileRuntimeSettings={setProfileRuntimeSettings}
-          createProfileDraftNote={createProfileDraftNote}
-          createProfileMatchingPreferencesDraft={createProfileMatchingPreferencesDraft}
-          busy={busy}
-        />
-        <div className="profile-delete-zone" data-confirming={confirmDelete ? "true" : "false"}>
-          {confirmDelete ? (
-            <>
-              <div>
-                <strong>Delete {profileName}?</strong>
-                <span>This removes the profile from Signal Desk and clears its current Review cards. Run history stays available.</span>
-              </div>
-              <button className="profile-delete-confirm text-button danger" disabled={busy} onClick={() => deleteProfile(profile.profile_id)} type="button">
+        <div className="profile-row-actions" data-confirming-delete={confirmDelete ? "true" : "false"}>
+          <ProfileRuntimeSettingsControl
+            profile={profile}
+            setProfileRuntimeSettings={setProfileRuntimeSettings}
+            createProfileDraftNote={createProfileDraftNote}
+            createProfileMatchingPreferencesDraft={createProfileMatchingPreferencesDraft}
+            busy={busy}
+          />
+          <div className="profile-delete-zone" data-confirming={confirmDelete ? "true" : "false"}>
+            {confirmDelete ? (
+              <>
+                <div>
+                  <strong>Delete {profileName}?</strong>
+                  <span>This removes the profile from Signal Desk and clears its current Review cards. Run history stays available.</span>
+                </div>
+                <button className="profile-delete-confirm text-button danger" disabled={busy} onClick={() => deleteProfile(profile.profile_id)} type="button">
+                  <Trash2 size={15} />
+                  <span>Delete profile</span>
+                </button>
+                <button className="profile-delete-cancel text-button secondary" disabled={busy} onClick={() => setConfirmDelete(false)} type="button">
+                  <X size={15} />
+                  <span>Cancel</span>
+                </button>
+              </>
+            ) : (
+              <button className="profile-delete-trigger text-button secondary" disabled={busy} onClick={() => setConfirmDelete(true)} type="button">
                 <Trash2 size={15} />
                 <span>Delete profile</span>
               </button>
-              <button className="profile-delete-cancel text-button secondary" disabled={busy} onClick={() => setConfirmDelete(false)} type="button">
-                <X size={15} />
-                <span>Cancel</span>
-              </button>
-            </>
-          ) : (
-            <button className="profile-delete-trigger text-button secondary" disabled={busy} onClick={() => setConfirmDelete(true)} type="button">
-              <Trash2 size={15} />
-              <span>Delete profile</span>
-            </button>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </details>

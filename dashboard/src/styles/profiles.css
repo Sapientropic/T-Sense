@@ -775,6 +775,30 @@
   box-shadow: none;
 }
 
+.profile-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.profile-row-actions .profile-runtime-settings {
+  flex: 1 1 100%;
+}
+
+.profile-row-actions[data-confirming-delete="true"] .profile-edit-settings {
+  display: none;
+}
+
+.profile-row-actions .profile-edit-settings,
+.profile-delete-trigger {
+  flex: 0 1 auto;
+  width: max-content;
+  max-width: 100%;
+  white-space: nowrap;
+}
+
 .profile-runtime-settings {
   box-sizing: border-box;
   display: grid;
@@ -1136,11 +1160,15 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
-  padding-top: 2px;
+}
+
+.profile-delete-zone:not([data-confirming="true"]) {
+  display: contents;
 }
 
 .profile-delete-zone[data-confirming="true"] {
   display: grid;
+  flex: 1 1 100%;
   grid-template-columns: minmax(0, 1fr) minmax(148px, auto) minmax(96px, auto);
   padding: 10px;
   border: 1px solid color-mix(in oklch, var(--signal-danger) 38%, var(--wash-paper-14));
@@ -1172,8 +1200,18 @@
 }
 
 .profile-delete-trigger {
-  min-height: 38px;
+  justify-content: center;
+  min-height: 44px;
+  border-color: color-mix(in oklch, var(--signal-danger) 34%, var(--paper-3));
+  background: color-mix(in oklch, var(--signal-danger) 9%, var(--paper));
   color: color-mix(in oklch, var(--signal-danger) 68%, var(--paper));
+  box-shadow: none;
+}
+
+.profile-delete-trigger:hover:not(:disabled),
+.profile-delete-trigger:focus-visible {
+  border-color: color-mix(in oklch, var(--signal-danger) 58%, var(--paper-3));
+  background: color-mix(in oklch, var(--signal-danger) 14%, var(--paper));
 }
 
 .profile-delete-confirm.danger {
