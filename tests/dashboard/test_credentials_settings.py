@@ -6,7 +6,7 @@ from http import HTTPStatus
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts import dashboard_server, desk_credentials, desk_secret_settings, monitor_state
+from scripts import dashboard_server, desk_credentials, desk_delivery_settings, desk_secret_settings, monitor_state
 
 
 class DashboardCredentialsSettingsTests(unittest.TestCase):
@@ -17,6 +17,7 @@ class DashboardCredentialsSettingsTests(unittest.TestCase):
         self.assertIs(dashboard_server.desk_notification_token_status, desk_credentials.desk_notification_token_status)
         self.assertIs(dashboard_server.desk_ai_settings_status, desk_credentials.desk_ai_settings_status)
         self.assertIs(dashboard_server.desk_action_env, desk_credentials.desk_action_env)
+        self.assertEqual(desk_credentials.DESK_DELIVERY_TARGET_ID, desk_delivery_settings.DESK_DELIVERY_TARGET_ID)
         self.assertEqual(desk_credentials.DESK_AI_PROVIDER_CONFIGS, desk_secret_settings.DESK_AI_PROVIDER_CONFIGS)
 
 
@@ -50,6 +51,41 @@ class DashboardCredentialsSettingsTests(unittest.TestCase):
             },
         )
         self.assertEqual(env["CUSTOM_API_KEY"], "custom-local-secret")
+
+
+    def test_delivery_chat_detection_uses_dashboard_facade_patch_after_split(self):
+        candidate = {"chat_id": "987654", "chat_type": "group", "source": "patched"}
+
+        with patch.object(dashboard_server, "_detect_chat_id_from_bot_updates", return_value=candidate) as detect_mock:
+            with patch.object(dashboard_server, "_telegram_current_user_chat_id", return_value="unused") as session_mock:
+                result = dashboard_server.detect_desk_delivery_chat_id("telegram-bot-default", {})
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["chat_id"], "987654")
+        self.assertEqual(result["chat_type"], "group")
+        self.assertEqual(result["source"], "telegram_bot_updates")
+        detect_mock.assert_called_once_with()
+        session_mock.assert_not_called()
+
+
+    def test_delivery_chat_detection_direct_owner_uses_credentials_session_fallback_after_split(self):
+        def no_facade(_name, default):
+            return default
+
+        with patch.object(desk_delivery_settings, "_facade_attr", side_effect=no_facade):
+            with patch.object(desk_delivery_settings, "_detect_chat_id_from_bot_updates", return_value=None):
+                with patch.object(
+                    desk_delivery_settings,
+                    "_telegram_current_user_chat_id",
+                    desk_delivery_settings._telegram_current_user_chat_id_from_credentials,
+                ):
+                    with patch.object(desk_credentials, "_telegram_current_user_chat_id", return_value="24680") as session_mock:
+                        result = desk_delivery_settings.detect_desk_delivery_chat_id("telegram-bot-default", {})
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["chat_id"], "24680")
+        self.assertEqual(result["source"], "telegram_session")
+        session_mock.assert_called_once_with()
 
 
     def test_telegram_credentials_are_saved_without_echoing_secret(self):

@@ -1,4 +1,4 @@
-"""Credential, login, delivery target, and AI key helpers for Signal Desk."""
+"""Telegram app credentials and Signal Desk settings compatibility helpers."""
 
 from __future__ import annotations
 
@@ -12,11 +12,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from threading import Lock
 from typing import Any
-from urllib import error as urllib_error
-from urllib.parse import quote, urlencode
-from urllib.request import urlopen
 
-from scripts import delivery, desk_secret_settings, monitor_state
+from scripts import desk_delivery_settings, desk_secret_settings
 
 
 def _positive_int_env(name: str, fallback: int) -> int:
@@ -36,11 +33,11 @@ TELEGRAM_CONFIG_DIR = Path(
 TELEGRAM_CONFIG_PATH = TELEGRAM_CONFIG_DIR / "config.toml"
 TELEGRAM_SESSION_PATH = TELEGRAM_CONFIG_DIR / "session"
 TELEGRAM_LOGIN_CODE_TTL_SECONDS = 300
-TELEGRAM_BOT_UPDATES_TIMEOUT_SECONDS = 8
-DESK_DELIVERY_TARGET_ID = "telegram-bot-default"
-DESK_DELIVERY_ALLOWED_FIELDS = {"chat_id", "enabled"}
-DESK_DELIVERY_TEST_ALLOWED_FIELDS = {"chat_id"}
-DESK_DELIVERY_DETECT_ALLOWED_FIELDS: set[str] = set()
+TELEGRAM_BOT_UPDATES_TIMEOUT_SECONDS = desk_delivery_settings.TELEGRAM_BOT_UPDATES_TIMEOUT_SECONDS
+DESK_DELIVERY_TARGET_ID = desk_delivery_settings.DESK_DELIVERY_TARGET_ID
+DESK_DELIVERY_ALLOWED_FIELDS = desk_delivery_settings.DESK_DELIVERY_ALLOWED_FIELDS
+DESK_DELIVERY_TEST_ALLOWED_FIELDS = desk_delivery_settings.DESK_DELIVERY_TEST_ALLOWED_FIELDS
+DESK_DELIVERY_DETECT_ALLOWED_FIELDS = desk_delivery_settings.DESK_DELIVERY_DETECT_ALLOWED_FIELDS
 DESK_NOTIFICATION_TOKEN_ALLOWED_FIELDS = desk_secret_settings.DESK_NOTIFICATION_TOKEN_ALLOWED_FIELDS
 DESK_AI_SETTINGS_ALLOWED_FIELDS = desk_secret_settings.DESK_AI_SETTINGS_ALLOWED_FIELDS
 DESK_AI_PROVIDER_CONFIGS = desk_secret_settings.DESK_AI_PROVIDER_CONFIGS
@@ -368,156 +365,48 @@ def telegram_cancel_login() -> dict:
 
 
 def _delivery_target_projection(conn, target_id: str) -> dict:
-    row = conn.execute("SELECT * FROM delivery_targets WHERE target_id = ?", (target_id,)).fetchone()
-    if not row:
-        raise ValueError("Notification target is not saved yet.")
-    return monitor_state.delivery_target_from_row(row)
+    _sync_delivery_settings_context()
+    return desk_delivery_settings._delivery_target_projection(conn, target_id)
 
 
 def _validate_desk_delivery_target_id(target_id: str) -> str:
-    clean = str(target_id or "").strip()
-    if clean != DESK_DELIVERY_TARGET_ID:
-        raise ValueError("Signal Desk can only edit the default Telegram notification target.")
-    return clean
+    _sync_delivery_settings_context()
+    return desk_delivery_settings._validate_desk_delivery_target_id(target_id)
 
 
 def _reject_unexpected_delivery_fields(body: dict, *, allowed: set[str]) -> None:
-    unexpected = sorted(str(key) for key in body.keys() if key not in allowed)
-    if unexpected:
-        raise ValueError(f"Unsupported notification setting field: {', '.join(unexpected)}")
+    _sync_delivery_settings_context()
+    return desk_delivery_settings._reject_unexpected_delivery_fields(body, allowed=allowed)
 
 
 def _clean_delivery_chat_id(value: object) -> str:
-    text = str(value or "").strip()
-    if not text:
-        return ""
-    if len(text) > 128 or not re.fullmatch(r"@?[A-Za-z0-9_:+.-]+", text):
-        raise ValueError("Telegram chat ID must be a short number, @channel, or channel identifier.")
-    return text
+    _sync_delivery_settings_context()
+    return desk_delivery_settings._clean_delivery_chat_id(value)
 
 
 def save_desk_delivery_target(conn, target_id: str, body: dict) -> dict:
-    clean_target_id = _validate_desk_delivery_target_id(target_id)
-    _reject_unexpected_delivery_fields(body, allowed=DESK_DELIVERY_ALLOWED_FIELDS)
-    chat_id = _clean_delivery_chat_id(body.get("chat_id"))
-    enabled = body.get("enabled")
-    if not isinstance(enabled, bool):
-        raise ValueError("Notification target enabled value must be true or false.")
-    if enabled and not chat_id:
-        raise ValueError("Enter a Telegram chat ID before enabling notifications.")
-    monitor_state.upsert_delivery_target(
-        conn,
-        {
-            "id": clean_target_id,
-            "type": "telegram_bot",
-            "enabled": enabled,
-            "chat_id": chat_id,
-        },
-    )
-    return _delivery_target_projection(conn, clean_target_id)
+    _sync_delivery_settings_context()
+    return desk_delivery_settings.save_desk_delivery_target(conn, target_id, body)
 
 
 def test_desk_delivery_target(conn, target_id: str, body: dict) -> dict:
-    clean_target_id = _validate_desk_delivery_target_id(target_id)
-    _reject_unexpected_delivery_fields(body, allowed=DESK_DELIVERY_TEST_ALLOWED_FIELDS)
-    chat_id = _clean_delivery_chat_id(body.get("chat_id"))
-    if not chat_id:
-        try:
-            current = _delivery_target_projection(conn, clean_target_id)
-            config = current.get("config") if isinstance(current.get("config"), dict) else {}
-            chat_id = _clean_delivery_chat_id(config.get("chat_id"))
-        except ValueError:
-            chat_id = ""
-    attempt = delivery.send_telegram_bot_message(
-        target_id=clean_target_id,
-        chat_id=chat_id,
-        text="Signal Desk notification test. No Telegram message was sent.",
-        mode="dry-run",
-    ).to_dict()
-    detail = (
-        "Test passed. Signal Desk can use this chat ID when live notifications are turned on."
-        if attempt.get("ok")
-        else str(attempt.get("error") or "The test could not validate the notification target.")
-    )
-    return {
-        "schema_version": "desk_delivery_test_result_v1",
-        "target_id": clean_target_id,
-        "target_type": "telegram_bot",
-        "mode": "dry-run",
-        "ok": bool(attempt.get("ok")),
-        "status": str(attempt.get("status") or "unknown"),
-        "title": "Notification test",
-        "detail": detail,
-        "finished_at": _utc_now(),
-    }
+    _sync_delivery_settings_context()
+    return desk_delivery_settings.test_desk_delivery_target(conn, target_id, body)
 
 
 def _chat_candidate_from_update(update: dict) -> dict[str, str] | None:
-    chat: object = None
-    for key in ("message", "edited_message", "channel_post", "my_chat_member"):
-        event = update.get(key)
-        if not isinstance(event, dict):
-            continue
-        if key == "my_chat_member":
-            chat = event.get("chat")
-        else:
-            chat = event.get("chat")
-        if isinstance(chat, dict):
-            break
-    if not isinstance(chat, dict):
-        return None
-    raw_chat_id = chat.get("id")
-    if raw_chat_id is None:
-        return None
-    chat_id = _clean_delivery_chat_id(str(raw_chat_id))
-    if not chat_id:
-        return None
-    chat_type = str(chat.get("type") or "chat").strip() or "chat"
-    return {
-        "chat_id": chat_id,
-        "chat_type": chat_type,
-    }
+    _sync_delivery_settings_context()
+    return desk_delivery_settings._chat_candidate_from_update(update)
 
 
 def _chat_candidate_from_bot_updates(payload: object) -> dict[str, str] | None:
-    if not isinstance(payload, dict) or payload.get("ok") is not True:
-        return None
-    updates = payload.get("result")
-    if not isinstance(updates, list):
-        return None
-    fallback: dict[str, str] | None = None
-    for update in reversed(updates):
-        if not isinstance(update, dict):
-            continue
-        candidate = _chat_candidate_from_update(update)
-        if not candidate:
-            continue
-        if candidate.get("chat_type") == "private":
-            return candidate
-        fallback = fallback or candidate
-    return fallback
+    _sync_delivery_settings_context()
+    return desk_delivery_settings._chat_candidate_from_bot_updates(payload)
 
 
 def _detect_chat_id_from_bot_updates() -> dict[str, str] | None:
-    token = delivery.resolve_telegram_bot_token()
-    if not token.token:
-        return None
-    query = urlencode({"limit": "20", "timeout": "0"})
-    url = f"https://api.telegram.org/bot{quote(token.token, safe=':')}/getUpdates?{query}"
-    try:
-        opener = _facade_attr("urlopen", urlopen)
-        timeout = int(_facade_attr("TELEGRAM_BOT_UPDATES_TIMEOUT_SECONDS", TELEGRAM_BOT_UPDATES_TIMEOUT_SECONDS))
-        with opener(url, timeout=timeout) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except (OSError, TimeoutError, urllib_error.URLError, json.JSONDecodeError, ValueError):
-        return None
-    candidate = _chat_candidate_from_bot_updates(payload)
-    if not candidate:
-        return None
-    return {
-        **candidate,
-        "source": "telegram_bot_updates",
-    }
+    _sync_delivery_settings_context()
+    return desk_delivery_settings._detect_chat_id_from_bot_updates()
 
 
 async def _telegram_current_user_chat_id_async(
@@ -556,59 +445,37 @@ def _telegram_current_user_chat_id(
 
 
 def detect_desk_delivery_chat_id(target_id: str, body: dict) -> dict:
-    clean_target_id = _validate_desk_delivery_target_id(target_id)
-    _reject_unexpected_delivery_fields(body, allowed=DESK_DELIVERY_DETECT_ALLOWED_FIELDS)
-    detect_from_bot = _facade_attr("_detect_chat_id_from_bot_updates", _detect_chat_id_from_bot_updates)
-    candidate = detect_from_bot()
-    if candidate:
-        chat_type = candidate.get("chat_type") or "chat"
-        return {
-            "schema_version": "desk_delivery_chat_detection_v1",
-            "target_id": clean_target_id,
-            "target_type": "telegram_bot",
-            "ok": True,
-            "status": "detected_from_bot_updates",
-            "source": "telegram_bot_updates",
-            "chat_id": candidate["chat_id"],
-            "chat_type": chat_type,
-            "title": "Chat ID detected",
-            "detail": f"Detected the latest {chat_type} that messaged this bot. Review it, then save notifications.",
-            "finished_at": _utc_now(),
-        }
-    current_user_chat_id = _facade_attr("_telegram_current_user_chat_id", _telegram_current_user_chat_id)
-    current_user_id = current_user_chat_id()
-    if current_user_id:
-        return {
-            "schema_version": "desk_delivery_chat_detection_v1",
-            "target_id": clean_target_id,
-            "target_type": "telegram_bot",
-            "ok": True,
-            "status": "detected_from_telegram_session",
-            "source": "telegram_session",
-            "chat_id": current_user_id,
-            "chat_type": "private",
-            "title": "Private chat ID detected",
-            "detail": "Detected your Telegram user ID from the local login. Send a message to the bot before live alerts, then save notifications.",
-            "finished_at": _utc_now(),
-        }
-    token = delivery.resolve_telegram_bot_token()
-    if token.token:
-        detail = "Send any message to the bot, then retry detection. Telegram has not returned a chat for this bot yet."
-    else:
-        detail = "Save a Telegram bot token, send the bot a message, then retry detection. If you use Telegram login, finish Start login first."
-    return {
-        "schema_version": "desk_delivery_chat_detection_v1",
-        "target_id": clean_target_id,
-        "target_type": "telegram_bot",
-        "ok": False,
-        "status": "needs_bot_message",
-        "source": "none",
-        "chat_id": "",
-        "chat_type": "",
-        "title": "Chat ID not found",
-        "detail": detail,
-        "finished_at": _utc_now(),
-    }
+    _sync_delivery_settings_context()
+    return desk_delivery_settings.detect_desk_delivery_chat_id(target_id, body)
+
+
+def _sync_delivery_settings_context() -> None:
+    # Delivery helpers are exposed through dashboard_server for HTTP handlers,
+    # tests, and local Desk integrations. Keep the new owner facade-aware so
+    # patches for target ids, allowed fields, bot-update network hooks, and
+    # Telegram-session fallback continue to land on the public surface.
+    desk_delivery_settings.TELEGRAM_BOT_UPDATES_TIMEOUT_SECONDS = _facade_attr(
+        "TELEGRAM_BOT_UPDATES_TIMEOUT_SECONDS",
+        TELEGRAM_BOT_UPDATES_TIMEOUT_SECONDS,
+    )
+    desk_delivery_settings.DESK_DELIVERY_TARGET_ID = _facade_attr(
+        "DESK_DELIVERY_TARGET_ID",
+        DESK_DELIVERY_TARGET_ID,
+    )
+    desk_delivery_settings.DESK_DELIVERY_ALLOWED_FIELDS = _facade_attr(
+        "DESK_DELIVERY_ALLOWED_FIELDS",
+        DESK_DELIVERY_ALLOWED_FIELDS,
+    )
+    desk_delivery_settings.DESK_DELIVERY_TEST_ALLOWED_FIELDS = _facade_attr(
+        "DESK_DELIVERY_TEST_ALLOWED_FIELDS",
+        DESK_DELIVERY_TEST_ALLOWED_FIELDS,
+    )
+    desk_delivery_settings.DESK_DELIVERY_DETECT_ALLOWED_FIELDS = _facade_attr(
+        "DESK_DELIVERY_DETECT_ALLOWED_FIELDS",
+        DESK_DELIVERY_DETECT_ALLOWED_FIELDS,
+    )
+    desk_delivery_settings._utc_now = _utc_now
+    desk_delivery_settings._telegram_current_user_chat_id = _telegram_current_user_chat_id
 
 
 def _sync_secret_settings_context() -> None:

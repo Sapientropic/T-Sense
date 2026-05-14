@@ -650,6 +650,37 @@ changing Telegram login, notification target, or settings status contracts:
   tests, targeted `py_compile`, targeted `ruff`, the full dashboard Python
   test directory, and the mixed credential/action/Bot Gateway contract gate.
 
+## Progress Update: 2026-05-14 Delivery Settings Split
+
+The Desk credentials module shed the delivery-target and chat-detection
+boundary without changing Telegram login, dry-run notification tests, or
+dashboard facade contracts:
+
+- `scripts/desk_delivery_settings.py` now owns default delivery target
+  validation, projection, save/test payloads, Telegram bot `getUpdates` chat
+  detection, chat-candidate selection, and the no-secret detection result
+  payloads.
+- `scripts/desk_credentials.py` remains the Telegram app credential/login
+  owner. It keeps the old delivery helper names as compatibility wrappers
+  because `dashboard_server.py` still exposes them as the public HTTP/test
+  facade.
+- The wrapper sync layer deliberately keeps delivery target ids, allowed-field
+  constants, bot-update timeout, `_utc_now`, and Telegram-session fallback
+  facade-aware. This protects existing `dashboard_server` monkeypatch paths
+  after the split instead of forcing callers onto the new module immediately.
+- Regression tests now lock a patched
+  `dashboard_server._detect_chat_id_from_bot_updates` through
+  `detect_desk_delivery_chat_id()`, while existing tests continue to cover
+  secret/command-field rejection, sanitized target projection, dry-run-only
+  send tests, Bot token privacy in `getUpdates`, and Telegram-session fallback.
+  A direct-owner regression also verifies the new module can lazy-call the
+  credentials session fallback if future code bypasses the facade.
+- The CI explicit `py_compile` list now includes
+  `scripts/desk_delivery_settings.py`.
+- Focused gates passed: credential/settings contract tests, targeted
+  `py_compile`, targeted `ruff`, the full dashboard Python test directory,
+  and the mixed credential/action/Bot Gateway contract gate.
+
 ## Current Debt Snapshot: 2026-05-14
 
 The debt register below remains the long-form reasoning. This table is the
@@ -659,7 +690,7 @@ current triage view for what is still real after the later splits:
 | --- | --- | --- |
 | D1. WIP and branch hygiene | Cleared for the known backlog. The dirty implementation slices from the handoff are now checkpoint commits. | Keep using staged snapshot or clean worktree gates for future slices; do not use mixed-worktree gates as commit proof. |
 | D2. Contract sprawl | Materially improved. Shared fixtures now cover the high-risk Python/TypeScript contracts, but `docs/agent-cli-contract.md` is still long. | Keep the contract doc as an index and move new guarantees into fixtures first, prose second. |
-| D3. `dashboard_server.py` boundaries | Artifact, git, fixed dry-run scheduler, Bot Gateway background, credentials, secret settings, sources, source access, source assistant, action execution, profile creation, server selection, HTTP security, and profile route mutation helpers are split behind the old facade. The facade is currently `1276` lines and mainly owns route dispatch, state payload assembly, pre-state-access guards, and compatibility re-exports. | Keep remaining route dispatch in the facade until a group has focused tests; next backend leverage is test concentration or state payload routing, not low-value line shaving. |
+| D3. `dashboard_server.py` boundaries | Artifact, git, fixed dry-run scheduler, Bot Gateway background, credentials, delivery settings, secret settings, sources, source access, source assistant, action execution, profile creation, server selection, HTTP security, and profile route mutation helpers are split behind the old facade. The facade is currently `1276` lines and mainly owns route dispatch, state payload assembly, pre-state-access guards, and compatibility re-exports. | Keep remaining route dispatch in the facade until a group has focused tests; next backend leverage is test concentration or state payload routing, not low-value line shaving. |
 | D4. `monitor_state.py` boundaries | Mostly reduced to a `411` line facade. DB/schema, common privacy guards, review cards, alerts, feedback, profile patches, and dashboard projection are split. | Profile runtime/settings helpers are the only meaningful remaining state responsibility; split only with focused tests if that area changes. |
 | D5. `report.py` coupling | Mostly reduced. `report.py` is now `503` lines; report behavior moved into `report_*` modules, and report HTML link/source rendering now lives in a focused helper module. | Treat `report_extraction.py`, `report_html.py`, and `report_sources.py` as review units; next report work should be behavior or visual-output driven, not line-count driven. |
 | D6. Dashboard root/settings state | Actions, Profiles, Inbox, Runs, the Settings source library, and the profile runtime settings editor are now composition entrypoints. `inbox.tsx` is down to `137` lines, `runs.tsx` to `76` lines, `source-library-panel.tsx` to `204` lines, and `runtime-settings-control.tsx` to `200` lines, each backed by focused submodules. | The next UI slice should be driven by a real UX/test gap rather than more line-count cleanup. |
@@ -675,7 +706,8 @@ Large current files are still the main maintainability signal:
 | Python server | `scripts/dashboard_server.py` | 1276 | HTTP routing, state payload assembly, route-level validation, and compatibility re-exports remain in the facade after profile creation, server selection, HTTP security, and profile route mutation payloads moved out. |
 | Desk scan scheduler | `scripts/desk_scheduler.py` | 630 | Fixed dry-run auto-scan scheduler and compatibility wrappers remain here after Bot Gateway background/autostart moved out. |
 | Desk Bot Gateway background | `scripts/desk_bot_gateway_background.py` | 556 | Focused Bot Gateway background module for local-first status, token-gated autostart, fixed launcher argv, and launchd/systemd/Windows login task handling. |
-| Desk credentials and delivery | `scripts/desk_credentials.py` | 691 | Telegram app credentials/login, delivery target projection, chat detection, and compatibility wrappers remain here after local secret settings moved out. |
+| Desk credentials | `scripts/desk_credentials.py` | 453 | Telegram app credentials/login and compatibility wrappers remain here after local secret settings and delivery target/chat detection moved out. |
+| Desk delivery settings | `scripts/desk_delivery_settings.py` | 231 | Focused delivery target module for default target validation, sanitized target projection, dry-run notification tests, Bot update chat detection, Telegram session fallback bridging, and no-secret detection payloads. |
 | Desk secret settings | `scripts/desk_secret_settings.py` | 276 | Focused local secret-settings module for notification bot token status/update, AI provider key status/update, and provider env hydration without echoing secrets. |
 | Desk source registry | `scripts/desk_sources.py` | 552 | Source registry CRUD/import and facade compatibility remain here after source assistant and source access moved out. |
 | Desk source access | `scripts/desk_source_access.py` | 489 | Focused access module for cached source-health files, source-access summaries, Telethon bounded probes, quiet-source semantics, and cached-health repair actions. |
