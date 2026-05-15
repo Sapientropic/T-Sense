@@ -489,8 +489,12 @@ class DashboardSchedulerTests(unittest.TestCase):
             home = Path(tmp) / "home"
             project_root = Path(tmp) / "repo"
             home.mkdir()
-            project_root.mkdir()
-            (project_root / "tgcs").write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+            (project_root / "scripts").mkdir(parents=True)
+            tgcs_script = project_root / "scripts" / "tgcs.py"
+            tgcs_script.write_text("# tgcs entry\n", encoding="utf-8")
+            python = project_root / ".venv" / "bin" / "python"
+            python.parent.mkdir(parents=True)
+            python.write_text("", encoding="utf-8")
             calls: list[list[str]] = []
 
             def fake_run(args):
@@ -500,11 +504,12 @@ class DashboardSchedulerTests(unittest.TestCase):
             with patch.object(dashboard_server.sys, "platform", "darwin"):
                 with patch.object(dashboard_server.Path, "home", return_value=home):
                     with patch.object(dashboard_server, "PROJECT_ROOT", project_root):
-                        with patch.object(dashboard_server, "_run_scheduler_command", side_effect=fake_run):
-                            result = dashboard_server.run_desk_action(
-                                "schedule_install_dry_run",
-                                body={"confirm": True},
-                            )
+                        with patch.object(dashboard_server, "_pythonw_entry", return_value=python):
+                            with patch.object(dashboard_server, "_run_scheduler_command", side_effect=fake_run):
+                                result = dashboard_server.run_desk_action(
+                                    "schedule_install_dry_run",
+                                    body={"confirm": True},
+                                )
 
             plist_path = home / "Library" / "LaunchAgents" / "com.sapientropic.tgcs.jobs-fast.dry-run.plist"
             plist = plistlib.loads(plist_path.read_bytes())
@@ -514,7 +519,8 @@ class DashboardSchedulerTests(unittest.TestCase):
         self.assertEqual(
             plist["ProgramArguments"],
             [
-                str(project_root / "tgcs"),
+                str(python),
+                str(tgcs_script),
                 "monitor",
                 "run",
                 "--profile-id",
@@ -523,7 +529,39 @@ class DashboardSchedulerTests(unittest.TestCase):
                 "live",
             ],
         )
+        self.assertNotIn("WorkingDirectory", plist)
+        self.assertIn(["launchctl", "unload", "-w", str(plist_path)], calls)
         self.assertIn(["launchctl", "load", "-w", str(plist_path)], calls)
+
+
+    def test_desk_scheduler_status_surfaces_failing_macos_launch_agent_exit_code(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            project_root = Path(tmp) / "repo"
+            plist_path = home / "Library" / "LaunchAgents" / "com.sapientropic.tgcs.jobs-fast.dry-run.plist"
+            plist_path.parent.mkdir(parents=True)
+            plist_path.write_text("placeholder", encoding="utf-8")
+            completed = subprocess.CompletedProcess(
+                ["launchctl"],
+                0,
+                stdout="state = exited\nlast exit code = 126\n",
+                stderr="",
+            )
+
+            with patch.object(dashboard_server.sys, "platform", "darwin"):
+                with patch.object(dashboard_server.Path, "home", return_value=home):
+                    with patch.object(dashboard_server, "PROJECT_ROOT", project_root):
+                        with patch.object(dashboard_server, "_run_scheduler_command", return_value=completed) as run_mock:
+                            status = dashboard_server.desk_scheduler_status()
+
+        self.assertTrue(status["installed"])
+        self.assertEqual(status["status"], "failed")
+        self.assertEqual(status["last_exit_code"], 126)
+        self.assertIn("last exited with code 126", status["detail"])
+        self.assertIn("Repair auto review", status["next_action"])
+        args = run_mock.call_args.args[0]
+        self.assertEqual(args[0:2], ["launchctl", "print"])
+        self.assertIn("com.sapientropic.tgcs.jobs-fast.dry-run", args[-1])
 
 
     def test_schedule_remove_dry_run_unloads_macos_launch_agent_with_fixed_argv(self):

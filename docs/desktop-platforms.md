@@ -85,7 +85,7 @@ process is offline.
 Background mode and gateway liveness are separate checks. A login task can be
 installed while the gateway is still `not_detected` or `stale`; Signal Desk
 marks the gateway stale when its local heartbeat is older than 120 seconds. In
-that state, use `Restart / repair bot` from Settings > Alerts. The repair
+that state, use `Repair alerts` from Settings > Alerts. The repair
 action restarts the installed Windows task, reloads the macOS LaunchAgent, or
 restarts the Linux `systemd --user` service. If no scheduler backend is
 available, run `./tgcs bot run` manually.
@@ -118,6 +118,19 @@ falls back to `jobs-fast`.
 | macOS | Per-user `launchd` LaunchAgent. |
 | Linux desktop/user session | `systemd --user` service and timer. |
 | Non-systemd or headless Linux | Manual cron preview only. |
+
+On macOS, the auto-scan LaunchAgent runs the current virtualenv Python directly
+with `scripts/tgcs.py monitor run ...`. It intentionally does not invoke the
+repo-local `tgcs` shell launcher and does not set `WorkingDirectory`, because
+LaunchServices sandbox/path inheritance can make shell launchers fail with
+`bad interpreter` or `getcwd` errors. Turning auto review on again rewrites and
+reloads the LaunchAgent, so a stale shell-based plist is repaired from Signal
+Desk.
+
+Signal Desk treats an installed macOS LaunchAgent as unhealthy when `launchctl
+print` reports a failing job or a non-zero last exit code. The user-facing
+Automation card should show repair guidance instead of implying that auto scan
+is running normally.
 
 `tgcs schedule print` is no-side-effect and can print deterministic previews:
 

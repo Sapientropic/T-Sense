@@ -171,6 +171,7 @@ describe("Desk bot and local settings sanitizers", () => {
         backend: " linux_systemd_user ",
         profile_id: " frontend-only ",
         display_command: " tgcs schedule print --profile-id frontend-only --interval-minutes 15 --delivery-mode dry-run ",
+        last_exit_code: 126,
         can_install: true,
         can_remove: false,
         stdout: "ignored",
@@ -190,6 +191,7 @@ describe("Desk bot and local settings sanitizers", () => {
       backend: "linux_systemd_user",
       profile_id: "frontend-only",
       display_command: "tgcs schedule print --profile-id frontend-only --interval-minutes 15 --delivery-mode dry-run",
+      last_exit_code: 126,
       can_install: true,
       can_remove: false,
     });

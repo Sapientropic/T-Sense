@@ -64,22 +64,34 @@ export function buildJourneySteps(
   const sourceNeedsCleanup = sourceAttention || (workspaceDone && (sourceAccessHasInaccessible || sourceAccessHasQuiet));
 
   const hasSuccess = (actionId: string) => results[actionId]?.status === "success";
-  const dryRunScheduleOn = scheduler?.installed || (hasSuccess("schedule_install_dry_run") && results.schedule_remove_dry_run?.status !== "success");
+  const automationNeedsAttention = schedulerNeedsAttention(scheduler);
+  const dryRunScheduleOn = Boolean(scheduler?.installed) || (hasSuccess("schedule_install_dry_run") && results.schedule_remove_dry_run?.status !== "success");
   const notifications = notificationReadiness(targets);
   const schedulerCanInstall = scheduler ? (scheduler.can_install ?? scheduler.available !== false) : true;
   const schedulerCanRemove = scheduler ? (scheduler.can_remove ?? schedulerCanInstall) : true;
-  const automationDetail = scheduler?.installed
-    ? "Automatic AI reviews are on every 15 minutes."
-    : schedulerCanInstall
-      ? "Automatic AI reviews can run every 15 minutes from Signal Desk."
-      : "Automatic AI reviews need the manual schedule preview on this machine.";
-  const automationStateLabel = scheduler?.installed ? "Auto review on" : schedulerCanInstall ? "Off" : "Manual";
+  const automationDetail = automationNeedsAttention
+    ? schedulerAttentionDetail(scheduler)
+    : scheduler?.installed
+      ? "Automatic AI reviews are on every 15 minutes."
+      : schedulerCanInstall
+        ? "Automatic AI reviews can run every 15 minutes from Signal Desk."
+        : "Automatic AI reviews need the manual schedule preview on this machine.";
+  const automationStateLabel = automationNeedsAttention ? "Needs repair" : scheduler?.installed ? "Auto review on" : schedulerCanInstall ? "Off" : "Manual";
   const automationState =
     ready || stage === "needs_delivery_target"
-      ? schedulerCanInstall || scheduler?.installed
-        ? "ready"
-        : "manual"
+      ? automationNeedsAttention
+        ? "active"
+        : schedulerCanInstall || scheduler?.installed
+          ? "ready"
+          : "manual"
       : "blocked";
+  const installScheduleButton = automationNeedsAttention
+    ? schedulerCanInstall
+      ? [{ actionId: "schedule_install_dry_run", label: "Repair", variant: "primary" as const }]
+      : []
+    : !dryRunScheduleOn && schedulerCanInstall
+      ? [{ actionId: "schedule_install_dry_run", label: "Turn on", variant: "primary" as const }]
+      : [];
   const availableButtons = (buttons: JourneyButton[]) => buttons.filter((button) => actionIds.has(button.actionId) || button.actionId.startsWith("settings_"));
   const availableAdvanced = (ids: string[]) => ids.filter((actionId) => actionIds.has(actionId));
 
@@ -160,7 +172,7 @@ export function buildJourneySteps(
       stateLabel: ready || stage === "needs_delivery_target" ? automationStateLabel : "Finish setup first",
       buttons: availableButtons([
         { actionId: "schedule_preview", label: "Preview", variant: "secondary" },
-        ...(!dryRunScheduleOn && schedulerCanInstall ? [{ actionId: "schedule_install_dry_run", label: "Turn on", variant: "primary" as const }] : []),
+        ...installScheduleButton,
         ...(dryRunScheduleOn && schedulerCanRemove ? [{ actionId: "schedule_remove_dry_run", label: "Turn off", variant: "secondary" as const }] : []),
         { actionId: "live_delivery_human", label: "Notifications", variant: "secondary" },
       ]),
@@ -205,7 +217,7 @@ export function buildStartSummary(
   const activeButton = activeStep?.key === "telegram" ? undefined : primaryButtonForStep(activeStep);
   const nextValue = activeStep?.title
     ?? (reviewCount > 0 ? `Review ${reviewCount} card${reviewCount === 1 ? "" : "s"}` : !setupStatus?.has_runs ? "Run first AI review" : "Run another AI review");
-  const automationValue = scheduler?.installed ? "On" : scheduler?.available === false ? "Manual" : "Off";
+  const automationValue = schedulerNeedsAttention(scheduler) ? "Needs repair" : scheduler?.installed ? "On" : scheduler?.available === false ? "Manual" : "Off";
   const notifications = notificationReadiness(targets);
   const notificationAction =
     notifications.value === "Needs chat ID"
@@ -224,6 +236,16 @@ export function buildStartSummary(
 
 function primaryButtonForStep(step: JourneyStep | undefined) {
   return step?.buttons.find((button) => button.variant === "primary") ?? step?.buttons[0];
+}
+
+function schedulerNeedsAttention(scheduler: DeskSchedulerStatus | null | undefined) {
+  return Boolean(scheduler?.installed && scheduler.status !== "installed");
+}
+
+function schedulerAttentionDetail(scheduler: DeskSchedulerStatus | null | undefined) {
+  const detail = scheduler?.detail?.trim() || "Automatic AI reviews are installed, but Signal Desk cannot confirm they are running.";
+  const nextAction = scheduler?.next_action?.trim();
+  return nextAction ? `${detail} ${nextAction}` : detail;
 }
 
 function telegramDetail(telegramStatus: DeskTelegramStatus | null | undefined, telegramReady: boolean) {

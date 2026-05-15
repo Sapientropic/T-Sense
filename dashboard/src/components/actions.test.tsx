@@ -8,6 +8,7 @@ import {
   notificationReadiness as notificationReadinessFromModel,
 } from "./actions/journey-model";
 import { JourneyStepCard } from "./actions/journey-step-card";
+import { StartManagementStrip } from "./actions/start-management-strip";
 import type { DeliveryTarget, DeskAction, DeskActionResult, DeskSchedulerStatus } from "../domain/types";
 
 function action(actionId: string, runMode = "execute"): DeskAction {
@@ -49,6 +50,16 @@ function schedulerStatus(installed: boolean): DeskSchedulerStatus {
     detail: installed ? "Automatic AI reviews are on every 15 minutes." : "Automatic AI reviews are off.",
     next_action: installed ? "You can turn them off." : "Turn on auto review.",
     checked_at: "2026-05-10T00:00:00Z",
+  };
+}
+
+function failingSchedulerStatus(): DeskSchedulerStatus {
+  return {
+    ...schedulerStatus(true),
+    status: "failed",
+    detail: "Automatic reviews are installed, but launchd last exited with code 126.",
+    next_action: "Repair auto review from Signal Desk to rewrite and reload the LaunchAgent.",
+    last_exit_code: 126,
   };
 }
 
@@ -495,6 +506,48 @@ describe("Signal Desk journey", () => {
       "Turn off",
       "Notifications",
     ]);
+  });
+
+  it("does not present a failing installed scheduler as healthy automation", () => {
+    const scheduler = failingSchedulerStatus();
+    const setup = { stage: "ready", has_profiles: true, has_runs: true };
+    const steps = buildJourneySteps(actions, {}, setup, telegramReady, scheduler);
+    const automation = steps.find((step) => step.key === "automation");
+    const summary = buildStartSummary(steps, setup, telegramReady, scheduler);
+
+    expect(automation).toMatchObject({
+      state: "active",
+      stateLabel: "Needs repair",
+      detail: expect.stringContaining("launchd last exited with code 126"),
+    });
+    expect(automation?.detail).toContain("Repair auto review");
+    expect(automation?.buttons.map((button) => button.label)).toEqual([
+      "Preview",
+      "Repair",
+      "Turn off",
+      "Notifications",
+    ]);
+    expect(summary.find((item) => item.label === "Automation")).toMatchObject({ value: "Needs repair" });
+  });
+
+  it("points the top automation shortcut at repair when the scheduler is failing", () => {
+    const scheduler = failingSchedulerStatus();
+    const automation = buildJourneySteps(actions, {}, { stage: "ready", has_profiles: true, has_runs: true }, telegramReady, scheduler).find(
+      (step) => step.key === "automation",
+    );
+    const html = renderToStaticMarkup(
+      <StartManagementStrip
+        anyBusy={false}
+        automationStep={automation}
+        onRun={async () => undefined}
+        scheduler={scheduler}
+        setupOpen={false}
+        onToggleSetup={() => undefined}
+      />,
+    );
+
+    expect(html).toContain("Repair auto review");
+    expect(html).toContain("Needs attention");
   });
 
   it("shows notification readiness in the automation guidance", () => {

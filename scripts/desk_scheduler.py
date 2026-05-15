@@ -241,6 +241,10 @@ def posix_tgcs_entry() -> Path:
     return PROJECT_ROOT / "tgcs"
 
 
+def tgcs_script_path() -> Path:
+    return PROJECT_ROOT / "scripts" / "tgcs.py"
+
+
 def bot_gateway_script_path() -> Path:
     _sync_bot_gateway_context()
     return desk_bot_gateway_background.bot_gateway_script_path()
@@ -262,6 +266,20 @@ def fixed_monitor_argv(entry: Path, *, profile_id: str | None = None) -> list[st
     selected_profile_id = profile_id or preferred_scheduler_profile_id()
     return [
         str(entry),
+        "monitor",
+        "run",
+        "--profile-id",
+        selected_profile_id,
+        "--delivery-mode",
+        "live",
+    ]
+
+
+def fixed_monitor_python_argv(python_entry: Path | None = None, *, profile_id: str | None = None) -> list[str]:
+    selected_profile_id = profile_id or preferred_scheduler_profile_id()
+    return [
+        str(python_entry or pythonw_entry()),
+        str(tgcs_script_path()),
         "monitor",
         "run",
         "--profile-id",
@@ -324,6 +342,8 @@ def desk_scheduler_status() -> dict:
 
     if backend == "macos_launchd":
         installed = launchd_plist_path().exists()
+        if installed:
+            return launchd_scheduler_status(base)
         return {
             **base,
             "available": True,
@@ -392,19 +412,91 @@ def desk_scheduler_status() -> dict:
     }
 
 
-def write_launchd_plist(path: Path, entry: Path, *, profile_id: str | None = None) -> None:
+def launchd_service_target() -> str:
+    getuid = getattr(os, "getuid", None)
+    if callable(getuid):
+        return f"gui/{getuid()}/{DESK_SCHEDULER_LAUNCHD_LABEL}"
+    return DESK_SCHEDULER_LAUNCHD_LABEL
+
+
+def launchd_last_exit_code(output: str) -> int | None:
+    match = re.search(r"last exit code\s*=\s*(-?\d+)", output, flags=re.IGNORECASE)
+    if not match:
+        return None
+    try:
+        return int(match.group(1))
+    except ValueError:
+        return None
+
+
+def launchd_scheduler_status(base: dict) -> dict:
+    try:
+        completed = _run_scheduler_command(["launchctl", "print", launchd_service_target()])
+    except subprocess.TimeoutExpired:
+        return {
+            **base,
+            "available": True,
+            "installed": True,
+            "status": "unknown",
+            "detail": "Automatic reviews are installed, but Signal Desk could not confirm launchd status before the check timed out.",
+            "next_action": "If new Review cards stop arriving, repair auto review from Signal Desk.",
+        }
+    except OSError:
+        return {
+            **base,
+            "available": True,
+            "installed": True,
+            "status": "unknown",
+            "detail": "Automatic reviews are installed, but Signal Desk could not query launchd on this machine.",
+            "next_action": "If new Review cards stop arriving, repair auto review from Signal Desk.",
+        }
+
+    output = "\n".join([completed.stdout or "", completed.stderr or ""])
+    last_exit_code = launchd_last_exit_code(output)
+    if completed.returncode != 0:
+        return {
+            **base,
+            "available": True,
+            "installed": True,
+            "status": "failed",
+            "detail": "Automatic reviews are installed, but launchd does not report the job as loaded.",
+            "next_action": "Repair auto review from Signal Desk to rewrite and reload the LaunchAgent.",
+            **({"last_exit_code": last_exit_code} if last_exit_code is not None else {}),
+        }
+    if last_exit_code not in (None, 0):
+        return {
+            **base,
+            "available": True,
+            "installed": True,
+            "status": "failed",
+            "detail": f"Automatic reviews are installed, but launchd last exited with code {last_exit_code}.",
+            "next_action": "Repair auto review from Signal Desk to rewrite and reload the LaunchAgent.",
+            "last_exit_code": last_exit_code,
+        }
+    return {
+        **base,
+        "available": True,
+        "installed": True,
+        "status": "installed",
+        "detail": "Automatic AI reviews are on every 15 minutes.",
+        "next_action": "You can turn them off from Signal Desk when you no longer need background checks.",
+        **({"last_exit_code": last_exit_code} if last_exit_code is not None else {}),
+    }
+
+
+def write_launchd_plist(path: Path, python_entry: Path, *, profile_id: str | None = None) -> None:
     selected_profile_id = profile_id or preferred_scheduler_profile_id()
     path.parent.mkdir(parents=True, exist_ok=True)
+    output_dir = PROJECT_ROOT / "output"
+    output_dir.mkdir(parents=True, exist_ok=True)
     payload = {
         "Label": DESK_SCHEDULER_LAUNCHD_LABEL,
-        "ProgramArguments": fixed_monitor_argv(entry, profile_id=selected_profile_id),
+        "ProgramArguments": fixed_monitor_python_argv(python_entry, profile_id=selected_profile_id),
         "RunAtLoad": True,
         "StartInterval": DESK_SCHEDULER_INTERVAL_MINUTES * 60,
-        "WorkingDirectory": str(PROJECT_ROOT),
-        "StandardOutPath": str(PROJECT_ROOT / "output" / f"tgcs-{selected_profile_id}.log"),
-        "StandardErrorPath": str(PROJECT_ROOT / "output" / f"tgcs-{selected_profile_id}.err.log"),
+        "StandardOutPath": str(output_dir / f"tgcs-{selected_profile_id}.log"),
+        "StandardErrorPath": str(output_dir / f"tgcs-{selected_profile_id}.err.log"),
     }
-    PROJECT_ROOT.joinpath("output").mkdir(parents=True, exist_ok=True)
     with path.open("wb") as handle:
         plistlib.dump(payload, handle)
 
@@ -481,12 +573,14 @@ def run_desk_scheduler_action(action_id: str, *, body: dict | None = None) -> di
         )
 
     tgcs_entry = PROJECT_ROOT / "tgcs.bat" if backend == "windows_schtasks" else posix_tgcs_entry()
-    if not tgcs_entry.exists():
+    macos_tgcs_script = tgcs_script_path()
+    required_entry = macos_tgcs_script if backend == "macos_launchd" else tgcs_entry
+    if action_id == "schedule_install_dry_run" and not required_entry.exists():
         return scheduler_result(
             action_id,
             status="blocked",
             title="Launcher file is missing",
-            detail="Signal Desk could not find the local T-Sense launcher needed by the scheduler.",
+            detail="Signal Desk could not find the local T-Sense launcher or scheduler entry file.",
             next_action="Repair the repo-local install, then turn on auto scan again.",
             display_command=display_command,
         )
@@ -568,7 +662,11 @@ def run_desk_scheduler_action(action_id: str, *, body: dict | None = None) -> di
     if backend == "macos_launchd":
         plist_path = launchd_plist_path()
         if action_id == "schedule_install_dry_run":
-            write_launchd_plist(plist_path, tgcs_entry, profile_id=profile_id)
+            write_launchd_plist(plist_path, pythonw_entry(), profile_id=profile_id)
+            try:
+                _run_scheduler_command(["launchctl", "unload", "-w", str(plist_path)])
+            except (OSError, subprocess.TimeoutExpired):
+                pass
             args = ["launchctl", "load", "-w", str(plist_path)]
             success_title = "Auto scan is on"
             success_detail = f"launchd will run {profile_id} AI reviews every 15 minutes. Telegram alerts use the saved notification target."

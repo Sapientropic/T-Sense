@@ -38,13 +38,14 @@ export function StartManagementStrip({
   const automationButton =
     automationStep?.buttons.find((button) => button.actionId === "schedule_install_dry_run" || button.actionId === "schedule_remove_dry_run") ??
     automationStep?.buttons.find((button) => button.actionId === "schedule_preview");
+  const needsSchedulerAttention = schedulerNeedsAttention(scheduler);
   const controls: StartManagementControl[] = [
     ...(automationButton
       ? [
           {
             key: "automation",
-            label: scheduler?.installed ? "Auto review on" : "Automation",
-            detail: scheduler?.installed ? "Every 15 min" : "Set schedule",
+            label: needsSchedulerAttention ? "Repair auto review" : scheduler?.installed ? "Auto review on" : "Automation",
+            detail: needsSchedulerAttention ? "Needs attention" : scheduler?.installed ? "Every 15 min" : "Set schedule",
             icon: <Bell size={15} />,
             disabled: anyBusy,
             onClick: () => void onRun(automationButton.actionId),
@@ -102,4 +103,8 @@ export function StartManagementStrip({
       ))}
     </nav>
   );
+}
+
+function schedulerNeedsAttention(scheduler: DeskSchedulerStatus | null | undefined) {
+  return Boolean(scheduler?.installed && scheduler.status !== "installed");
 }

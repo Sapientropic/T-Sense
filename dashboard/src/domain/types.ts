@@ -600,6 +600,7 @@ export type DeskSchedulerStatus = {
   can_install?: boolean;
   can_remove?: boolean;
   display_command?: string;
+  last_exit_code?: number;
   detail: string;
   next_action: string;
   checked_at: string;

@@ -313,6 +313,9 @@ export function sanitizeDeskSchedulerStatus(value: unknown): DeskSchedulerStatus
   if (displayCommand) {
     sanitized.display_command = displayCommand;
   }
+  if (typeof value.last_exit_code === "number" && Number.isInteger(value.last_exit_code)) {
+    sanitized.last_exit_code = value.last_exit_code;
+  }
   if ("can_install" in value) {
     sanitized.can_install = value.can_install === true;
   }
