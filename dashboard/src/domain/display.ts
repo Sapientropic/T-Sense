@@ -203,6 +203,9 @@ export function sourceHeatClass(source: SourceStat) {
 }
 
 export function metricShortLabel(label: string) {
+  if (label.toLowerCase().includes("found")) {
+    return "found";
+  }
   if (label.toLowerCase().includes("yield")) {
     return "yield";
   }

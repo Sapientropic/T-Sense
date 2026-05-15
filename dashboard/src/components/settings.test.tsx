@@ -7,6 +7,8 @@ import {
   botIdentityResultLine,
   botGatewayBackgroundLine,
   botGatewayCanInstallBackground,
+  botGatewayLivenessLine,
+  botGatewayRepairLabel,
   botGatewayStatusLine,
   filterDeskSourcesByQuery,
   paginatedDeskSources,
@@ -152,9 +154,11 @@ describe("Settings source topic editor", () => {
     expect(sourceLibraryActivityLabel([])).toBe("");
   });
 
-  it("keeps source evidence panels collapsible", () => {
+  it("turns source stats into source recommendations with real next-step buttons", () => {
     const html = renderToStaticMarkup(
       <SourceInsightsPanel
+        onManageSources={() => undefined}
+        onReviewCards={() => undefined}
         sourceStats={[
           sourceStat({
             display_name: "Remote Jobs",
@@ -176,11 +180,16 @@ describe("Settings source topic editor", () => {
       />,
     );
 
-    expect(html).toContain("<details");
-    expect(html).toContain("Yield History");
-    expect(html).toContain("Source Actions");
-    expect(html).toContain("Source yield details");
-    expect(html).toContain("Source action details");
+    expect(html).toContain("Source recommendations");
+    expect(html).toContain("<details class=\"table-section source-recommendations-panel\"");
+    expect(html).toContain("<summary");
+    expect(html).toContain("Remote Jobs");
+    expect(html).toContain("Review cards");
+    expect(html).toContain("Manage sources");
+    expect(html).not.toContain("Yield History");
+    expect(html).not.toContain("Source Actions");
+    expect(html).not.toContain("Source yield details");
+    expect(html).not.toContain("Source action details");
   });
 
   it("frames source setup as Telegram discovery plus AI profile filtering, not pasted channels", () => {
@@ -229,7 +238,10 @@ describe("Settings source topic editor", () => {
     expect(html).toContain("Discover Sources");
     expect(html).toContain("AI filters your Telegram channels against the selected profile.");
     expect(html).toContain("Telegram folder");
-    expect(html).toContain("Scan all channels");
+    expect(html).toContain("All channels");
+    expect(html).toContain("aria-pressed=\"true\"");
+    expect(html).not.toContain("readOnly");
+    expect(html).not.toContain("readonly");
     expect(html).not.toContain("<span>Telegram channels</span>");
     expect(html).not.toContain("Paste channel handles");
     expect(html).not.toContain("@remote_jobs");
@@ -339,6 +351,9 @@ describe("Settings source topic editor", () => {
     };
 
     expect(botGatewayStatusLine(status)).toBe("Running · token ready · 1 chat");
+    expect(botGatewayLivenessLine(status)).toBe("Bot is running");
+    expect(botGatewayLivenessLine({ ...status, gateway_status: "stale" })).toBe("Bot may be stopped");
+    expect(botGatewayRepairLabel({ ...status, gateway_status: "stale" })).toBe("Restart / repair bot");
     expect(botGatewayStatusLine({ ...status, authorized_chat_count: 0, gateway_status: "not_detected" })).toBe(
       "Not detected · token ready · no chats",
     );
@@ -414,6 +429,8 @@ describe("Settings source topic editor", () => {
     );
 
     expect(html).toContain("Default notification chat");
+    expect(html).toContain("Bot status unknown");
+    expect(html).toContain("Restart / repair bot");
     expect(html).toContain("Add a Telegram chat ID to create the default private bot notification target.");
     expect(html).toContain("Telegram chat ID");
     expect(html).toContain("Detect chat ID");

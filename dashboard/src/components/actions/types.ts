@@ -1,6 +1,6 @@
 import type { DeskTelegramStatus } from "../../domain/types";
 
-export type SettingsShortcutTarget = "sources" | "ai" | "notifications" | "learning" | "evidence";
+export type SettingsShortcutTarget = "sources" | "ai" | "notifications" | "learning";
 
 export type TelegramControls = {
   status: DeskTelegramStatus | null;

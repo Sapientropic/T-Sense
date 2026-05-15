@@ -181,7 +181,8 @@
   .sources-settings-grid {
     grid-template-areas:
       "source-import"
-      "source-library";
+      "source-library"
+      "source-recommendations";
   }
 
   .pulse-panel {

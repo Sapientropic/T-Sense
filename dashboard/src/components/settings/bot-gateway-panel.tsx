@@ -1,4 +1,4 @@
-import { CirclePause, CirclePlay, RadioTower, ShieldCheck } from "lucide-react";
+import { CirclePause, CirclePlay, RadioTower, ShieldCheck, Wrench } from "lucide-react";
 
 import type { DeskBotGatewayStatus, DeskBotIdentityResult } from "../../domain/types";
 
@@ -49,6 +49,32 @@ export function botGatewayBackgroundLine(status: DeskBotGatewayStatus | null) {
     return `Background off · ${backendLabel}`;
   }
   return `Background unavailable · ${backendLabel}`;
+}
+
+export function botGatewayLivenessLine(status: DeskBotGatewayStatus | null) {
+  if (!status) {
+    return "Bot status unknown";
+  }
+  if (!status.token_configured) {
+    return "Bot needs a token";
+  }
+  if (status.authorized_chat_count <= 0) {
+    return "Bot needs a chat";
+  }
+  if (status.gateway_status === "running") {
+    return "Bot is running";
+  }
+  if (status.gateway_status === "stale") {
+    return "Bot may be stopped";
+  }
+  return "Bot is stopped";
+}
+
+export function botGatewayRepairLabel(status: DeskBotGatewayStatus | null) {
+  if (!status || status.gateway_status === "stale" || status.background?.installed) {
+    return "Restart / repair bot";
+  }
+  return "Run in background";
 }
 
 export function botIdentityResultLine(result: DeskBotIdentityResult | null) {
@@ -118,6 +144,15 @@ export function botGatewayCanInstallBackground(status: DeskBotGatewayStatus | nu
   );
 }
 
+function botGatewayCanRepair(status: DeskBotGatewayStatus | null) {
+  return Boolean(
+    status?.token_configured === true &&
+      status.authorized_chat_count > 0 &&
+      status.background?.can_install === true &&
+      (status.background.installed || status.gateway_status === "stale"),
+  );
+}
+
 export function BotGatewayPanel({
   status,
   error,
@@ -138,8 +173,10 @@ export function BotGatewayPanel({
   const gatewayTone = status?.gateway_status === "running" ? "enabled" : status?.gateway_status === "stale" ? "pending" : "disabled";
   const canApplyIdentity = status?.token_configured === true;
   const canInstallBackground = botGatewayCanInstallBackground(status);
+  const canRepair = botGatewayCanRepair(status);
   const canRemoveBackground = status?.background?.can_remove === true;
   const identityLine = botIdentityResultLine(identityResult);
+  const repairLabel = botGatewayRepairLabel(status);
   return (
     <section className="bot-gateway-panel" aria-label="Bot Gateway status">
       <div className="notification-token-head">
@@ -151,6 +188,10 @@ export function BotGatewayPanel({
         <span className={`status ${gatewayTone}`}>{status?.gateway_status === "running" ? "Live" : "Local"}</span>
       </div>
       <div className="bot-gateway-readout" aria-label="Bot Gateway readiness">
+        <span className={`bot-gateway-health ${gatewayTone}`}>
+          <strong>{botGatewayLivenessLine(status)}</strong>
+          <small>{status?.safe_next_action || "Save bot setup, then repair from here if alerts stop."}</small>
+        </span>
         <span>
           <strong>{status?.token_configured ? "Ready" : "Needed"}</strong>
           <small>bot token</small>
@@ -171,6 +212,15 @@ export function BotGatewayPanel({
       <div className="bot-gateway-actions">
         <button
           className="text-button"
+          disabled={busy || !canRepair}
+          onClick={() => void installBotGatewayAutostart()}
+          type="button"
+        >
+          <Wrench size={15} />
+          <span>{busy ? "Working" : repairLabel}</span>
+        </button>
+        <button
+          className="text-button secondary"
           disabled={busy || !canInstallBackground}
           onClick={() => void installBotGatewayAutostart()}
           type="button"

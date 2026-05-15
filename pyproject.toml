@@ -28,6 +28,7 @@ classifiers = [
 [project.optional-dependencies]
 llm = [
   "openai==2.34.0",
+  "pypdf==6.10.2",
 ]
 desktop = [
   "keyring==25.7.0",

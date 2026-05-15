@@ -209,14 +209,15 @@ def _profile_create_input_text(body: dict) -> str:
     parts: list[str] = []
     brief = str(body.get("brief") or "").strip()
     if brief:
-        parts.append(brief)
+        parts.append(f"Profile goal:\n{brief}")
+    filename = str(body.get("source_filename") or "").strip()
     source_text = str(body.get("source_text") or "").strip()
     if source_text:
-        parts.append(source_text)
+        parts.append(f"{_profile_attachment_heading(filename)}:\n{source_text}")
     source_base64 = str(body.get("source_base64") or "").strip()
     if source_base64:
-        filename = str(body.get("source_filename") or "").strip()
-        parts.append(_facade_callable("_profile_text_from_base64_file", _profile_text_from_base64_file)(source_base64, filename))
+        parsed_text = _facade_callable("_profile_text_from_base64_file", _profile_text_from_base64_file)(source_base64, filename)
+        parts.append(f"{_profile_attachment_heading(filename)}:\n{parsed_text}")
     text = "\n\n".join(part for part in parts if part.strip()).strip()
     if not text:
         raise ValueError("Describe the profile or attach a Markdown, text, or PDF file.")
@@ -224,6 +225,13 @@ def _profile_create_input_text(body: dict) -> str:
     if len(text) > max_text_length:
         raise ValueError(f"Profile brief must be {max_text_length} characters or fewer after parsing.")
     return monitor_state.require_profile_text_without_private_fragments("Profile brief", text)
+
+
+def _profile_attachment_heading(filename: str) -> str:
+    display_name = Path(str(filename or "")).name.strip()
+    if display_name:
+        return f"Attached profile file ({display_name})"
+    return "Attached profile file"
 
 
 def _profile_text_from_base64_file(source_base64: str, filename: str) -> str:

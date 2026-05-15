@@ -42,15 +42,16 @@ export function ReviewFilterEmptyState({
   const allCaughtUp = activeFilter === "actionable" && reviewQueueTotal === 0;
   const pendingDraftCount = feedbackSummary?.pending_profile_diff_count ?? 0;
   const exportableCount = feedbackSummary?.exportable_count ?? 0;
+  const tuningSourceCount = feedbackSummary?.current_decision_count ?? exportableCount + (feedbackSummary?.non_exportable_follow_up_count ?? 0);
   const canShowLearningAction =
-    allCaughtUp && ((pendingDraftCount > 0 && onOpenProfiles) || (exportableCount > 0 && onGenerateProfileSuggestions));
+    allCaughtUp && ((pendingDraftCount > 0 && onOpenProfiles) || (tuningSourceCount > 0 && onGenerateProfileSuggestions));
   const learningAction = canShowLearningAction ? (
     <ReviewLearningAction
       busy={busy}
-      exportableCount={exportableCount}
       onGenerateProfileSuggestions={onGenerateProfileSuggestions}
       onOpenProfiles={onOpenProfiles}
       pendingDraftCount={pendingDraftCount}
+      tuningSourceCount={tuningSourceCount}
     />
   ) : null;
   const nextAction = next ? (
@@ -77,16 +78,16 @@ export function ReviewFilterEmptyState({
 
 function ReviewLearningAction({
   busy,
-  exportableCount,
   onGenerateProfileSuggestions,
   onOpenProfiles,
   pendingDraftCount,
+  tuningSourceCount,
 }: {
   busy: boolean;
-  exportableCount: number;
   onGenerateProfileSuggestions?: () => void;
   onOpenProfiles?: () => void;
   pendingDraftCount: number;
+  tuningSourceCount: number;
 }) {
   if (pendingDraftCount > 0 && onOpenProfiles) {
     return (
@@ -96,11 +97,11 @@ function ReviewLearningAction({
       </button>
     );
   }
-  if (exportableCount > 0 && onGenerateProfileSuggestions) {
+  if (tuningSourceCount > 0 && onGenerateProfileSuggestions) {
     return (
       <button type="button" onClick={onGenerateProfileSuggestions} disabled={busy}>
         <FileDiff size={15} />
-        Generate drafts {exportableCount}
+        Generate drafts {tuningSourceCount}
       </button>
     );
   }
@@ -112,7 +113,10 @@ function reviewAllCaughtUpDetail(summary: DashboardState["feedback_summary"], ne
     return "Profile drafts are ready to review.";
   }
   if ((summary?.exportable_count ?? 0) > 0) {
-    return "Use handled decisions to draft profile changes.";
+    return "Use handled Review tags and notes to draft profile changes.";
+  }
+  if ((summary?.non_exportable_follow_up_count ?? 0) > 0) {
+    return "Use saved notes to draft profile changes.";
   }
   return nextLabel ? reviewFilterEmptyDetail(nextLabel) : "This view is clear.";
 }

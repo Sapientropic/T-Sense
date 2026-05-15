@@ -31,12 +31,12 @@ describe("Learning panel copy", () => {
   });
 
   it("uses app-first wording for the primary learning action", () => {
-    expect(learningActionLabel(0)).toBe("Collect review decisions");
+    expect(learningActionLabel(0)).toBe("Review cards");
     expect(learningActionLabel(2)).toBe("Generate drafts");
     expect(learningActionLabel(2, 1)).toBe("Review profile drafts");
   });
 
-  it("keeps clear action clickable even when there are no current decisions", () => {
+  it("sends the empty learning state back to Review instead of showing a dead draft action", () => {
     const html = renderToStaticMarkup(
       createElement(LearningPanel, {
         busy: false,
@@ -45,6 +45,7 @@ describe("Learning panel copy", () => {
         exportResult: null,
         generateProfileSuggestions: () => undefined,
         openProfileDrafts: () => undefined,
+        openReviewCards: () => undefined,
         runAgainWithLearning: () => undefined,
         summary: { current_decision_count: 0, exportable_count: 0 },
         suggestionResult: null,
@@ -52,8 +53,10 @@ describe("Learning panel copy", () => {
       }),
     );
 
+    expect(html).toContain("Review cards");
     expect(html).toContain("Clear learning decisions");
-    expect(html).not.toMatch(/<button class="text-button secondary"[^>]*disabled[^>]*>[\s\S]*?Clear learning decisions/);
+    expect(html).toMatch(/<button class="text-button secondary"[^>]*disabled[^>]*>[\s\S]*?Clear learning decisions/);
+    expect(html).not.toContain("Collect review decisions");
   });
 
   it("renders calibration evidence for profile tuning decisions", () => {
@@ -65,6 +68,7 @@ describe("Learning panel copy", () => {
         exportResult: null,
         generateProfileSuggestions: () => undefined,
         openProfileDrafts: () => undefined,
+        openReviewCards: () => undefined,
         runAgainWithLearning: () => undefined,
         summary: {
           current_decision_count: 5,

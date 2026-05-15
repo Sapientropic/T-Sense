@@ -238,12 +238,43 @@ def _normalize_preference_lines(text: str) -> list[str]:
         line = " ".join(line.split())
         if not line:
             continue
+        line = _canonical_preference_line(line)
         key = line.casefold()
         if key in seen:
             continue
         seen.add(key)
         lines.append(line)
     return lines[:24]
+
+
+def _canonical_preference_line(line: str) -> str:
+    normalized = " ".join(line.split()).casefold()
+    if _looks_like_durable_preference_rule(normalized):
+        return line
+    if _mentions_full_stack(normalized) and _mentions_negative_preference(normalized):
+        return "Exclude full-stack roles; prefer opportunities with a focused frontend, backend, or specialist scope."
+    if _mentions_lead_role(normalized) and _mentions_negative_preference(normalized):
+        return "Exclude lead-only roles unless the profile explicitly asks for leadership scope."
+    return line
+
+
+def _looks_like_durable_preference_rule(normalized: str) -> bool:
+    return normalized.startswith(("exclude ", "avoid ", "reject ", "skip ", "down-rank ", "downrank "))
+
+
+def _mentions_full_stack(normalized: str) -> bool:
+    return bool(re.search(r"\bfull[-\s]?stack\b", normalized))
+
+
+def _mentions_lead_role(normalized: str) -> bool:
+    return bool(re.search(r"\b(?:lead|leader|manager|management)\b", normalized))
+
+
+def _mentions_negative_preference(normalized: str) -> bool:
+    return bool(
+        re.search(r"\b(?:not|no|never|exclude|avoid|without|don't|do not|doesn't|isn't|reject|skip)\b", normalized)
+        or re.search(r"不要|不想|不是|非|排除|拒绝|避免", normalized)
+    )
 
 
 def _replace_follow_up_preferences(profile_text: str, preferences_text: str) -> str:

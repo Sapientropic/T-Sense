@@ -257,8 +257,7 @@ class MonitorStateFeedbackTests(unittest.TestCase):
         self.assertEqual(result["existing_count"], 0)
         self.assertEqual(second_result["created_count"], 0)
         self.assertEqual(second_result["existing_count"], 1)
-        self.assertIn("Desk feedback tuning", patch_row["note"])
-        self.assertIn("Extract the generalized matching patterns", patch_row["note"])
+        self.assertEqual(patch_row["note"], monitor_state.REVIEW_LEARNING_PATCH_NOTE)
         self.assertNotIn("Kept TypeScript role", patch_row["note"])
         self.assertNotIn("Skipped internship", patch_row["note"])
         self.assertNotIn("Wrong crypto promo", patch_row["note"])
@@ -396,6 +395,12 @@ class MonitorStateFeedbackTests(unittest.TestCase):
                 note="prefer remote TypeScript contracts",
                 profile_path=profile_path,
             )
+            monitor_state.sync_review_learning_profile_patch_suggestion(
+                conn,
+                profile_id="jobs-fast",
+                profile_path=profile_path,
+            )
+            conn.commit()
 
             result = monitor_state.clear_feedback_decisions(conn)
 
@@ -479,22 +484,22 @@ class MonitorStateFeedbackTests(unittest.TestCase):
 
         self.assertEqual(snapshot["feedback_summary"]["exportable_count"], 3)
         self.assertEqual(snapshot["feedback_summary"]["non_exportable_follow_up_count"], 1)
-        self.assertEqual(snapshot["feedback_summary"]["profile_diff_count"], 1)
-        self.assertEqual(snapshot["feedback_summary"]["pending_profile_diff_count"], 1)
+        self.assertEqual(snapshot["feedback_summary"]["profile_diff_count"], 0)
+        self.assertEqual(snapshot["feedback_summary"]["pending_profile_diff_count"], 0)
         self.assertEqual(snapshot["feedback_summary"]["applied_profile_diff_count"], 0)
         self.assertEqual(snapshot["feedback_summary"]["reverted_profile_diff_count"], 0)
-        self.assertIn("follow_up becomes preference drafts", snapshot["feedback_summary"]["export_scope_note"])
+        self.assertIn("all Review feedback can generate profile drafts", snapshot["feedback_summary"]["export_scope_note"])
         self.assertEqual(snapshot["feedback_summary"]["by_action"], {"false_positive": 1, "keep": 1, "skip": 1})
         self.assertEqual(snapshot["feedback_summary"]["by_rating"], {"high": 1, "low": 1, "medium": 1})
         self.assertEqual(snapshot["feedback_summary"]["by_decision_status"], {"unknown": 3})
-        self.assertEqual(snapshot["feedback_summary"]["next_action"]["label"], "Review profile drafts")
+        self.assertEqual(snapshot["feedback_summary"]["next_action"]["label"], "Generate profile suggestions")
         impacts = {item["item_title"]: item for item in snapshot["feedback_summary"]["recent_impacts"]}
         self.assertEqual(impacts["Kept role"]["impact_type"], "profile_tuning_source")
         self.assertEqual(impacts["Kept role"]["impact_status"], "ready")
         self.assertEqual(impacts["Kept role"]["impact_label"], "Ready for profile draft")
-        self.assertEqual(impacts["Follow up role"]["impact_type"], "profile_diff")
-        self.assertEqual(impacts["Follow up role"]["impact_status"], "pending")
-        self.assertEqual(impacts["Follow up role"]["impact_label"], "Preference draft pending")
+        self.assertEqual(impacts["Follow up role"]["impact_type"], "profile_tuning_source")
+        self.assertEqual(impacts["Follow up role"]["impact_status"], "ready")
+        self.assertEqual(impacts["Follow up role"]["impact_label"], "Note saved for profile tuning")
         self.assertNotIn("profile tweak", json.dumps(snapshot["feedback_summary"], ensure_ascii=False))
 
 
@@ -523,6 +528,8 @@ class MonitorStateFeedbackTests(unittest.TestCase):
             ],
         )
         monitor_state.set_card_action(conn, card_id=first_cards[0]["card_id"], action="follow_up", note="prefer contract budget")
+        monitor_state.sync_review_learning_profile_patch_suggestion(conn, profile_id="jobs-fast")
+        conn.commit()
         conn.execute("UPDATE review_cards SET created_at = ? WHERE card_id = ?", ("2026-05-13T00:00:00Z", first_cards[0]["card_id"]))
         conn.execute("UPDATE feedback_events SET created_at = ?", ("2026-05-13T00:00:00Z",))
         conn.execute(

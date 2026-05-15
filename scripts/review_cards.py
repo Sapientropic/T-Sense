@@ -29,7 +29,7 @@ from scripts.monitor_common import (
     stable_json,
     utc_now,
 )
-from scripts.profile_patches import REVIEW_LEARNING_PATCH_NOTE, sync_review_learning_profile_patch_suggestion
+from scripts.profile_patches import REVIEW_LEARNING_PATCH_NOTE
 
 
 def _source_refs(item: dict[str, Any]) -> list[dict[str, Any]]:
@@ -227,6 +227,7 @@ def set_card_action(
     # prevents stale choices from leaking into future report learning.
     conn.execute("DELETE FROM feedback_events WHERE card_id = ?", (card_id,))
     _delete_legacy_pending_profile_patches_for_card(conn, card_id=card_id)
+    _delete_pending_review_learning_drafts_for_profile(conn, profile_id=card["profile_id"])
     conn.execute(
         """
         INSERT INTO feedback_events(event_id, card_id, profile_id, action, note, created_at)
@@ -234,16 +235,8 @@ def set_card_action(
         """,
         ("feedback_" + uuid.uuid4().hex, card_id, card["profile_id"], action, note, now),
     )
-    patch = sync_review_learning_profile_patch_suggestion(
-        conn,
-        profile_id=card["profile_id"],
-        profile_path=profile_path,
-    )
     conn.commit()
-    updated = get_review_card(conn, card_id)
-    if action == "follow_up" and patch:
-        updated["profile_patch_suggestion"] = patch
-    return updated
+    return get_review_card(conn, card_id)
 
 
 def undo_card_action(conn: sqlite3.Connection, *, card_id: str) -> dict[str, Any]:
@@ -251,7 +244,7 @@ def undo_card_action(conn: sqlite3.Connection, *, card_id: str) -> dict[str, Any
     now = utc_now()
     conn.execute("DELETE FROM feedback_events WHERE card_id = ?", (card_id,))
     _delete_legacy_pending_profile_patches_for_card(conn, card_id=card_id)
-    sync_review_learning_profile_patch_suggestion(conn, profile_id=card["profile_id"])
+    _delete_pending_review_learning_drafts_for_profile(conn, profile_id=card["profile_id"])
     conn.execute(
         "UPDATE review_cards SET status = ?, handled_at = NULL, updated_at = ? WHERE card_id = ?",
         (PENDING_STATUS, now, card_id),
@@ -269,6 +262,23 @@ def _delete_legacy_pending_profile_patches_for_card(conn: sqlite3.Connection, *,
           AND note != ?
         """,
         (card_id, REVIEW_LEARNING_PATCH_NOTE),
+    )
+
+
+def _delete_pending_review_learning_drafts_for_profile(conn: sqlite3.Connection, *, profile_id: str) -> None:
+    # Review feedback is collected first, then turned into one profile-level
+    # draft from the current full set of tags and notes. When the underlying
+    # evidence changes, remove only the pending generated draft so users do not
+    # apply a stale profile suggestion by accident. Applied/reverted history is
+    # left intact for audit and rollback.
+    conn.execute(
+        """
+        DELETE FROM profile_patch_suggestions
+        WHERE profile_id = ?
+          AND status = 'pending'
+          AND note = ?
+        """,
+        (profile_id, REVIEW_LEARNING_PATCH_NOTE),
     )
 
 

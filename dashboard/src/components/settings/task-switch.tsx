@@ -1,4 +1,4 @@
-export type SettingsTask = "sources" | "ai" | "notifications" | "learning" | "evidence" | "updates";
+export type SettingsTask = "sources" | "ai" | "notifications" | "learning" | "updates";
 
 export function SettingsTaskSwitch({
   activeTask,
@@ -6,7 +6,6 @@ export function SettingsTaskSwitch({
   aiCount,
   notificationCount,
   feedbackCount,
-  evidenceCount,
   updateCount,
   onSelect,
 }: {
@@ -15,7 +14,6 @@ export function SettingsTaskSwitch({
   aiCount: number;
   notificationCount: number;
   feedbackCount: number;
-  evidenceCount: number;
   updateCount: number;
   onSelect: (task: SettingsTask) => void;
 }) {
@@ -29,7 +27,6 @@ export function SettingsTaskSwitch({
       count: feedbackCount,
       detail: feedbackCount > 0 ? "Profile tuning" : "Review cards to teach preferences",
     },
-    { id: "evidence", label: "Yield", count: evidenceCount, detail: "Which sources found posts" },
     { id: "updates", label: "Updates", count: updateCount, detail: updateCount > 0 ? "New app version" : "App version" },
   ];
   return (

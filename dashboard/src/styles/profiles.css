@@ -653,6 +653,7 @@
 .profile-match-section,
 .profile-matching-more section {
   display: grid;
+  align-content: start;
   gap: 6px;
   min-width: 0;
   padding: 8px;
@@ -672,6 +673,7 @@
 .profile-match-section ul,
 .profile-matching-more ul {
   display: grid;
+  align-content: start;
   gap: 5px;
   margin: 0;
   padding: 0;

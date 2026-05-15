@@ -31,6 +31,8 @@ export type { SettingsTask } from "./settings/task-switch";
 export {
   botGatewayBackgroundLine,
   botGatewayCanInstallBackground,
+  botGatewayLivenessLine,
+  botGatewayRepairLabel,
   botGatewayStatusLine,
   botIdentityResultLine,
 } from "./settings/bot-gateway-panel";
@@ -68,6 +70,7 @@ export type SettingsSourcesController = {
     profileId?: string,
     folderName?: string,
   ) => Promise<SourceImportResult>;
+  openReviewCards: () => void;
   setSourceEnabled: (sourceId: string, enabled: boolean) => Promise<void>;
   removeSource: (sourceId: string) => Promise<void>;
   setSourceTopics: (sourceId: string, topics: string[]) => Promise<void>;
@@ -106,6 +109,7 @@ export type SettingsLearningController = {
   exportFeedback: () => void;
   generateFeedbackProfileSuggestions: () => void;
   openProfileDrafts: () => void;
+  openReviewCards: () => void;
   clearFeedback: () => void;
   undoFeedbackDecision: (cardId: string) => void;
   runAgainWithLearning: () => void;
@@ -149,6 +153,7 @@ export function SettingsView({
     importStarterSources,
     previewSourceAssistant,
     applySourceAssistant,
+    openReviewCards,
     setSourceEnabled,
     removeSource,
     setSourceTopics,
@@ -179,6 +184,7 @@ export function SettingsView({
     exportFeedback,
     generateFeedbackProfileSuggestions,
     openProfileDrafts,
+    openReviewCards: openReviewCardsForLearning,
     clearFeedback,
     undoFeedbackDecision,
     runAgainWithLearning,
@@ -210,7 +216,6 @@ export function SettingsView({
       <SettingsTaskSwitch
         activeTask={activeTask}
         feedbackCount={(feedbackSummary?.exportable_count ?? 0) + (feedbackSummary?.pending_profile_diff_count ?? 0)}
-        evidenceCount={sourceStats.length}
         updateCount={settingsUpdateCount(gitStatus)}
         aiCount={aiSettingsStatus?.configured_count ?? 0}
         notificationCount={targets.length}
@@ -241,6 +246,12 @@ export function SettingsView({
             removeSource={removeSource}
             setSourceEnabled={setSourceEnabled}
             setSourceTopics={setSourceTopics}
+            sourceStats={sourceStats}
+          />
+          <SourceInsightsPanel
+            onManageSources={() => setActiveTask("sources")}
+            onReviewCards={openReviewCards}
+            sourceInsights={sourceInsights}
             sourceStats={sourceStats}
           />
         </div>
@@ -300,6 +311,7 @@ export function SettingsView({
           exportResult={feedbackExport}
           generateProfileSuggestions={generateFeedbackProfileSuggestions}
           openProfileDrafts={openProfileDrafts}
+          openReviewCards={openReviewCardsForLearning}
           runAgainWithLearning={runAgainWithLearning}
           summary={feedbackSummary}
           suggestionResult={feedbackProfileSuggestions}
@@ -307,13 +319,6 @@ export function SettingsView({
         />
       </section>
 
-      <section
-        className="settings-section settings-section-evidence"
-        aria-label="Source evidence settings"
-        data-active={activeTask === "evidence" ? "true" : "false"}
-      >
-        <SourceInsightsPanel sourceInsights={sourceInsights} sourceStats={sourceStats} />
-      </section>
       <section
         className="settings-section settings-section-updates"
         aria-label="Updates settings"

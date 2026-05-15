@@ -42,10 +42,11 @@ describe("dashboard projections", () => {
       feedback_summary: { exportable_count: 3, pending_profile_diff_count: 1 },
     });
     expect(buildMetrics(dashboard).map((metric) => metric.label)).toEqual(["Runs", "Alerts", "Profiles", "Sources"]);
-    expect(buildTabCounts(dashboard, 8)).toEqual({ inbox: 0, actions: 8, profiles: 1, runs: 1, settings: 5 });
+    expect(buildTabCounts(dashboard, 8)).toEqual({ inbox: 0, actions: 8, profiles: 1, runs: 1, settings: 4 });
     expect(buildBoardMeta("actions", dashboard, 8).title).toBe("Start");
     expect(buildBoardMeta("settings", dashboard).title).toBe("Settings");
-    expect(settingsActionCount(dashboard)).toBe(5);
+    expect(buildBoardMeta("settings", dashboard).detail).not.toContain("source decisions pending");
+    expect(settingsActionCount(dashboard)).toBe(4);
   });
 
   it("builds a fixed run-day window with empty days preserved", () => {

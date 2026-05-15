@@ -16,7 +16,7 @@ export function learningActionLabel(count: number, pendingDraftCount = 0) {
   if (pendingDraftCount > 0) {
     return "Review profile drafts";
   }
-  return count > 0 ? "Generate drafts" : "Collect review decisions";
+  return count > 0 ? "Generate drafts" : "Review cards";
 }
 
 export function feedbackExportStatusLine(result: FeedbackExportResult | null) {
@@ -46,6 +46,7 @@ export function LearningPanel({
   exportFeedback,
   generateProfileSuggestions,
   openProfileDrafts,
+  openReviewCards,
   clearFeedback,
   undoFeedbackDecision,
   runAgainWithLearning,
@@ -57,6 +58,7 @@ export function LearningPanel({
   exportFeedback: () => void;
   generateProfileSuggestions: () => void;
   openProfileDrafts: () => void;
+  openReviewCards?: () => void;
   clearFeedback: () => void;
   undoFeedbackDecision: (cardId: string) => void;
   runAgainWithLearning: () => void;
@@ -67,7 +69,14 @@ export function LearningPanel({
   const currentDecisionCount = summary?.current_decision_count ?? exportableCount + (summary?.non_exportable_follow_up_count ?? 0);
   const statusLine = feedbackExportStatusLine(exportResult);
   const suggestionLine = feedbackSuggestionStatusLine(suggestionResult);
-  const primaryDisabled = busy || (pendingDraftCount <= 0 && exportableCount <= 0);
+  const shouldOpenReview = pendingDraftCount <= 0 && currentDecisionCount <= 0;
+  const primaryDisabled = busy || (shouldOpenReview && !openReviewCards);
+  const hasClearableLearning = currentDecisionCount > 0 || exportableCount > 0 || pendingDraftCount > 0;
+  const primaryAction = pendingDraftCount > 0
+    ? openProfileDrafts
+    : shouldOpenReview
+      ? openReviewCards
+      : generateProfileSuggestions;
   const copyExportPath = () => {
     if (!exportResult?.output_path || !navigator.clipboard) {
       return;
@@ -87,13 +96,13 @@ export function LearningPanel({
         <button
           className="text-button"
           type="button"
-          onClick={pendingDraftCount > 0 ? openProfileDrafts : generateProfileSuggestions}
+          onClick={() => primaryAction?.()}
           disabled={primaryDisabled}
         >
           {pendingDraftCount > 0 ? <UserRoundCog size={15} /> : <FileDiff size={15} />}
-          <span>{busy ? "Working" : learningActionLabel(exportableCount, pendingDraftCount)}</span>
+          <span>{busy ? "Working" : learningActionLabel(currentDecisionCount, pendingDraftCount)}</span>
         </button>
-        <button className="text-button secondary" type="button" onClick={clearFeedback} disabled={busy}>
+        <button className="text-button secondary" type="button" onClick={clearFeedback} disabled={busy || !hasClearableLearning}>
           <Trash2 size={15} />
           <span>Clear learning decisions</span>
         </button>
@@ -140,10 +149,12 @@ export function LearningPanel({
 }
 
 function FeedbackFlow({ summary }: { summary?: DashboardState["feedback_summary"] }) {
+  const tuningSourceCount =
+    summary?.current_decision_count ?? (summary?.exportable_count ?? 0) + (summary?.non_exportable_follow_up_count ?? 0);
   return (
     <div className="feedback-flow" aria-label="Feedback learning flow">
-      <span title="Confirmed decisions ready for profile tuning">
-        <strong>{summary?.exportable_count ?? 0}</strong>
+      <span title="Saved Review tags and notes ready for profile tuning">
+        <strong>{tuningSourceCount}</strong>
         ready
       </span>
       <span title="Preference drafts waiting for review">
@@ -173,7 +184,7 @@ function FeedbackBreakdown({
     { label: "Preferred", value: summary?.by_action?.keep ?? 0 },
     { label: "Deprioritized", value: summary?.by_action?.skip ?? 0 },
     { label: "Wrong match", value: summary?.by_action?.false_positive ?? 0 },
-    { label: "Draft notes", value: summary?.non_exportable_follow_up_count ?? 0 },
+    { label: "Saved notes", value: summary?.non_exportable_follow_up_count ?? 0 },
     { label: "High priority", value: summary?.by_rating?.high ?? 0 },
     { label: "Changed", value: summary?.by_decision_status?.changed ?? 0 },
     { label: "Applied changes", value: summary?.applied_profile_diff_count ?? 0 },

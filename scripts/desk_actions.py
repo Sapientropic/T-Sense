@@ -652,7 +652,7 @@ def _run_desk_action_unlocked(action_id: str, *, action: dict, body: dict | None
             return _desk_action_result(
                 action_id,
                 status=exc.status,
-                title="Source access check blocked",
+                title=_source_access_blocked_title(exc),
                 detail=str(exc),
                 next_action=exc.next_action,
             )
@@ -759,3 +759,16 @@ def _run_desk_action_unlocked(action_id: str, *, action: dict, body: dict | None
         "next_action": next_action,
         "finished_at": _utc_now(),
     }
+
+
+def _source_access_blocked_title(exc: SourceAccessProbeError) -> str:
+    text = f"{exc} {exc.next_action}".casefold()
+    if "credential" in text:
+        return "Connect Telegram first"
+    if "login" in text or "authorized" in text:
+        return "Finish Telegram login"
+    if "no enabled sources" in text:
+        return "Add a channel first"
+    if "registry" in text or "syntax" in text or "saved source" in text:
+        return "Fix saved channels first"
+    return "Source access needs setup"

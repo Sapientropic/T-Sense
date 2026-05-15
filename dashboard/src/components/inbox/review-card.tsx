@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { Archive, Ban, Bookmark, Check, ExternalLink, Eye, FileDiff, Play, RotateCcw, X } from "lucide-react";
+import { Archive, Ban, Bookmark, Check, ExternalLink, Eye, FileText, Play, RotateCcw, X } from "lucide-react";
 
 import { artifactFormatFromPath, artifactHref, reportProfileName, toneClass } from "../../domain/display";
 import { formatDate, profileDisplayName, sourceRefLabel, titleCaseLabel } from "../../domain/format";
@@ -179,7 +179,7 @@ function reviewStatusLabel(status?: string) {
   const normalized = String(status || "pending").toLowerCase();
   const labels: Record<string, string> = {
     false_positive: "Wrong match",
-    follow_up: "Profile draft",
+    follow_up: "Tuning note",
     kept: "Preferred",
     pending: "Needs decision",
     skipped: "Deprioritized",
@@ -340,17 +340,17 @@ function MobileActionStrip({
         </button>
       )}
       <button
-        aria-label={showFollowUp ? "Hide feedback tools" : "Explain why this is not a fit or tune the profile"}
+        aria-label={showFollowUp ? "Hide feedback tools" : "Leave a note or tag this match for profile tuning"}
         className="secondary-action"
         data-review-action="tune"
         data-review-tone="negative"
-        title={showFollowUp ? "Hide feedback tools" : "Explain why this is not a fit or tune the profile"}
+        title={showFollowUp ? "Hide feedback tools" : "Leave a note or tag this match for profile tuning"}
         type="button"
         onClick={() => setShowFollowUp((value) => !value)}
         disabled={busy}
       >
-        <FileDiff size={16} />
-        <span>{showFollowUp ? "Hide tools" : "Not a fit"}</span>
+        <FileText size={16} />
+        <span>{showFollowUp ? "Hide tools" : "Feedback"}</span>
       </button>
     </div>
   );
@@ -485,14 +485,14 @@ function CardActions({
             className="tune-profile-trigger"
             data-review-action="tune"
             data-review-tone="negative"
-            title="Explain why this is not a fit or tune the profile"
+            title="Leave a note or tag this match for profile tuning"
             type="button"
             onClick={() => setShowFollowUp(true)}
             disabled={busy}
           >
-            <FileDiff size={17} />
-            <span>Not a fit</span>
-            <small>Reasons + signals</small>
+            <FileText size={17} />
+            <span>Feedback</span>
+            <small>Notes + tags</small>
           </button>
         </div>
       )}
@@ -541,8 +541,8 @@ function CardActions({
             </div>
           </div>
           <div className="follow-up-group">
-            <span className="follow-up-group-label">Teach matching</span>
-            <div className="follow-up-signal-grid" aria-label="Preference training actions">
+            <span className="follow-up-group-label">Preference tags</span>
+            <div className="follow-up-signal-grid" aria-label="Profile tuning tags">
               <button
                 className="follow-up-signal"
                 title="Prefer similar future matches"
@@ -588,22 +588,22 @@ function CardActions({
               aria-label="Feedback note"
               value={note}
               onChange={(event) => setNote(event.target.value)}
-              placeholder="Describe what future matches should change"
+              placeholder="Leave a short note for the later profile tuning draft"
               disabled={busy}
             />
           </div>
           <div className="follow-up-footer">
-            <small>Creates a reviewable profile change. The note stays local and is not included in exports.</small>
+            <small>Saves this note with the card. Generate profile suggestions after reviewing the queue.</small>
             <button
               className="follow-up-submit"
               data-review-tone="supportive"
-              title={note.trim() ? "Create profile change" : "Add a note first"}
+              title={note.trim() ? "Leave note for profile tuning" : "Add a note first"}
               type="button"
               onClick={() => act(card.card_id, "follow_up", note.trim())}
               disabled={busy || !note.trim()}
             >
-              <FileDiff size={16} />
-              <span>{note.trim() ? "Create change" : "Add note"}</span>
+              <FileText size={16} />
+              <span>{note.trim() ? "Leave note" : "Add note"}</span>
             </button>
           </div>
         </div>

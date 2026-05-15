@@ -10,6 +10,17 @@ from unittest.mock import patch
 from scripts import monitor_state, profile_patches
 
 
+def _create_review_learning_patch(conn: sqlite3.Connection, *, profile_id: str, profile_path: Path) -> dict:
+    patch = monitor_state.sync_review_learning_profile_patch_suggestion(
+        conn,
+        profile_id=profile_id,
+        profile_path=profile_path,
+    )
+    conn.commit()
+    assert patch is not None
+    return patch
+
+
 class MonitorStateProfilePatchTests(unittest.TestCase):
     def test_profile_patch_helpers_stay_available_from_monitor_state_facade(self):
         self.assertIs(monitor_state.REVIEW_LEARNING_PATCH_NOTE, profile_patches.REVIEW_LEARNING_PATCH_NOTE)
@@ -67,7 +78,8 @@ class MonitorStateProfilePatchTests(unittest.TestCase):
                     note="Prefer official incident updates.",
                     profile_path=profile_path,
                 )
-            suggestion = card["profile_patch_suggestion"]
+                self.assertNotIn("profile_patch_suggestion", card)
+                suggestion = _create_review_learning_patch(conn, profile_id="market-news", profile_path=profile_path)
             result = monitor_state.apply_profile_patch(conn, patch_id=suggestion["patch_id"], profile_path=profile_path)
 
             self.assertEqual(result["status"], "applied")
@@ -185,25 +197,27 @@ class MonitorStateProfilePatchTests(unittest.TestCase):
                 ]
 
             with patch.object(profile_patches, "_llm_profile_patch_preference_lines", side_effect=fake_llm_profile_patch):
-                first = monitor_state.set_card_action(
+                monitor_state.set_card_action(
                     conn,
                     card_id=cards[0]["card_id"],
                     action="follow_up",
                     note="not full stack",
                     profile_path=profile_path,
-                )["profile_patch_suggestion"]
-                second = monitor_state.set_card_action(
+                )
+                self.assertEqual(conn.execute("SELECT COUNT(*) FROM profile_patch_suggestions").fetchone()[0], 0)
+                monitor_state.set_card_action(
                     conn,
                     card_id=cards[1]["card_id"],
                     action="follow_up",
                     note="too much video editing, not my target",
                     profile_path=profile_path,
-                )["profile_patch_suggestion"]
+                )
+                self.assertEqual(conn.execute("SELECT COUNT(*) FROM profile_patch_suggestions").fetchone()[0], 0)
+                patch_row = _create_review_learning_patch(conn, profile_id="market-news", profile_path=profile_path)
 
             snapshot = monitor_state.dashboard_snapshot(conn)
             feedback_summary = monitor_state.feedback_summary(conn)
 
-        self.assertEqual(first["patch_id"], second["patch_id"])
         self.assertEqual(conn.execute("SELECT COUNT(*) FROM profile_patch_suggestions").fetchone()[0], 1)
         patches = snapshot["profile_patch_suggestions"]
         self.assertEqual(len(patches), 1)
@@ -218,7 +232,8 @@ class MonitorStateProfilePatchTests(unittest.TestCase):
         self.assertNotIn("too much video editing, not my target", patches[0]["diff_text"].casefold())
         self.assertIn("Exclude full-stack roles", patches[0]["diff_text"])
         self.assertIn("Down-rank video-editing-heavy SaaS roles", patches[0]["diff_text"])
-        self.assertEqual(len(llm_calls), 2)
+        self.assertEqual(patch_row["patch_id"], patches[0]["patch_id"])
+        self.assertEqual(len(llm_calls), 1)
         self.assertEqual(llm_calls[-1]["note"], profile_patches.REVIEW_LEARNING_PATCH_NOTE)
         self.assertIn("Find frontend developer opportunities", llm_calls[-1]["profile_text"])
         self.assertCountEqual(
@@ -229,8 +244,8 @@ class MonitorStateProfilePatchTests(unittest.TestCase):
             any(item["card"].get("role") == "Full Stack Developer" for item in llm_calls[-1]["feedback_context"])
         )
         impacts = {item["item_title"]: item for item in feedback_summary["recent_impacts"]}
-        self.assertEqual(impacts["Full Stack Developer - Studio A"]["patch_id"], first["patch_id"])
-        self.assertEqual(impacts["Senior Full Stack Developer (TS/Nuxt, Video Editing) - Clideo"]["patch_id"], first["patch_id"])
+        self.assertEqual(impacts["Full Stack Developer - Studio A"]["patch_id"], patch_row["patch_id"])
+        self.assertEqual(impacts["Senior Full Stack Developer (TS/Nuxt, Video Editing) - Clideo"]["patch_id"], patch_row["patch_id"])
         self.assertEqual(impacts["Senior Full Stack Developer (TS/Nuxt, Video Editing) - Clideo"]["impact_status"], "pending")
 
 
@@ -369,6 +384,41 @@ class MonitorStateProfilePatchTests(unittest.TestCase):
             self.assertEqual(rows, [])
             self.assertEqual(profile_path.read_text(encoding="utf-8"), original)
 
+    def test_manual_matching_preferences_canonicalize_common_negative_notes(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        monitor_state.init_db(conn)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profile_path = root / "profile.md"
+            profile_path.write_text(
+                "# Profile\n\n"
+                "## Basic Info\n"
+                "- **Role**: Frontend / full-stack developer opportunities worth acting on\n\n"
+                "## Follow-up Preferences\n"
+                "- No extra learned preferences yet.\n",
+                encoding="utf-8",
+            )
+            monitor_state.upsert_profile(
+                conn,
+                {"id": "jobs-fast", "path": str(profile_path), "enabled": True},
+            )
+
+            with patch.object(monitor_state, "PROJECT_ROOT", root):
+                patch_row = monitor_state.create_profile_preferences_patch_suggestion(
+                    conn,
+                    profile_id="jobs-fast",
+                    preferences_text="not full stack\ni don't want full stack\nnot lead",
+                )
+
+        proposed = patch_row["proposed_profile_text"]
+        self.assertIn("Exclude full-stack roles; prefer opportunities with a focused frontend", proposed)
+        self.assertIn("Exclude lead-only roles unless the profile explicitly asks for leadership scope.", proposed)
+        self.assertEqual(proposed.count("Exclude full-stack roles"), 1)
+        self.assertNotIn("i don't want full stack", proposed)
+        self.assertNotIn("\n- not lead", proposed)
+
 
     def test_dashboard_profile_patch_refuses_db_path_outside_project(self):
         conn = sqlite3.connect(":memory:")
@@ -434,14 +484,14 @@ class MonitorStateProfilePatchTests(unittest.TestCase):
                     }
                 ],
             )
-            card = monitor_state.set_card_action(
+            monitor_state.set_card_action(
                 conn,
                 card_id=cards[0]["card_id"],
                 action="follow_up",
                 note="Prefer official incident updates.",
                 profile_path=profile_path,
             )
-            patch = card["profile_patch_suggestion"]
+            patch = _create_review_learning_patch(conn, profile_id="market-news", profile_path=profile_path)
             manually_edited = original + "\nManual edit before apply.\n"
             profile_path.write_text(manually_edited, encoding="utf-8")
 
@@ -488,14 +538,14 @@ class MonitorStateProfilePatchTests(unittest.TestCase):
                     }
                 ],
             )
-            card = monitor_state.set_card_action(
+            monitor_state.set_card_action(
                 conn,
                 card_id=cards[0]["card_id"],
                 action="follow_up",
                 note="Prefer official incident updates.",
                 profile_path=profile_path,
             )
-            patch = card["profile_patch_suggestion"]
+            patch = _create_review_learning_patch(conn, profile_id="market-news", profile_path=profile_path)
             monitor_state.apply_profile_patch(conn, patch_id=patch["patch_id"], profile_path=profile_path)
 
             result = monitor_state.revert_profile_patch(conn, patch_id=patch["patch_id"], profile_path=profile_path)
@@ -573,14 +623,14 @@ class MonitorStateProfilePatchTests(unittest.TestCase):
                     }
                 ],
             )
-            card = monitor_state.set_card_action(
+            monitor_state.set_card_action(
                 conn,
                 card_id=cards[0]["card_id"],
                 action="follow_up",
                 note="Prefer official incident updates.",
                 profile_path=profile_path,
             )
-            patch = card["profile_patch_suggestion"]
+            patch = _create_review_learning_patch(conn, profile_id="market-news", profile_path=profile_path)
             monitor_state.apply_profile_patch(conn, patch_id=patch["patch_id"], profile_path=profile_path)
             monitor_state.revert_profile_patch(conn, patch_id=patch["patch_id"], profile_path=profile_path)
 
@@ -623,14 +673,14 @@ class MonitorStateProfilePatchTests(unittest.TestCase):
                     }
                 ],
             )
-            card = monitor_state.set_card_action(
+            monitor_state.set_card_action(
                 conn,
                 card_id=cards[0]["card_id"],
                 action="follow_up",
                 note="Prefer official incident updates.",
                 profile_path=profile_path,
             )
-            patch = card["profile_patch_suggestion"]
+            patch = _create_review_learning_patch(conn, profile_id="market-news", profile_path=profile_path)
             monitor_state.apply_profile_patch(conn, patch_id=patch["patch_id"], profile_path=profile_path)
             manually_edited = profile_path.read_text(encoding="utf-8") + "\nManual edit.\n"
             profile_path.write_text(manually_edited, encoding="utf-8")
@@ -681,6 +731,7 @@ class MonitorStateProfilePatchTests(unittest.TestCase):
                 note="Prefer roles with explicit frontend ownership.",
                 profile_path=profile_path,
             )
+            _create_review_learning_patch(conn, profile_id="jobs-fast", profile_path=profile_path)
 
             snapshot = monitor_state.dashboard_snapshot(conn)
             profile_path.write_text("# Profile\n\nManual edit after suggestion.\n", encoding="utf-8")

@@ -43,19 +43,20 @@ export function SourceImportPanel({
   const initialProfileId = selectableProfiles[0]?.profile_id ?? "";
   const [profileId, setProfileId] = useState(initialProfileId);
   const [folderName, setFolderName] = useState("");
+  const [scanScope, setScanScope] = useState<"all" | "folder">("all");
   const selectedProfile = selectableProfiles.find((profile) => profile.profile_id === profileId) ?? selectableProfiles[0];
   const selectedProfileId = selectedProfile?.profile_id ?? "";
   const selectedProfileLabel = selectedProfile?.display_name || selectedProfile?.report_display_name || selectedProfile?.profile_id || "Profile";
   const topic = selectedProfile?.source_topics?.[0] || selectedProfileId || "default";
-  const folder = folderName.trim();
+  const folder = scanScope === "folder" ? folderName.trim() : "";
   const instruction = folder
     ? `Scan Telegram folder "${folder}" and let AI select sources for ${selectedProfileLabel}.`
     : `Scan all Telegram channels and let AI select sources for ${selectedProfileLabel}.`;
-  const assistantKey = `${selectedProfileId}\n${folder.toLowerCase()}\n${topic}`;
+  const assistantKey = `${selectedProfileId}\n${scanScope}\n${folder.toLowerCase()}\n${topic}`;
   const assistantOperationCount = result
     ? result.added_count + result.updated_count + (result.removed_count ?? 0) + (result.enabled_count ?? 0) + (result.disabled_count ?? 0)
     : 0;
-  const canAssistantPreview = Boolean(selectedProfileId);
+  const canAssistantPreview = Boolean(selectedProfileId) && (scanScope === "all" || Boolean(folder));
   const canAssistantApply =
     canAssistantPreview &&
     assistantPreviewKey === assistantKey &&
@@ -115,21 +116,40 @@ export function SourceImportPanel({
             ))}
           </select>
         </label>
-        <label className="source-import-field">
-          <span>Telegram folder</span>
+        <div className="source-scope-control" role="group" aria-label="Telegram discovery scope">
+          <button
+            aria-pressed={scanScope === "all"}
+            onClick={() => {
+              setScanScope("all");
+              setAssistantPreviewKey("");
+            }}
+            type="button"
+          >
+            All channels
+          </button>
+          <button
+            aria-pressed={scanScope === "folder"}
+            onClick={() => {
+              setScanScope("folder");
+              setAssistantPreviewKey("");
+            }}
+            type="button"
+          >
+            Telegram folder
+          </button>
+        </div>
+        <label className="source-import-field" data-disabled={scanScope === "all" ? "true" : "false"}>
+          <span>Folder name</span>
           <input
+            disabled={scanScope === "all"}
             onChange={(event) => {
               setFolderName(event.target.value);
               setAssistantPreviewKey("");
             }}
-            placeholder="Optional folder name"
+            placeholder="Folder name from Telegram"
             type="text"
             value={folderName}
           />
-        </label>
-        <label className="source-assistant-ai">
-          <input checked={!folder} readOnly type="checkbox" />
-          <span>Scan all channels</span>
         </label>
         <div className="source-import-actions">
           <button className="text-button secondary" disabled={busy || !canAssistantPreview} type="submit">

@@ -33,6 +33,7 @@ class PackagingMetadataTests(unittest.TestCase):
 
         self.assertEqual(project["dependencies"], requirement_lines("requirements.txt"))
         self.assertEqual(project["optional-dependencies"]["llm"], requirement_lines("requirements-llm.txt"))
+        self.assertIn("pypdf==6.10.2", project["optional-dependencies"]["llm"])
         self.assertEqual(
             project["optional-dependencies"]["desktop"],
             requirement_lines("requirements-desktop.txt"),

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Check, ChevronDown, CirclePlay, FileDiff, UserRoundCog, X } from "lucide-react";
 
 import { InlineEmpty, PanelHeader } from "./common";
@@ -111,13 +111,15 @@ export function ProfilesView({
             <span className="count-badge">{visiblePatches.length}</span>
           </header>
           <div className="patch-list" hidden={!draftsOpen} id={draftsPanelId}>
-            <ProfileDraftSuggestionEditor
-              applyPatch={applyPatch}
-              busy={busy}
-              createProfileMatchingPreferencesDraft={createProfileMatchingPreferencesDraft}
-              patches={visiblePatches}
-              revertPatch={revertPatch}
-            />
+            {visiblePatches.map((patch) => (
+              <ProfileDraftCard
+                applyPatch={applyPatch}
+                busy={busy}
+                key={patch.patch_id}
+                patch={patch}
+                revertPatch={revertPatch}
+              />
+            ))}
           </div>
         </div>
       )}
@@ -125,85 +127,63 @@ export function ProfilesView({
   );
 }
 
-function ProfileDraftSuggestionEditor({
+function ProfileDraftCard({
   applyPatch,
   busy,
-  createProfileMatchingPreferencesDraft,
-  patches,
+  patch,
   revertPatch,
 }: {
   applyPatch: (patchId: string) => void;
   busy: boolean;
-  createProfileMatchingPreferencesDraft: (profileId: string, preferences: string) => Promise<void>;
-  patches: ProfilePatch[];
+  patch: ProfilePatch;
   revertPatch: (patchId: string) => void;
 }) {
-  const initialSuggestion = profileSuggestionText(patches);
-  const [suggestionText, setSuggestionText] = useState(initialSuggestion);
-  const reviewDecisionCount = patches.reduce((sum, patch) => sum + Math.max(1, patch.source_card_count || (patch.card_id ? 1 : 0)), 0);
-  const primaryProfileId = patches[0]?.profile_id || "";
-  const normalizedSuggestion = suggestionText.trim();
-  const canPreview = Boolean(normalizedSuggestion && primaryProfileId);
-
-  useEffect(() => {
-    setSuggestionText(initialSuggestion);
-  }, [initialSuggestion]);
+  const suggestionText = profileSuggestionText([patch]);
+  const reviewDecisionCount = patch.source_card_count || (patch.card_id ? 1 : 0);
+  const sourceLine = reviewDecisionCount > 0
+    ? `${reviewDecisionCount} Review decision${reviewDecisionCount === 1 ? "" : "s"}`
+    : "Manual profile draft";
 
   return (
     <article className="review-card patch-card profile-draft-ai-card">
       <div className="card-main">
         <div className="card-title-row">
-          <h3>Profile suggestions</h3>
-          <span className="status pending">{patches.length} drafts</span>
+          <h3>Profile draft</h3>
+          <span className="status pending">Pending</span>
         </div>
         <div className="patch-context-row">
-          <span>{reviewDecisionCount} Review decisions</span>
-          <span>{new Set(patches.map((patch) => patch.profile_id)).size} profiles</span>
+          <span>{sourceLine}</span>
+          <span>{patch.profile_display_path || patch.profile_id}</span>
         </div>
-        <p className="note-line">Edit the suggestion, preview it, then apply the draft.</p>
+        <p className="note-line">Review this drafted profile change, then apply or dismiss it.</p>
         <label className="profile-draft-suggestion-field">
-          <span>Suggested matching changes</span>
+          <span>Drafted matching changes</span>
           <textarea
-            disabled={busy}
+            readOnly
             maxLength={5000}
-            onChange={(event) => setSuggestionText(event.target.value)}
             value={suggestionText}
           />
         </label>
         <div className="patch-actions">
           <button
             className="text-button"
-            disabled={busy || !canPreview}
-            onClick={() => {
-              if (canPreview) {
-                void createProfileMatchingPreferencesDraft(primaryProfileId, normalizedSuggestion);
-              }
-            }}
-            title={canPreview ? "Preview the edited suggestion as a draft" : "Add a suggestion before previewing"}
-            type="button"
-          >
-            <FileDiff size={15} />
-            <span>Preview</span>
-          </button>
-          <button
-            className="text-button"
-            disabled={busy || patches.length === 0}
-            onClick={() => patches.forEach((patch) => applyPatch(patch.patch_id))}
-            title="Apply all current profile suggestions"
+            disabled={busy}
+            onClick={() => applyPatch(patch.patch_id)}
+            title="Apply this profile draft"
             type="button"
           >
             <Check size={15} />
-            <span>Apply</span>
+            <span>Apply to profile</span>
           </button>
           <button
             className="text-button secondary"
-            disabled={busy || patches.length === 0}
-            onClick={() => patches.forEach((patch) => revertPatch(patch.patch_id))}
-            title="Clear these suggestions without changing the profile"
+            disabled={busy}
+            onClick={() => revertPatch(patch.patch_id)}
+            title="Dismiss this draft without changing the profile"
             type="button"
           >
             <X size={15} />
-            <span>Clear</span>
+            <span>Dismiss draft</span>
           </button>
         </div>
       </div>
@@ -242,10 +222,35 @@ function normalizeSuggestionLine(value: string) {
   if (!text || text === "## Follow-up Preferences") {
     return "";
   }
+  if (isGenericProfileDraftNote(text) || isProfileSectionLabel(text) || isProfileSectionMetadataLine(text)) {
+    return "";
+  }
   if (text.startsWith("Desk feedback tuning:")) {
     return "";
   }
   return text;
+}
+
+function isGenericProfileDraftNote(text: string) {
+  const normalized = text.toLocaleLowerCase();
+  return (
+    normalized === "user edited matching preferences in signal desk." ||
+    normalized === "signal desk review learning batch: combine review decisions into future matching rules."
+  );
+}
+
+function isProfileSectionLabel(text: string) {
+  return [
+    "Match profile",
+    "How cards are judged",
+    "Applied tuning notes",
+    "Report preferences",
+    "Suggested matching changes",
+  ].some((label) => text.localeCompare(label, undefined, { sensitivity: "accent" }) === 0);
+}
+
+function isProfileSectionMetadataLine(text: string) {
+  return /^(Role|Level|Work format|Location exclusions|Goal|Review style|Report title|Section high|Section medium|Section low):\s/i.test(text);
 }
 
 function shouldOpenDraftsByDefault() {

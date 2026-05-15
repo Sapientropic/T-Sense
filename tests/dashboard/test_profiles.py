@@ -67,7 +67,7 @@ class DashboardProfileTests(unittest.TestCase):
                 conn.close()
 
         text_mock.assert_called_once_with("not-base64", "brief.txt")
-        ai_mock.assert_called_once_with("Patched profile brief")
+        ai_mock.assert_called_once_with("Attached profile file (brief.txt):\nPatched profile brief")
         id_mock.assert_called_once()
         append_mock.assert_called_once()
         self.assertEqual(result["profile_id"], "patched-profile")
@@ -135,6 +135,21 @@ class DashboardProfileTests(unittest.TestCase):
         self.assertIn("Reject unpaid internships", profile_text)
         self.assertIn('source_topics = ["ai-roles"]', config_text)
         self.assertIn('prefilter_keywords = ["ai", "senior", "remote", "agent"]', config_text)
+
+    def test_profile_create_input_labels_attached_file_text_for_ai_prompt(self):
+        with patch.object(dashboard_server, "_profile_text_from_base64_file", return_value="PDF says avoid agency-only roles."):
+            text = dashboard_server._profile_create_input_text(
+                {
+                    "brief": "Watch for senior frontend contracts.",
+                    "source_filename": "preferences.pdf",
+                    "source_base64": "data:application/pdf;base64,ZmFrZQ==",
+                },
+            )
+
+        self.assertIn("Profile goal:", text)
+        self.assertIn("Watch for senior frontend contracts.", text)
+        self.assertIn("Attached profile file (preferences.pdf):", text)
+        self.assertIn("PDF says avoid agency-only roles.", text)
 
     def test_profile_enabled_http_endpoint_updates_runtime_override(self):
         with tempfile.TemporaryDirectory() as tmp:

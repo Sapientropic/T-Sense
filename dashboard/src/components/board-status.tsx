@@ -191,7 +191,7 @@ function validationKeepRate(summary: ValidationSummary) {
 function validationActionLabel(action: string) {
   const labels: Record<string, string> = {
     false_positive: "Wrong match",
-    follow_up: "Profile draft",
+    follow_up: "Tuning note",
     keep: "Preferred",
     skip: "Deprioritized",
   };

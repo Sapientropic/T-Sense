@@ -150,7 +150,7 @@
       },
       "next_action": {
         "label": "Generate profile suggestions",
-        "detail": "Turn confirmed review decisions into local profile drafts. The raw export stays in Advanced export."
+        "detail": "Turn collected Review tags and notes into local profile drafts. The raw export stays in Advanced export."
       }
     },
     "setup_status": {

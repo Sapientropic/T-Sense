@@ -43,7 +43,7 @@ describe("InboxView", () => {
     expect(html).toContain("Priority");
     expect(html).toContain("Frontend Developer");
     expect(html).toContain("Applied");
-    expect(html).toContain("Not a fit");
+    expect(html).toContain("Feedback");
     expect(html).not.toContain("Prefer similar");
   });
 
@@ -196,7 +196,7 @@ describe("InboxView", () => {
     expect(html).toContain('data-review-tone="supportive"');
     expect(html).toContain('data-review-action="tune"');
     expect(html).toContain('data-review-tone="negative"');
-    expect(html).toContain("Reasons + signals");
+    expect(html).toContain("Notes + tags");
     expect(html).not.toContain('data-review-action="contacted"');
     expect(html).not.toContain('data-review-action="dismissed"');
     expect(html).not.toContain('data-review-action="duplicate"');
@@ -370,7 +370,7 @@ describe("InboxView", () => {
     );
 
     expect(html).toContain("All caught up");
-    expect(html).toContain("Use handled decisions to draft profile changes.");
+    expect(html).toContain("Use handled Review tags and notes to draft profile changes.");
     expect(html).toContain("Generate drafts 3");
   });
 

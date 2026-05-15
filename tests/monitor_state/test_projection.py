@@ -51,6 +51,44 @@ class MonitorStateProjectionTests(unittest.TestCase):
 
         self.assertEqual(title, "Patched Root Signal Report")
 
+    def test_template_profile_does_not_expose_desk_tuning_prompt_as_preference(self):
+        profile_text = Path("profiles/templates/jobs.md").read_text(encoding="utf-8")
+
+        self.assertNotIn("Desk feedback tuning:", profile_text)
+
+    def test_profile_matching_summary_resolves_learned_full_stack_exclusion(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            profile_path = Path(tmp) / "profile.md"
+            profile_path.write_text(
+                "\n".join(
+                    [
+                        "# Profile",
+                        "",
+                        "## Basic Info",
+                        "- **Role**: Frontend / full-stack developer opportunities worth acting on",
+                        "- **Level**: Middle to senior contract work",
+                        "",
+                        "## Search Rules",
+                        "1. Include frontend and full-stack roles when actionable.",
+                        "",
+                        "## Follow-up Preferences",
+                        "- not full stack",
+                        "- i don't want full stack",
+                        "- not lead",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            summary = dashboard_profiles.profile_matching_summary(str(profile_path))
+
+        serialized = json.dumps(summary, ensure_ascii=False)
+        self.assertIn("Role: Frontend developer opportunities worth acting on", serialized)
+        self.assertIn("not full stack", serialized)
+        self.assertNotIn("Frontend / full-stack", serialized)
+        self.assertNotIn("Include frontend and full-stack roles", serialized)
+
 
     def test_dashboard_snapshot_includes_first_run_setup_status(self):
         conn = sqlite3.connect(":memory:")
@@ -960,6 +998,12 @@ class MonitorStateProjectionTests(unittest.TestCase):
             )
             with patch.object(monitor_state, "PROJECT_ROOT", Path(tmp)):
                 monitor_state.set_card_action(conn, card_id=cards[0]["card_id"], action="follow_up", note="Prefer remote roles.")
+                monitor_state.sync_review_learning_profile_patch_suggestion(
+                    conn,
+                    profile_id="jobs-fast",
+                    profile_path=profile_path,
+                )
+                conn.commit()
                 snapshot = monitor_state.dashboard_snapshot(conn)
 
         self.assertEqual(snapshot["profiles"][0]["display_path"], "Profiles/jobs.md")

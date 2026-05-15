@@ -119,7 +119,7 @@ describe("ProfilesView", () => {
     expect(html).toContain("No profiles yet");
   });
 
-  it("shows preference drafts as one editable suggestion editor when there is work to review", () => {
+  it("shows preference drafts as reviewable profile changes with explicit actions", () => {
     const patch: ProfilePatch = {
       patch_id: "patch-1",
       profile_id: "jobs-fast",
@@ -150,13 +150,14 @@ describe("ProfilesView", () => {
 
     expect(html).toContain("Profile Drafts");
     expect(html).toContain("aria-expanded=\"true\"");
-    expect(html).toContain("Profile suggestions");
+    expect(html).toContain("Profile draft");
     expect(html).toContain("2 Review decisions");
-    expect(html).toContain("Edit the suggestion, preview it, then apply the draft.");
-    expect(html).toContain("Suggested matching changes");
-    expect(html).toContain("Preview");
-    expect(html).toContain("Apply");
-    expect(html).toContain("Clear");
+    expect(html).toContain("Review this drafted profile change, then apply or dismiss it.");
+    expect(html).toContain("Drafted matching changes");
+    expect(html).toContain("Apply to profile");
+    expect(html).toContain("Dismiss draft");
+    expect(html).not.toContain(">Preview<");
+    expect(html).not.toContain("Edit the suggestion, preview it, then apply the draft.");
     expect(html).not.toContain("AI profile suggestions");
     expect(html).not.toContain("AI modification suggestions");
     expect(html).not.toContain("Regenerate with AI");
@@ -165,6 +166,52 @@ describe("ProfilesView", () => {
     expect(html).not.toContain("Apply batch");
     expect(html).not.toContain("Jobs Fast feedback batch");
     expect(html).not.toContain("Adds your manual preference");
+  });
+
+  it("does not turn profile section labels into draft suggestion text", () => {
+    const patch: ProfilePatch = {
+      patch_id: "patch-1",
+      profile_id: "jobs-fast",
+      note: "User edited matching preferences in Signal Desk.",
+      status: "pending",
+      diff_text: [
+        "--- current-profile",
+        "+++ proposed-profile",
+        "@@ -1,3 +1,8 @@",
+        " ## Follow-up Preferences",
+        "+Match profile",
+        "+Role: Frontend / full-stack developer opportunities worth acting on",
+        "+How cards are judged",
+        "+Exclude full-stack roles; prefer focused frontend or specialist scopes.",
+        "+Report preferences",
+      ].join("\n"),
+      source_card_count: 0,
+      created_at: "2026-05-10T00:00:00Z",
+    };
+    const html = renderToStaticMarkup(
+      <ProfilesView
+        profiles={[profile({ enabled: true })]}
+        patches={[patch]}
+        applyPatch={vi.fn()}
+        revertPatch={vi.fn()}
+        replayPatch={vi.fn()}
+        setAlertMode={vi.fn()}
+        setProfileEnabled={vi.fn()}
+        setProfileRuntimeSettings={vi.fn()}
+        createProfileDraftNote={vi.fn()}
+        createProfileMatchingPreferencesDraft={vi.fn()}
+        createProfileFromBrief={createProfileFromBrief}
+        profileCreateResult={null}
+        busy={false}
+      />,
+    );
+
+    expect(html).toContain("Exclude full-stack roles");
+    expect(html).not.toContain("User edited matching preferences");
+    expect(html).not.toContain("Match profile");
+    expect(html).not.toContain("How cards are judged");
+    expect(html).not.toContain("Report preferences");
+    expect(html).not.toContain("Role: Frontend");
   });
 
   it("hides applied and reverted profile diffs from the default review queue", () => {
@@ -246,10 +293,10 @@ describe("ProfilesView", () => {
     expect(html).not.toContain("Add: not full stack");
     expect(html.match(/not fullstack/g) ?? []).toHaveLength(1);
     expect(html.match(/not full stack/g) ?? []).toHaveLength(1);
-    expect(html).toContain("Preview");
+    expect(html).toContain("Apply to profile");
     expect(html).toContain("Apply");
-    expect(html).toContain("Clear");
-    expect(html).toContain("title=\"Apply all current profile suggestions\" type=\"button\"");
+    expect(html).toContain("Dismiss draft");
+    expect(html).toContain("title=\"Apply this profile draft\" type=\"button\"");
     expect(html).not.toContain("Regenerate the stale suggestion before applying");
   });
 
@@ -288,11 +335,113 @@ describe("ProfilesView", () => {
       />,
     );
 
-    expect(html).toContain("Preview");
+    expect(html).toContain("Create draft");
     expect(html).toContain("Prefer senior AI roles");
     expect(html).toContain("textarea");
-    expect(html).toContain("directly edit matching rules");
+    expect(html).toContain("edit profile tuning notes");
+    expect(html).not.toContain("jobs-fast How cards are judged directly edit matching rules");
     expect(html).not.toContain("Editable profile settings");
+  });
+
+  it("keeps internal tuning prompts out of user-editable tuning notes", () => {
+    const html = renderToStaticMarkup(
+      <ProfilesView
+        profiles={[
+          profile({
+            enabled: true,
+            matching_profile: {
+              summary: "Current matching rules",
+              learned_preferences: ["not full stack", "not lead"],
+              editable_text: "- Prefer senior AI roles",
+              sections: [
+                {
+                  key: "rules",
+                  label: "How cards are judged",
+                  items: ["Prefer senior AI roles"],
+                },
+                {
+                  key: "learned",
+                  label: "Applied tuning notes",
+                  items: [
+                    "not full stack",
+                    "Desk feedback tuning: Analyze the recent Keep/Skip/Wrong Match feedback.",
+                  ],
+                },
+              ],
+            },
+          }),
+        ]}
+        patches={[]}
+        applyPatch={vi.fn()}
+        revertPatch={vi.fn()}
+        replayPatch={vi.fn()}
+        setAlertMode={vi.fn()}
+        setProfileEnabled={vi.fn()}
+        setProfileRuntimeSettings={vi.fn()}
+        createProfileDraftNote={vi.fn()}
+        createProfileMatchingPreferencesDraft={vi.fn()}
+        createProfileFromBrief={createProfileFromBrief}
+        profileCreateResult={null}
+        busy={false}
+      />,
+    );
+
+    expect(html).toContain("Tuning notes");
+    expect(html).toContain("not full stack");
+    expect(html).toContain("not lead");
+    expect(html).toContain("aria-label=\"jobs-fast Tuning notes edit profile tuning notes\"");
+    expect(html).not.toContain("Applied tuning notes directly edit matching rules");
+    expect(html).not.toContain("Desk feedback tuning");
+  });
+
+  it("shows learned exclusions as the effective matching profile instead of conflicting base text", () => {
+    const html = renderToStaticMarkup(
+      <ProfilesView
+        profiles={[
+          profile({
+            enabled: true,
+            matching_profile: {
+              summary: "Role: Frontend / full-stack developer opportunities worth acting on",
+              learned_preferences: ["not full stack", "i don't want full stack", "not lead"],
+              editable_text: "",
+              sections: [
+                {
+                  key: "basics",
+                  label: "Match profile",
+                  items: [
+                    "Role: Frontend / full-stack developer opportunities worth acting on",
+                    "Level: Middle to senior, or specialist contract work with clear budget",
+                  ],
+                },
+                {
+                  key: "learned",
+                  label: "Applied tuning notes",
+                  items: ["not full stack", "i don't want full stack", "not lead"],
+                },
+              ],
+            },
+          }),
+        ]}
+        patches={[]}
+        applyPatch={vi.fn()}
+        revertPatch={vi.fn()}
+        replayPatch={vi.fn()}
+        setAlertMode={vi.fn()}
+        setProfileEnabled={vi.fn()}
+        setProfileRuntimeSettings={vi.fn()}
+        createProfileDraftNote={vi.fn()}
+        createProfileMatchingPreferencesDraft={vi.fn()}
+        createProfileFromBrief={createProfileFromBrief}
+        profileCreateResult={null}
+        busy={false}
+      />,
+    );
+
+    expect(html).toContain("Role: Frontend developer opportunities worth acting on");
+    expect(html).toContain("not full stack");
+    expect(html).toContain("not lead");
+    expect(html).not.toContain("Frontend / full-stack");
+    expect(html).not.toContain("full-stack developer opportunities");
   });
 
   it("validates profile scan setting edits before save", () => {

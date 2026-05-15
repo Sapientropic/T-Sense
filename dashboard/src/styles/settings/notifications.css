@@ -32,7 +32,7 @@
 
 .bot-gateway-readout {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: minmax(180px, 1.25fr) repeat(4, minmax(0, 1fr));
   gap: 8px;
   min-width: 0;
 }
@@ -52,6 +52,21 @@
   overflow-wrap: anywhere;
 }
 
+.bot-gateway-health.enabled {
+  border-color: color-mix(in oklch, var(--signal-high) 34%, var(--line));
+  background: color-mix(in oklch, var(--signal-high) 10%, transparent);
+}
+
+.bot-gateway-health.pending {
+  border-color: color-mix(in oklch, var(--signal-medium) 40%, var(--line));
+  background: color-mix(in oklch, var(--signal-medium) 10%, transparent);
+}
+
+.bot-gateway-health.disabled {
+  border-color: color-mix(in oklch, var(--signal-danger) 28%, var(--line));
+  background: color-mix(in oklch, var(--signal-danger) 8%, transparent);
+}
+
 .bot-gateway-readout strong {
   color: var(--paper);
   font-size: 12px;
@@ -68,7 +83,7 @@
 
 .bot-gateway-actions {
   display: grid;
-  grid-template-columns: repeat(3, minmax(150px, 1fr));
+  grid-template-columns: repeat(4, minmax(138px, 1fr));
   gap: 8px;
   align-items: start;
   min-width: 0;

@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { Activity, ShieldCheck } from "lucide-react";
+import { ListChecks, Settings2, ShieldCheck } from "lucide-react";
 
 import { InlineEmpty, PanelHeader } from "../common";
 import { metricShortLabel, percentWidth, sourceHeatClass, sourceSignalScore } from "../../domain/display";
@@ -13,25 +13,41 @@ const SOURCE_ACTION_LIMIT = 6;
 export function SourceInsightsPanel({
   sourceStats,
   sourceInsights,
+  onManageSources,
+  onReviewCards,
 }: {
   sourceStats: SourceStat[];
   sourceInsights: SourceInsight[];
+  onManageSources?: () => void;
+  onReviewCards?: () => void;
 }) {
   return (
-    <div className="settings-evidence-grid">
-      <details className="table-section source-yield-panel settings-evidence-card" aria-label="Source yield details">
-        <summary>
-          <PanelHeader icon={<Activity size={18} />} title="Yield History" count={sourceStats.length} />
-        </summary>
-        {sourceStats.length ? <SourceYieldMap sources={sourceStats} /> : <InlineEmpty title="No source stats yet" />}
-      </details>
-      <details className="table-section source-actions-panel settings-evidence-card" aria-label="Source action details">
-        <summary>
-          <PanelHeader icon={<ShieldCheck size={18} />} title="Source Actions" count={sourceInsights.length} />
-        </summary>
-        {sourceInsights.length ? <SourceActionGrid insights={sourceInsights} /> : <InlineEmpty title="No source actions yet" />}
-      </details>
-    </div>
+    <details className="table-section source-recommendations-panel" aria-label="Source recommendations">
+      <summary>
+        <PanelHeader icon={<ShieldCheck size={18} />} title="Source recommendations" count={sourceInsights.length} />
+      </summary>
+      <div className="source-recommendations-body">
+        <p className="delivery-note">Use recent scan results to decide which saved channels need review or cleanup.</p>
+        <div className="source-recommendation-actions">
+          <button className="text-button secondary" disabled={!onReviewCards} onClick={onReviewCards} type="button">
+            <ListChecks size={15} />
+            <span>Review cards</span>
+          </button>
+          <button className="text-button secondary" disabled={!onManageSources} onClick={onManageSources} type="button">
+            <Settings2 size={15} />
+            <span>Manage sources</span>
+          </button>
+        </div>
+        <div className="settings-evidence-grid">
+          {sourceStats.length ? <SourceYieldMap sources={sourceStats} /> : <InlineEmpty title="No source stats yet" />}
+          {sourceInsights.length ? (
+            <SourceActionGrid insights={sourceInsights} onManageSources={onManageSources} onReviewCards={onReviewCards} />
+          ) : (
+            <InlineEmpty title="No source changes suggested" />
+          )}
+        </div>
+      </div>
+    </details>
   );
 }
 
@@ -42,8 +58,8 @@ function SourceYieldMap({ sources }: { sources: SourceStat[] }) {
   const hotCount = sources.filter((source) => (source.high_count ?? 0) > 0).length;
   const riskCount = sources.filter((source) => source.scan_failure || source.scan_incomplete).length;
   return (
-    <div className="source-yield-map" aria-label="Source yield map">
-      <div className="source-heat-panel" aria-label="Source signal heat map">
+    <div className="source-yield-map" aria-label="Source activity map">
+      <div className="source-heat-panel" aria-label="Source signal map">
         <div className="source-heat-grid">
           {heatSources.map((source) => (
             <span
@@ -80,7 +96,7 @@ function SourceYieldMap({ sources }: { sources: SourceStat[] }) {
               value={source.scan_keep_rate ?? 0}
               detail={`${source.kept_count ?? 0}/${source.raw_count ?? 0}`}
             />
-            <MetricBar label="Card yield" value={source.card_yield_rate ?? 0} detail={formatPercent(source.card_yield_rate ?? 0)} />
+            <MetricBar label="Found rate" value={source.card_yield_rate ?? 0} detail={formatPercent(source.card_yield_rate ?? 0)} />
           </div>
           <div className="source-mini-stats">
             <SourceMiniStats
@@ -110,7 +126,15 @@ function MetricBar({ label, value, detail }: { label: string; value: number; det
   );
 }
 
-function SourceActionGrid({ insights }: { insights: SourceInsight[] }) {
+function SourceActionGrid({
+  insights,
+  onManageSources,
+  onReviewCards,
+}: {
+  insights: SourceInsight[];
+  onManageSources?: () => void;
+  onReviewCards?: () => void;
+}) {
   const visible = insights.slice(0, SOURCE_ACTION_LIMIT);
   const hiddenCount = Math.max(0, insights.length - visible.length);
   return (
@@ -118,7 +142,7 @@ function SourceActionGrid({ insights }: { insights: SourceInsight[] }) {
       {visible.map((insight, index) => (
         <article className={`source-insight ${insight.kind}`} key={`${insight.kind}-${insight.channel}-${index}`}>
           <div className="source-insight-head">
-            <span className={`status ${insight.kind}`}>{insight.label}</span>
+            <span className={`status ${insight.kind}`}>{sourceInsightLabel(insight)}</span>
             <small>{insight.confidence || "medium"}</small>
           </div>
           <strong title={`@${insight.channel}`}>{insight.display_name || channelDisplayName(insight.channel)}</strong>
@@ -129,18 +153,22 @@ function SourceActionGrid({ insights }: { insights: SourceInsight[] }) {
               detail={`${insight.stats.kept_count ?? 0}/${insight.stats.raw_count ?? 0}`}
             />
             <MetricBar
-              label="High-rate"
+              label="High rate"
               value={insight.stats.high_rate ?? 0}
               detail={formatPercent(insight.stats.high_rate ?? 0)}
             />
           </div>
-          <div
+          <button
             className="source-next-action"
+            disabled={insight.kind === "promote" ? !onReviewCards : !onManageSources}
+            onClick={insight.kind === "promote" ? onReviewCards : onManageSources}
             title={insight.next_action?.detail || insight.reason}
-            aria-label={`${insight.next_action?.label || "Review source"}: ${insight.next_action?.detail || insight.reason}`}
+            aria-label={`${sourceInsightButtonLabel(insight)}: ${insight.next_action?.detail || insight.reason}`}
+            type="button"
           >
-            <span>{insight.next_action?.label || "Review source"}</span>
-          </div>
+            {insight.kind === "promote" ? <ListChecks size={14} /> : <Settings2 size={14} />}
+            <span>{sourceInsightButtonLabel(insight)}</span>
+          </button>
           <div className="source-mini-stats">
             <SourceMiniStats
               emptyLabel="no noise"
@@ -156,6 +184,23 @@ function SourceActionGrid({ insights }: { insights: SourceInsight[] }) {
       {hiddenCount > 0 && <div className="list-overflow-note">+{hiddenCount} more source actions queued</div>}
     </div>
   );
+}
+
+function sourceInsightLabel(insight: SourceInsight) {
+  if (insight.kind === "promote") {
+    return "Good source";
+  }
+  if (insight.kind === "prune") {
+    return "Needs cleanup";
+  }
+  if (insight.kind === "observe") {
+    return "More data";
+  }
+  return insight.label || "Review source";
+}
+
+function sourceInsightButtonLabel(insight: SourceInsight) {
+  return insight.kind === "promote" ? "Review cards" : "Manage sources";
 }
 
 function SourceMiniStats({

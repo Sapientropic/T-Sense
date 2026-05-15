@@ -86,15 +86,19 @@ def profile_matching_summary(profile_path: str) -> dict[str, Any]:
     except OSError:
         return {"schema_version": "profile_matching_profile_v1", "sections": [], "learned_preferences": []}
     sections = _markdown_sections(text)
-    basics = _clean_markdown_items(sections.get("Basic Info", []), limit=6)
-    search_rules = _clean_markdown_items(sections.get("Search Rules", []), limit=7)
+    learned = [
+        item
+        for item in _clean_markdown_items(sections.get("Follow-up Preferences", []), limit=12)
+        if not _is_profile_tuning_instruction(item)
+    ]
+    basics = _apply_learned_profile_overrides(_clean_markdown_items(sections.get("Basic Info", []), limit=6), learned)
+    search_rules = _apply_learned_profile_overrides(_clean_markdown_items(sections.get("Search Rules", []), limit=7), learned)
     report_preferences = _clean_markdown_items(sections.get("Report Preferences", []), limit=5)
-    learned = _clean_markdown_items(sections.get("Follow-up Preferences", []), limit=12)
     output_sections: list[dict[str, Any]] = []
     for key, label, items in [
         ("basics", "Match profile", basics),
         ("rules", "How cards are judged", search_rules),
-        ("learned", "Learned preferences", learned),
+        ("learned", "Applied tuning notes", learned),
         ("report", "Report preferences", report_preferences),
     ]:
         if items:
@@ -158,6 +162,65 @@ def _clean_markdown_items(lines: list[str], *, limit: int) -> list[str]:
         if len(items) >= limit:
             break
     return items
+
+
+def _is_profile_tuning_instruction(item: str) -> bool:
+    normalized = " ".join(str(item or "").split()).casefold()
+    return normalized.startswith("desk feedback tuning:") or normalized.startswith("signal desk review learning batch:")
+
+
+_FULL_STACK_RE = re.compile(r"\bfull[-\s]?stack\b", flags=re.IGNORECASE)
+_NEGATIVE_PREFERENCE_RE = re.compile(
+    r"\b(?:not|no|never|exclude|avoid|without|don't|do not|doesn't|isn't|reject|skip)\b"
+    r"|不要|不想|不是|非全栈|排除|拒绝|避免",
+    flags=re.IGNORECASE,
+)
+
+
+def _apply_learned_profile_overrides(items: list[str], learned: list[str]) -> list[str]:
+    """Project the effective matching rules after user tuning notes.
+
+    The Markdown file intentionally keeps base rules and learned preferences as
+    separate sections. The dashboard, however, is the user's reading surface:
+    if learned tuning says "not full stack", continuing to display full-stack
+    as a positive match looks like a contradiction even though the matcher can
+    read the later Follow-up Preferences section.
+    """
+    full_stack_excluded = any(_is_full_stack_exclusion(item) for item in learned)
+    output: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        resolved = _resolve_profile_override_item(item, full_stack_excluded=full_stack_excluded)
+        if not resolved:
+            continue
+        key = resolved.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        output.append(resolved)
+    return output
+
+
+def _resolve_profile_override_item(item: str, *, full_stack_excluded: bool) -> str:
+    if not full_stack_excluded or not _FULL_STACK_RE.search(item) or _is_full_stack_exclusion(item):
+        return item
+    resolved = re.sub(
+        r"\s*/\s*full[-\s]?stack(?=\s+(?:developer|engineer|role|roles|opportunities)\b)",
+        "",
+        item,
+        flags=re.IGNORECASE,
+    )
+    resolved = re.sub(r"\bfull[-\s]?stack\s*/\s*", "", resolved, flags=re.IGNORECASE)
+    resolved = re.sub(r"\s*,\s*full[-\s]?stack\b", "", resolved, flags=re.IGNORECASE)
+    resolved = re.sub(r"\bfull[-\s]?stack\s*,\s*", "", resolved, flags=re.IGNORECASE)
+    resolved = re.sub(r"\s+([,.;:])", r"\1", resolved)
+    resolved = re.sub(r"\s{2,}", " ", resolved).strip(" ,;/")
+    return "" if _FULL_STACK_RE.search(resolved) else resolved
+
+
+def _is_full_stack_exclusion(item: str) -> bool:
+    normalized = " ".join(str(item or "").split())
+    return bool(_FULL_STACK_RE.search(normalized) and _NEGATIVE_PREFERENCE_RE.search(normalized))
 
 
 def display_profile_path(profile_path: str) -> str:

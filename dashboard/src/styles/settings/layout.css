@@ -89,7 +89,8 @@
 
 .sources-settings-grid {
   grid-template-areas:
-    "source-import source-library";
+    "source-import source-library"
+    "source-recommendations source-recommendations";
   grid-template-columns: minmax(320px, 0.7fr) minmax(0, 1.3fr);
 }
 
@@ -183,5 +184,9 @@
 
 .settings-grid .source-actions-panel {
   grid-area: actions;
+}
+
+.settings-grid .source-recommendations-panel {
+  grid-area: source-recommendations;
 }
 

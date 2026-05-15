@@ -38,7 +38,7 @@ export function buildTabCounts(state: DashboardState, actionCount = 0): Record<T
     actions: actionCount,
     profiles: state.profiles.length,
     runs: state.runs.length,
-    settings: deliveryBlockers + state.source_insights.length + feedbackCount,
+    settings: deliveryBlockers + feedbackCount,
   };
 }
 
@@ -79,9 +79,7 @@ export function buildBoardMeta(activeTab: Tab, state: DashboardState, actionCoun
     settings: {
       title: "Settings",
       value: `${settingsActionCount(state)}`,
-      detail: `Saved sources, notification delivery, and learning controls. ${
-        state.source_insights.length
-      } source decisions pending.`,
+      detail: "Saved sources, notification delivery, and learning controls.",
       tone: "blue",
     },
   };
@@ -90,7 +88,7 @@ export function buildBoardMeta(activeTab: Tab, state: DashboardState, actionCoun
 
 export function settingsActionCount(state: DashboardState) {
   const deliveryBlockers = state.delivery_targets.filter((target) => !target.enabled).length;
-  return deliveryBlockers + state.source_insights.length + (state.feedback_summary?.exportable_count ?? 0) + (state.feedback_summary?.pending_profile_diff_count ?? 0);
+  return deliveryBlockers + (state.feedback_summary?.exportable_count ?? 0) + (state.feedback_summary?.pending_profile_diff_count ?? 0);
 }
 
 export function hasBlockingOpportunitySummary(summary?: OpportunitySummary) {

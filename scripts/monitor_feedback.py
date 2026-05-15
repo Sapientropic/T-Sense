@@ -80,46 +80,24 @@ def export_feedback_entries(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     return entries
 
 
-def _feedback_titles_by_action(rows: list[sqlite3.Row], *, limit_per_action: int) -> dict[str, list[str]]:
-    titles: dict[str, list[str]] = {}
-    seen: set[tuple[str, str]] = set()
-    for row in rows:
-        action = str(row["action"] or "")
-        if action not in {"keep", "skip", "false_positive"}:
-            continue
-        if len(titles.get(action, [])) >= limit_per_action:
-            continue
-        item = parse_json(row["item_json"], {})
-        title = display_item_title(item if isinstance(item, dict) else {}, fallback=row["title"] or "Review card", max_len=72)
-        title = " ".join(str(title or "").split())
-        if not title:
-            continue
-        key = (action, title.casefold())
-        if key in seen:
-            continue
-        seen.add(key)
-        titles.setdefault(action, []).append(title)
-    return titles
-
-
 def _feedback_profile_suggestion_note(rows: list[sqlite3.Row]) -> str:
-    titles = _feedback_titles_by_action(rows, limit_per_action=1)
-    if not titles:
+    if not rows:
         return ""
-    return "Desk feedback tuning: Analyze the recent Keep/Skip/Wrong Match feedback. Extract the generalized matching patterns, industry preferences, and explicit exclusions. Do not list specific card titles. Write broad, reusable rules."
+    return REVIEW_LEARNING_PATCH_NOTE
 
 
 def _feedback_profile_patch_context(rows: list[sqlite3.Row]) -> list[dict[str, Any]]:
     context: list[dict[str, Any]] = []
     for row in rows[:24]:
+        action = str(row["action"] or "")
         item = parse_json(row["item_json"], {})
         card = profile_patch_card_context(item if isinstance(item, dict) else {})
         title = display_item_title(item if isinstance(item, dict) else {}, fallback=row["title"] or "Review card", max_len=120)
         context.append(
             {
-                "action": str(row["action"] or ""),
+                "action": action,
                 "title": title,
-                "note": "",
+                "note": str(row["note"] or "") if action == "follow_up" else "",
                 "card": card,
             }
         )
@@ -148,10 +126,10 @@ def create_feedback_profile_patch_suggestions(
 ) -> dict[str, Any]:
     rows = conn.execute(
         """
-        SELECT f.event_id, f.card_id, f.profile_id, f.action, c.title, c.item_json
+        SELECT f.event_id, f.card_id, f.profile_id, f.action, f.note, c.title, c.item_json
         FROM feedback_events f
         LEFT JOIN review_cards c ON c.card_id = f.card_id
-        WHERE f.action IN ('keep', 'skip', 'false_positive')
+        WHERE f.action IN ('keep', 'skip', 'false_positive', 'follow_up')
         ORDER BY f.profile_id ASC, f.created_at ASC, f.event_id ASC
         """
     ).fetchall()
@@ -270,6 +248,7 @@ def latest_feedback_export(conn: sqlite3.Connection) -> dict[str, Any] | None:
 def feedback_next_action(exportable_count: int, follow_up_count: int, patch_counts: dict[str, int]) -> dict[str, str]:
     pending_diffs = patch_counts.get("pending", 0)
     applied_diffs = patch_counts.get("applied", 0)
+    tuning_source_count = exportable_count + follow_up_count
     if pending_diffs:
         return {
             "label": "Review profile drafts",
@@ -277,23 +256,23 @@ def feedback_next_action(exportable_count: int, follow_up_count: int, patch_coun
             "target_tab": "profiles",
             "action_id": "review_preference_drafts",
         }
-    if exportable_count:
-        return {
-            "label": "Generate profile suggestions",
-            "detail": "Turn confirmed review decisions into local profile drafts. The raw export stays in Advanced export.",
-            "target_tab": "settings",
-            "action_id": "feedback_profile_suggestions",
-        }
-    if follow_up_count and applied_diffs:
+    if follow_up_count and applied_diffs and not exportable_count:
         return {
             "label": "Run with tuned preferences",
             "detail": "Applied preference drafts are in place; run the profile again and watch false positives.",
             "target_tab": "actions",
             "action_id": "monitor_jobs_dry_run",
         }
+    if tuning_source_count:
+        return {
+            "label": "Generate profile suggestions",
+            "detail": "Turn collected Review tags and notes into local profile drafts. The raw export stays in Advanced export.",
+            "target_tab": "settings",
+            "action_id": "feedback_profile_suggestions",
+        }
     return {
         "label": "Collect feedback",
-        "detail": "Mark keep, skip, false positive, or draft a preference change after reviewing cards.",
+        "detail": "Mark keep, skip, wrong match, or leave a note after reviewing cards.",
         "target_tab": "inbox",
         "action_id": "review_cards",
     }
@@ -363,23 +342,33 @@ def recent_feedback_impacts(conn: sqlite3.Connection, *, limit: int = 6) -> list
             )
         elif action == "follow_up":
             patch_status = str(row["patch_status"] or "missing")
-            impact.update(
-                {
-                    "impact_type": "profile_diff",
-                    "impact_status": patch_status,
-                    "impact_label": {
-                        "pending": "Preference draft pending",
-                        "applied": "Preference draft applied",
-                        "reverted": "Preference draft reverted",
-                    }.get(patch_status, "Preference draft missing"),
-                    "impact_detail": {
-                        "pending": "Review and apply or leave the generated preference draft in Learning.",
-                        "applied": "This feedback has already changed the local profile.",
-                        "reverted": "This feedback changed the profile and was later reverted.",
-                    }.get(patch_status, "Regenerate the follow-up draft if this feedback still matters."),
-                    "patch_id": row["patch_id"] or "",
-                }
-            )
+            if patch_status in {"pending", "applied", "reverted"}:
+                impact.update(
+                    {
+                        "impact_type": "profile_diff",
+                        "impact_status": patch_status,
+                        "impact_label": {
+                            "pending": "Included in profile draft",
+                            "applied": "Preference draft applied",
+                            "reverted": "Preference draft reverted",
+                        }.get(patch_status, "Preference draft missing"),
+                        "impact_detail": {
+                            "pending": "Review the profile-level draft generated from saved Review feedback.",
+                            "applied": "This feedback has already changed the local profile.",
+                            "reverted": "This feedback changed the profile and was later reverted.",
+                        }.get(patch_status, "Generate profile suggestions again if this note still matters."),
+                        "patch_id": row["patch_id"] or "",
+                    }
+                )
+            else:
+                impact.update(
+                    {
+                        "impact_type": "profile_tuning_source",
+                        "impact_status": "ready",
+                        "impact_label": "Note saved for profile tuning",
+                        "impact_detail": "Generate profile suggestions so this note can become a reviewable profile draft.",
+                    }
+                )
         else:
             impact.update(
                 {
@@ -467,7 +456,7 @@ def feedback_summary(conn: sqlite3.Connection) -> dict[str, Any]:
         "recent_impacts": recent_feedback_impacts(conn),
         "export_scope_note": (
             "keep/skip/false_positive export to decision memory; "
-            "follow_up becomes preference drafts for review."
+            "all Review feedback can generate profile drafts for review."
         ),
         "by_action": by_action,
         "by_rating": by_rating,
