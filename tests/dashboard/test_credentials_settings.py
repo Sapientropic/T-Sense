@@ -1,6 +1,9 @@
+import json
+import os
+import subprocess
+import sys
 import tempfile
 import unittest
-import json
 from datetime import UTC, datetime, timedelta
 from http import HTTPStatus
 from pathlib import Path
@@ -14,6 +17,9 @@ from scripts import (
     desk_telegram_login,
     monitor_state,
 )
+
+
+ROOT = Path(__file__).resolve().parents[2]
 
 
 class DashboardCredentialsSettingsTests(unittest.TestCase):
@@ -129,6 +135,67 @@ class DashboardCredentialsSettingsTests(unittest.TestCase):
             config_path=desk_credentials.TELEGRAM_CONFIG_PATH,
             session_path=desk_credentials.TELEGRAM_SESSION_PATH,
         )
+
+
+    def test_telegram_credentials_follow_facade_path_after_app_state_root_changes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            legacy_dir = root / "legacy-tgcli"
+            active_dir = root / "Application Support" / "T-Sense" / ".tgcs" / "telegram"
+            script = """
+import json
+import os
+from pathlib import Path
+from unittest.mock import patch
+
+from scripts import dashboard_server
+
+active_dir = Path(os.environ["ACTIVE_CONFIG_DIR"])
+legacy_config = Path(os.environ["TG_SCANNER_CONFIG_DIR"]) / "config.toml"
+active_config = active_dir / "config.toml"
+active_session = active_dir / "session"
+
+with patch.object(dashboard_server, "TELEGRAM_CONFIG_DIR", active_dir):
+    saved = dashboard_server.save_telegram_credentials("12345", "a" * 32)
+    status = dashboard_server.telegram_status()
+    loaded_id, loaded_hash = dashboard_server._load_telegram_credentials()
+    action_env = dashboard_server.desk_action_env()
+
+print(json.dumps({
+    "active_exists": active_config.exists(),
+    "legacy_exists": legacy_config.exists(),
+    "saved_ready": saved["credentials_ready"],
+    "status_ready": status["credentials_ready"],
+    "loaded_id": loaded_id,
+    "loaded_hash_len": len(loaded_hash),
+    "action_config_dir": action_env.get("TG_SCANNER_CONFIG_DIR"),
+    "action_tgcli_dir": action_env.get("TGCLI_CONFIG_DIR"),
+}))
+"""
+            env = os.environ.copy()
+            env["TG_SCANNER_CONFIG_DIR"] = str(legacy_dir)
+            env["ACTIVE_CONFIG_DIR"] = str(active_dir)
+            env["PYTHONPATH"] = str(ROOT)
+
+            result = subprocess.run(
+                [sys.executable, "-c", script],
+                cwd=ROOT,
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertTrue(payload["active_exists"])
+        self.assertFalse(payload["legacy_exists"])
+        self.assertTrue(payload["saved_ready"])
+        self.assertTrue(payload["status_ready"])
+        self.assertEqual(payload["loaded_id"], 12345)
+        self.assertEqual(payload["loaded_hash_len"], 32)
+        self.assertEqual(payload["action_config_dir"], str(active_dir))
+        self.assertEqual(payload["action_tgcli_dir"], str(active_dir))
 
 
     def test_telegram_credentials_are_saved_without_echoing_secret(self):

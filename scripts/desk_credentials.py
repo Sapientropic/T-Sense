@@ -15,6 +15,9 @@ PROJECT_ROOT = desk_telegram_login.PROJECT_ROOT
 TELEGRAM_CONFIG_DIR = desk_telegram_login.TELEGRAM_CONFIG_DIR
 TELEGRAM_CONFIG_PATH = desk_telegram_login.TELEGRAM_CONFIG_PATH
 TELEGRAM_SESSION_PATH = desk_telegram_login.TELEGRAM_SESSION_PATH
+_DEFAULT_TELEGRAM_CONFIG_DIR = TELEGRAM_CONFIG_DIR
+_DEFAULT_TELEGRAM_CONFIG_PATH = TELEGRAM_CONFIG_PATH
+_DEFAULT_TELEGRAM_SESSION_PATH = TELEGRAM_SESSION_PATH
 TELEGRAM_LOGIN_CODE_TTL_SECONDS = desk_telegram_login.TELEGRAM_LOGIN_CODE_TTL_SECONDS
 TELEGRAM_BOT_UPDATES_TIMEOUT_SECONDS = desk_delivery_settings.TELEGRAM_BOT_UPDATES_TIMEOUT_SECONDS
 DESK_DELIVERY_TARGET_ID = desk_delivery_settings.DESK_DELIVERY_TARGET_ID
@@ -42,18 +45,78 @@ def _facade_or_current_attr(name: str, original_default: Any) -> Any:
     return current
 
 
+def _telegram_path_following_config_dir(
+    raw_path: object,
+    *,
+    config_dir: Path,
+    previous_dir: Path,
+    previous_path: Path,
+    default_dir: Path,
+    default_path: Path,
+    filename: str,
+) -> Path:
+    path = Path(raw_path)
+    target_path = config_dir / filename
+    if path == target_path:
+        return path
+    # dashboard_server exposes TELEGRAM_CONFIG_DIR plus derived path constants.
+    # macOS app-state routing may patch only the dir; in that case the old
+    # default config.toml/session path is stale and must continue to follow the
+    # active dir. Explicit non-default path patches are left untouched.
+    previous_default = previous_dir / filename
+    import_default = default_dir / filename
+    if (path == previous_path and previous_path == previous_default) or (
+        path == default_path and default_path == import_default
+    ):
+        return target_path
+    return path
+
+
 def _sync_telegram_login_context() -> None:
     # Telegram login helpers are still reached through dashboard_server by the
     # browser routes and tests. Keep the new owner facade-aware so patches for
     # config paths, login-code TTL, and provider async hooks continue to target
     # the public surface after this split.
-    desk_telegram_login.PROJECT_ROOT = Path(_facade_attr("PROJECT_ROOT", PROJECT_ROOT))
-    desk_telegram_login.TELEGRAM_CONFIG_DIR = Path(_facade_attr("TELEGRAM_CONFIG_DIR", TELEGRAM_CONFIG_DIR))
-    desk_telegram_login.TELEGRAM_CONFIG_PATH = Path(_facade_attr("TELEGRAM_CONFIG_PATH", TELEGRAM_CONFIG_PATH))
-    desk_telegram_login.TELEGRAM_SESSION_PATH = Path(_facade_attr("TELEGRAM_SESSION_PATH", TELEGRAM_SESSION_PATH))
-    desk_telegram_login.TELEGRAM_LOGIN_CODE_TTL_SECONDS = int(
-        _facade_attr("TELEGRAM_LOGIN_CODE_TTL_SECONDS", TELEGRAM_LOGIN_CODE_TTL_SECONDS)
+    global PROJECT_ROOT, TELEGRAM_CONFIG_DIR, TELEGRAM_CONFIG_PATH, TELEGRAM_SESSION_PATH, TELEGRAM_LOGIN_CODE_TTL_SECONDS
+    previous_config_dir = TELEGRAM_CONFIG_DIR
+    previous_config_path = TELEGRAM_CONFIG_PATH
+    previous_session_path = TELEGRAM_SESSION_PATH
+    project_root = Path(_facade_attr("PROJECT_ROOT", PROJECT_ROOT))
+    config_dir = Path(_facade_attr("TELEGRAM_CONFIG_DIR", TELEGRAM_CONFIG_DIR))
+    raw_config_path = _facade_attr("TELEGRAM_CONFIG_PATH", TELEGRAM_CONFIG_PATH)
+    raw_session_path = _facade_attr("TELEGRAM_SESSION_PATH", TELEGRAM_SESSION_PATH)
+    config_path = _telegram_path_following_config_dir(
+        raw_config_path,
+        config_dir=config_dir,
+        previous_dir=previous_config_dir,
+        previous_path=previous_config_path,
+        default_dir=_DEFAULT_TELEGRAM_CONFIG_DIR,
+        default_path=_DEFAULT_TELEGRAM_CONFIG_PATH,
+        filename="config.toml",
     )
+    session_path = _telegram_path_following_config_dir(
+        raw_session_path,
+        config_dir=config_dir,
+        previous_dir=previous_config_dir,
+        previous_path=previous_session_path,
+        default_dir=_DEFAULT_TELEGRAM_CONFIG_DIR,
+        default_path=_DEFAULT_TELEGRAM_SESSION_PATH,
+        filename="session",
+    )
+    login_ttl = int(_facade_attr("TELEGRAM_LOGIN_CODE_TTL_SECONDS", TELEGRAM_LOGIN_CODE_TTL_SECONDS))
+    PROJECT_ROOT = desk_telegram_login.PROJECT_ROOT = project_root
+    TELEGRAM_CONFIG_DIR = desk_telegram_login.TELEGRAM_CONFIG_DIR = config_dir
+    TELEGRAM_CONFIG_PATH = desk_telegram_login.TELEGRAM_CONFIG_PATH = config_path
+    TELEGRAM_SESSION_PATH = desk_telegram_login.TELEGRAM_SESSION_PATH = session_path
+    TELEGRAM_LOGIN_CODE_TTL_SECONDS = desk_telegram_login.TELEGRAM_LOGIN_CODE_TTL_SECONDS = login_ttl
+
+
+def _telegram_config_path(config_path: Path | None = None) -> Path:
+    return Path(config_path) if config_path is not None else desk_telegram_login.TELEGRAM_CONFIG_PATH
+
+
+def _telegram_session_path(session_path: Path | None = None) -> Path:
+    return Path(session_path) if session_path is not None else desk_telegram_login.TELEGRAM_SESSION_PATH
 
 
 def _project_root() -> Path:
@@ -71,18 +134,21 @@ def _display_user_path(path: Path) -> str:
     return desk_telegram_login._display_user_path(path)
 
 
-def _load_telegram_credentials(*, config_path: Path = TELEGRAM_CONFIG_PATH) -> tuple[int, str]:
+def _load_telegram_credentials(*, config_path: Path | None = None) -> tuple[int, str]:
     _sync_telegram_login_context()
+    config_path = _telegram_config_path(config_path)
     return desk_telegram_login._load_telegram_credentials(config_path=config_path)
 
 
-def _telegram_credentials_ready(*, config_path: Path = TELEGRAM_CONFIG_PATH) -> bool:
+def _telegram_credentials_ready(*, config_path: Path | None = None) -> bool:
     _sync_telegram_login_context()
+    config_path = _telegram_config_path(config_path)
     return desk_telegram_login._telegram_credentials_ready(config_path=config_path)
 
 
-def _telegram_session_ready(*, session_path: Path = TELEGRAM_SESSION_PATH) -> bool:
+def _telegram_session_ready(*, session_path: Path | None = None) -> bool:
     _sync_telegram_login_context()
+    session_path = _telegram_session_path(session_path)
     return desk_telegram_login._telegram_session_ready(session_path=session_path)
 
 
@@ -115,10 +181,12 @@ def save_telegram_credentials(
     api_id: object,
     api_hash: object,
     *,
-    config_path: Path = TELEGRAM_CONFIG_PATH,
-    session_path: Path = TELEGRAM_SESSION_PATH,
+    config_path: Path | None = None,
+    session_path: Path | None = None,
 ) -> dict:
     _sync_telegram_login_context()
+    config_path = _telegram_config_path(config_path)
+    session_path = _telegram_session_path(session_path)
     return desk_telegram_login.save_telegram_credentials(
         api_id,
         api_hash,
@@ -129,10 +197,12 @@ def save_telegram_credentials(
 
 def telegram_status(
     *,
-    config_path: Path = TELEGRAM_CONFIG_PATH,
-    session_path: Path = TELEGRAM_SESSION_PATH,
+    config_path: Path | None = None,
+    session_path: Path | None = None,
 ) -> dict:
     _sync_telegram_login_context()
+    config_path = _telegram_config_path(config_path)
+    session_path = _telegram_session_path(session_path)
     return desk_telegram_login.telegram_status(config_path=config_path, session_path=session_path)
 
 
@@ -144,10 +214,12 @@ def _telegram_interactive_error(exc: Exception, *, action: str) -> ValueError:
 async def _telegram_send_code_async(
     phone: str,
     *,
-    config_path: Path = TELEGRAM_CONFIG_PATH,
-    session_path: Path = TELEGRAM_SESSION_PATH,
+    config_path: Path | None = None,
+    session_path: Path | None = None,
 ) -> dict:
     _sync_telegram_login_context()
+    config_path = _telegram_config_path(config_path)
+    session_path = _telegram_session_path(session_path)
     return await desk_telegram_login._telegram_send_code_async(
         phone,
         config_path=config_path,
@@ -159,10 +231,12 @@ async def _telegram_verify_code_async(
     code: str,
     password: str = "",
     *,
-    config_path: Path = TELEGRAM_CONFIG_PATH,
-    session_path: Path = TELEGRAM_SESSION_PATH,
+    config_path: Path | None = None,
+    session_path: Path | None = None,
 ) -> dict:
     _sync_telegram_login_context()
+    config_path = _telegram_config_path(config_path)
+    session_path = _telegram_session_path(session_path)
     return await desk_telegram_login._telegram_verify_code_async(
         code,
         password,
@@ -178,13 +252,15 @@ _ORIGINAL_TELEGRAM_VERIFY_CODE_ASYNC = _telegram_verify_code_async
 def telegram_send_code(
     phone: object,
     *,
-    config_path: Path = TELEGRAM_CONFIG_PATH,
-    session_path: Path = TELEGRAM_SESSION_PATH,
+    config_path: Path | None = None,
+    session_path: Path | None = None,
 ) -> dict:
     _sync_telegram_login_context()
     clean_phone = str(phone or "").strip()
     if not re.fullmatch(r"\+?[0-9][0-9 ()-]{5,24}", clean_phone):
         raise ValueError("Enter a phone number with country code.")
+    config_path = _telegram_config_path(config_path)
+    session_path = _telegram_session_path(session_path)
     try:
         send_code_async = _facade_or_current_attr("_telegram_send_code_async", _ORIGINAL_TELEGRAM_SEND_CODE_ASYNC)
         return asyncio.run(send_code_async(clean_phone, config_path=config_path, session_path=session_path))
@@ -198,14 +274,16 @@ def telegram_verify_code(
     code: object,
     password: object = "",
     *,
-    config_path: Path = TELEGRAM_CONFIG_PATH,
-    session_path: Path = TELEGRAM_SESSION_PATH,
+    config_path: Path | None = None,
+    session_path: Path | None = None,
 ) -> dict:
     _sync_telegram_login_context()
     clean_code = str(code or "").strip().replace(" ", "")
     clean_password = str(password or "")
     if not re.fullmatch(r"[0-9A-Za-z-]{3,32}", clean_code):
         raise ValueError("Enter the Telegram verification code.")
+    config_path = _telegram_config_path(config_path)
+    session_path = _telegram_session_path(session_path)
     try:
         verify_code_async = _facade_or_current_attr("_telegram_verify_code_async", _ORIGINAL_TELEGRAM_VERIFY_CODE_ASYNC)
         return asyncio.run(
@@ -219,15 +297,21 @@ def telegram_verify_code(
 
 def telegram_cancel_login() -> dict:
     _sync_telegram_login_context()
-    return desk_telegram_login.telegram_cancel_login()
+    desk_telegram_login._telegram_login_clear()
+    return desk_telegram_login.telegram_status(
+        config_path=_telegram_config_path(),
+        session_path=_telegram_session_path(),
+    )
 
 
 async def _telegram_current_user_chat_id_async(
     *,
-    config_path: Path = TELEGRAM_CONFIG_PATH,
-    session_path: Path = TELEGRAM_SESSION_PATH,
+    config_path: Path | None = None,
+    session_path: Path | None = None,
 ) -> str | None:
     _sync_telegram_login_context()
+    config_path = _telegram_config_path(config_path)
+    session_path = _telegram_session_path(session_path)
     return await desk_telegram_login._telegram_current_user_chat_id_async(
         config_path=config_path,
         session_path=session_path,
@@ -236,10 +320,12 @@ async def _telegram_current_user_chat_id_async(
 
 def _telegram_current_user_chat_id(
     *,
-    config_path: Path = TELEGRAM_CONFIG_PATH,
-    session_path: Path = TELEGRAM_SESSION_PATH,
+    config_path: Path | None = None,
+    session_path: Path | None = None,
 ) -> str | None:
     _sync_telegram_login_context()
+    config_path = _telegram_config_path(config_path)
+    session_path = _telegram_session_path(session_path)
     return desk_telegram_login._telegram_current_user_chat_id(config_path=config_path, session_path=session_path)
 
 
@@ -398,5 +484,13 @@ def update_desk_ai_settings(body: dict) -> dict:
 
 
 def desk_action_env() -> dict[str, str]:
+    _sync_telegram_login_context()
     _sync_secret_settings_context()
-    return desk_secret_settings.desk_action_env()
+    env = desk_secret_settings.desk_action_env()
+    telegram_dir = str(desk_telegram_login.TELEGRAM_CONFIG_DIR)
+    # Desk actions run doctor/monitor in subprocesses. They must inherit the
+    # same Telegram config root as the browser setup flow, especially after the
+    # macOS app moves mutable state into its app-owned data directory.
+    env["TG_SCANNER_CONFIG_DIR"] = telegram_dir
+    env["TGCLI_CONFIG_DIR"] = telegram_dir
+    return env

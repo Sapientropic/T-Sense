@@ -49,7 +49,16 @@ def _display_user_path(path: Path) -> str:
         return path.name
 
 
-def _load_telegram_credentials(*, config_path: Path = TELEGRAM_CONFIG_PATH) -> tuple[int, str]:
+def _telegram_config_path(config_path: Path | None = None) -> Path:
+    return Path(config_path) if config_path is not None else TELEGRAM_CONFIG_PATH
+
+
+def _telegram_session_path(session_path: Path | None = None) -> Path:
+    return Path(session_path) if session_path is not None else TELEGRAM_SESSION_PATH
+
+
+def _load_telegram_credentials(*, config_path: Path | None = None) -> tuple[int, str]:
+    config_path = _telegram_config_path(config_path)
     api_id: int | None = None
     api_hash = ""
     if config_path.exists():
@@ -82,7 +91,7 @@ def _load_telegram_credentials(*, config_path: Path = TELEGRAM_CONFIG_PATH) -> t
     return api_id, api_hash
 
 
-def _telegram_credentials_ready(*, config_path: Path = TELEGRAM_CONFIG_PATH) -> bool:
+def _telegram_credentials_ready(*, config_path: Path | None = None) -> bool:
     try:
         _load_telegram_credentials(config_path=config_path)
     except ValueError:
@@ -90,7 +99,8 @@ def _telegram_credentials_ready(*, config_path: Path = TELEGRAM_CONFIG_PATH) -> 
     return True
 
 
-def _telegram_session_ready(*, session_path: Path = TELEGRAM_SESSION_PATH) -> bool:
+def _telegram_session_ready(*, session_path: Path | None = None) -> bool:
+    session_path = _telegram_session_path(session_path)
     try:
         return bool(session_path.exists() and session_path.read_text(encoding="utf-8").strip())
     except OSError:
@@ -139,8 +149,8 @@ def save_telegram_credentials(
     api_id: object,
     api_hash: object,
     *,
-    config_path: Path = TELEGRAM_CONFIG_PATH,
-    session_path: Path = TELEGRAM_SESSION_PATH,
+    config_path: Path | None = None,
+    session_path: Path | None = None,
 ) -> dict:
     try:
         clean_api_id = int(str(api_id).strip())
@@ -152,6 +162,8 @@ def save_telegram_credentials(
     if not re.fullmatch(r"[A-Za-z0-9]{16,128}", clean_api_hash):
         raise ValueError("Telegram app hash must be 16-128 letters or numbers.")
 
+    config_path = _telegram_config_path(config_path)
+    session_path = _telegram_session_path(session_path)
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(
         f"api_id = {clean_api_id}\napi_hash = {json.dumps(clean_api_hash)}\n",
@@ -162,9 +174,11 @@ def save_telegram_credentials(
 
 def telegram_status(
     *,
-    config_path: Path = TELEGRAM_CONFIG_PATH,
-    session_path: Path = TELEGRAM_SESSION_PATH,
+    config_path: Path | None = None,
+    session_path: Path | None = None,
 ) -> dict:
+    config_path = _telegram_config_path(config_path)
+    session_path = _telegram_session_path(session_path)
     credentials_ready = _telegram_credentials_ready(config_path=config_path)
     session_ready = _telegram_session_ready(session_path=session_path)
     credentials_status = (
@@ -243,12 +257,14 @@ def _telegram_interactive_error(exc: Exception, *, action: str) -> ValueError:
 async def _telegram_send_code_async(
     phone: str,
     *,
-    config_path: Path = TELEGRAM_CONFIG_PATH,
-    session_path: Path = TELEGRAM_SESSION_PATH,
+    config_path: Path | None = None,
+    session_path: Path | None = None,
 ) -> dict:
     from telethon import TelegramClient
     from telethon.sessions import StringSession
 
+    config_path = _telegram_config_path(config_path)
+    session_path = _telegram_session_path(session_path)
     api_id, api_hash = _load_telegram_credentials(config_path=config_path)
     session_string = session_path.read_text(encoding="utf-8").strip() if session_path.exists() else ""
     client = TelegramClient(StringSession(session_string), api_id, api_hash)
@@ -279,8 +295,8 @@ async def _telegram_verify_code_async(
     code: str,
     password: str = "",
     *,
-    config_path: Path = TELEGRAM_CONFIG_PATH,
-    session_path: Path = TELEGRAM_SESSION_PATH,
+    config_path: Path | None = None,
+    session_path: Path | None = None,
 ) -> dict:
     from telethon import TelegramClient
     from telethon.errors import SessionPasswordNeededError
@@ -295,6 +311,8 @@ async def _telegram_verify_code_async(
     if not phone or not phone_code_hash:
         raise ValueError("Send a Telegram login code before verifying.")
 
+    config_path = _telegram_config_path(config_path)
+    session_path = _telegram_session_path(session_path)
     api_id, api_hash = _load_telegram_credentials(config_path=config_path)
     session_string = session_path.read_text(encoding="utf-8").strip() if session_path.exists() else ""
     client = TelegramClient(StringSession(session_string), api_id, api_hash)
@@ -321,12 +339,14 @@ async def _telegram_verify_code_async(
 def telegram_send_code(
     phone: object,
     *,
-    config_path: Path = TELEGRAM_CONFIG_PATH,
-    session_path: Path = TELEGRAM_SESSION_PATH,
+    config_path: Path | None = None,
+    session_path: Path | None = None,
 ) -> dict:
     clean_phone = str(phone or "").strip()
     if not re.fullmatch(r"\+?[0-9][0-9 ()-]{5,24}", clean_phone):
         raise ValueError("Enter a phone number with country code.")
+    config_path = _telegram_config_path(config_path)
+    session_path = _telegram_session_path(session_path)
     try:
         send_code_async = _facade_attr("_telegram_send_code_async", _telegram_send_code_async)
         return asyncio.run(send_code_async(clean_phone, config_path=config_path, session_path=session_path))
@@ -340,13 +360,15 @@ def telegram_verify_code(
     code: object,
     password: object = "",
     *,
-    config_path: Path = TELEGRAM_CONFIG_PATH,
-    session_path: Path = TELEGRAM_SESSION_PATH,
+    config_path: Path | None = None,
+    session_path: Path | None = None,
 ) -> dict:
     clean_code = str(code or "").strip().replace(" ", "")
     clean_password = str(password or "")
     if not re.fullmatch(r"[0-9A-Za-z-]{3,32}", clean_code):
         raise ValueError("Enter the Telegram verification code.")
+    config_path = _telegram_config_path(config_path)
+    session_path = _telegram_session_path(session_path)
     try:
         verify_code_async = _facade_attr("_telegram_verify_code_async", _telegram_verify_code_async)
         return asyncio.run(
@@ -365,12 +387,14 @@ def telegram_cancel_login() -> dict:
 
 async def _telegram_current_user_chat_id_async(
     *,
-    config_path: Path = TELEGRAM_CONFIG_PATH,
-    session_path: Path = TELEGRAM_SESSION_PATH,
+    config_path: Path | None = None,
+    session_path: Path | None = None,
 ) -> str | None:
     from telethon import TelegramClient
     from telethon.sessions import StringSession
 
+    config_path = _telegram_config_path(config_path)
+    session_path = _telegram_session_path(session_path)
     api_id, api_hash = _load_telegram_credentials(config_path=config_path)
     session_string = session_path.read_text(encoding="utf-8").strip() if session_path.exists() else ""
     if not session_string:
@@ -389,9 +413,11 @@ async def _telegram_current_user_chat_id_async(
 
 def _telegram_current_user_chat_id(
     *,
-    config_path: Path = TELEGRAM_CONFIG_PATH,
-    session_path: Path = TELEGRAM_SESSION_PATH,
+    config_path: Path | None = None,
+    session_path: Path | None = None,
 ) -> str | None:
+    config_path = _telegram_config_path(config_path)
+    session_path = _telegram_session_path(session_path)
     try:
         return asyncio.run(_telegram_current_user_chat_id_async(config_path=config_path, session_path=session_path))
     except Exception:
