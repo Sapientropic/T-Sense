@@ -122,6 +122,7 @@ def scan_command(
     source_args: list[str],
     hours: int,
     allow_incomplete: bool,
+    allow_partial_failures: bool = False,
     concurrency: int | None = None,
     delay_seconds: float | None = None,
 ) -> list[str | Path]:
@@ -141,6 +142,8 @@ def scan_command(
     ]
     if allow_incomplete:
         cmd.append("--allow-incomplete")
+    if allow_partial_failures:
+        cmd.append("--allow-partial-failures")
     if concurrency:
         cmd.extend(["--scan-concurrency", str(concurrency)])
     if delay_seconds is not None:
@@ -160,6 +163,7 @@ def daily_report_command(
     allow_incomplete: bool,
     profile_id: str,
     run_id: str,
+    allow_partial_failures: bool = False,
     max_messages: int | None = None,
     max_tokens: int | None = None,
     scan_concurrency_value: int | None = None,
@@ -198,6 +202,8 @@ def daily_report_command(
         cmd.extend(["--items-json", items_json])
     if allow_incomplete:
         cmd.append("--allow-incomplete")
+    if allow_partial_failures:
+        cmd.append("--allow-partial-failures")
     if max_messages:
         cmd.extend(["--max-messages", str(max_messages)])
     if max_tokens:
@@ -271,6 +277,7 @@ def execute_monitor_commands(
     token_limit = semantic_max_tokens(profile)
     source_scan_concurrency = scan_concurrency(profile)
     source_scan_delay_seconds = scan_delay_seconds(profile)
+    allow_partial_source_failures = bool(profile.get("allow_partial_source_failures"))
     batch_limit = semantic_batch_size(profile)
     semantic_concurrency_limit = semantic_concurrency(profile)
 
@@ -300,6 +307,7 @@ def execute_monitor_commands(
                 source_args=source_args,
                 hours=scan_window_hours,
                 allow_incomplete=args.allow_incomplete,
+                allow_partial_failures=allow_partial_source_failures,
                 concurrency=source_scan_concurrency,
                 delay_seconds=source_scan_delay_seconds,
             )
@@ -368,6 +376,7 @@ def execute_monitor_commands(
                 hours=scan_window_hours,
                 items_json=args.items_json,
                 allow_incomplete=args.allow_incomplete,
+                allow_partial_failures=allow_partial_source_failures,
                 profile_id=args.profile_id,
                 run_id=run_id_value,
                 max_messages=semantic_limit,

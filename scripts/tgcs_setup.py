@@ -128,6 +128,7 @@ def _write_default_profiles_config(path: Path, *, force: bool = False) -> None:
                 'delivery_targets = ["telegram-bot-default"]',
                 "dashboard_visible = true",
                 "prefilter_enabled = true",
+                "allow_partial_source_failures = true",
                 "scan_concurrency = 3",
                 "scan_delay_seconds = 0.2",
                 "semantic_max_messages = 40",

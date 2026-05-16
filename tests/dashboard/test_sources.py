@@ -106,6 +106,22 @@ class DashboardSourcesTests(unittest.TestCase):
         self.assertEqual(payload["sources"][0]["topics"], ["jobs"])
 
 
+    def test_import_starter_sources_skips_packaged_example_placeholders(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            starter = root / "channel_lists" / "jobs.txt"
+            starter.parent.mkdir(parents=True)
+            starter.write_text("example_remote_jobs\nreal_remote_jobs\n", encoding="utf-8")
+            with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                result = dashboard_server.import_starter_sources({"topic": "jobs"})
+
+            registry = root / ".tgcs" / "sources.json"
+            payload = json.loads(registry.read_text(encoding="utf-8"))
+
+        self.assertEqual(result["added_count"], 1)
+        self.assertEqual([source["username"] for source in payload["sources"]], ["real_remote_jobs"])
+
+
     def test_desk_source_import_rejects_non_telegram_like_identifiers(self):
         with self.assertRaises(ValueError):
             dashboard_server.preview_desk_source_import(

@@ -454,7 +454,7 @@ export function sanitizeDeskTelegramStatus(value: unknown): DeskTelegramStatus |
   if (!loginState || !detail || !nextStep || !configPath || !sessionPath) {
     return null;
   }
-  return {
+  const sanitized: DeskTelegramStatus = {
     schema_version: "desk_telegram_status_v1",
     credentials_ready: value.credentials_ready === true,
     session_ready: value.session_ready === true,
@@ -464,6 +464,11 @@ export function sanitizeDeskTelegramStatus(value: unknown): DeskTelegramStatus |
     config_path: configPath,
     session_path: sessionPath,
   };
+  const credentialsStatus = optionalString(value.credentials_status);
+  if (credentialsStatus) {
+    sanitized.credentials_status = credentialsStatus;
+  }
+  return sanitized;
 }
 
 export function sanitizeDeskNotificationTokenStatus(value: unknown): DeskNotificationTokenStatus | null {
@@ -499,6 +504,10 @@ export function sanitizeDeskNotificationTokenStatus(value: unknown): DeskNotific
     platform,
     detail,
   };
+  const verificationStatus = optionalString(value.verification_status);
+  if (verificationStatus) {
+    sanitized.verification_status = verificationStatus;
+  }
   const localStoreBackend = optionalString(value.local_store_backend);
   const localStoreLabel = optionalString(value.local_store_label);
   if (localStoreBackend) {
@@ -621,6 +630,14 @@ export function sanitizeDeskAiSettingsStatus(value: unknown): DeskAiSettingsStat
     providers: sanitizeDeskAiProviders(value.providers),
     checked_at: optionalString(value.checked_at),
   };
+  const matchingConfiguredCount = nonNegativeInteger(value.matching_configured_count);
+  const ocrConfiguredCount = nonNegativeInteger(value.ocr_configured_count);
+  if (matchingConfiguredCount !== null) {
+    sanitized.matching_configured_count = matchingConfiguredCount;
+  }
+  if (ocrConfiguredCount !== null) {
+    sanitized.ocr_configured_count = ocrConfiguredCount;
+  }
   const localStoreBackend = optionalString(value.local_store_backend);
   const localStoreLabel = optionalString(value.local_store_label);
   if (localStoreBackend) {
@@ -655,6 +672,17 @@ function sanitizeDeskAiProviders(value: unknown): DeskAiProviderStatus[] {
       updated_at: optionalStringOrNull(record.updated_at),
       detail: optionalString(record.detail) ?? "",
     };
+    const purpose = optionalString(record.purpose);
+    const verificationStatus = optionalString(record.verification_status);
+    if (purpose) {
+      providerStatus.purpose = purpose;
+    }
+    if (verificationStatus) {
+      providerStatus.verification_status = verificationStatus;
+    }
+    if ("usable_for_matching" in record) {
+      providerStatus.usable_for_matching = record.usable_for_matching === true;
+    }
     const localStoreBackend = optionalString(record.local_store_backend);
     const localStoreLabel = optionalString(record.local_store_label);
     if (localStoreBackend) {
@@ -681,7 +709,7 @@ export function sanitizeDeliveryTestResult(value: unknown): DeliveryTestResult |
     schema_version: "desk_delivery_test_result_v1",
     target_id: targetId,
     target_type: targetType,
-    mode: "dry-run",
+    mode: value.mode === "live" ? "live" : "dry-run",
     ok: value.ok === true,
     status,
     title: optionalString(value.title),

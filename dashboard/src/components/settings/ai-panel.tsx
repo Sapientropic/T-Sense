@@ -37,9 +37,10 @@ export function AiApiSettingsPanel({
   const localStoreLabel = selected?.local_store_label ?? status?.local_store_label ?? "local secure storage";
   const canSave = Boolean(selected?.can_save && apiKey.trim());
   const canClear = Boolean(selected?.can_clear);
+  const matchingKeyCount = status?.matching_configured_count ?? status?.configured_count ?? 0;
   return (
     <div className="table-section ai-api-panel" ref={panelRef} tabIndex={-1} aria-label="AI API keys">
-      <PanelHeader icon={<PlugZap size={18} />} title="AI API" count={status?.configured_count ?? 0} />
+      <PanelHeader icon={<PlugZap size={18} />} title="AI API" count={matchingKeyCount} />
       <div className="ai-provider-grid" aria-label="AI provider status">
         {providers.length ? (
           providers.map((item) => (
@@ -51,7 +52,7 @@ export function AiApiSettingsPanel({
               type="button"
             >
               <strong>{item.label}</strong>
-              <span>{item.configured ? (item.env_configured ? "ENV" : "Saved") : "Missing"}</span>
+              <span>{providerStatusLabel(item)}</span>
             </button>
           ))
         ) : (
@@ -125,4 +126,17 @@ export function AiApiSettingsPanel({
       </p>
     </div>
   );
+}
+
+function providerStatusLabel(item: DeskAiSettingsStatus["providers"][number]) {
+  if (!item.configured) {
+    return "Missing";
+  }
+  if (item.verification_status === "verified") {
+    return "Verified";
+  }
+  if (item.purpose === "ocr") {
+    return item.env_configured ? "OCR ENV" : "OCR saved";
+  }
+  return item.env_configured ? "ENV, not tested" : "Saved, not tested";
 }

@@ -196,6 +196,7 @@ def scan_command(
     source_args: list[str],
     hours: int,
     allow_incomplete: bool,
+    allow_partial_failures: bool = False,
     concurrency: int | None = None,
     delay_seconds: float | None = None,
 ) -> list[str | Path]:
@@ -205,6 +206,7 @@ def scan_command(
         source_args=source_args,
         hours=hours,
         allow_incomplete=allow_incomplete,
+        allow_partial_failures=allow_partial_failures,
         concurrency=concurrency,
         delay_seconds=delay_seconds,
     )
@@ -222,6 +224,7 @@ def daily_report_command(
     allow_incomplete: bool,
     profile_id: str,
     run_id: str,
+    allow_partial_failures: bool = False,
     max_messages: int | None = None,
     max_tokens: int | None = None,
     scan_concurrency_value: int | None = None,
@@ -239,6 +242,7 @@ def daily_report_command(
         hours=hours,
         items_json=items_json,
         allow_incomplete=allow_incomplete,
+        allow_partial_failures=allow_partial_failures,
         profile_id=profile_id,
         run_id=run_id,
         max_messages=max_messages,

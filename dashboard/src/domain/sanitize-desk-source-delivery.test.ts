@@ -8,7 +8,7 @@ import {
 } from "./sanitize";
 
 describe("Desk source and delivery sanitizers", () => {
-  it("sanitizes notification dry-run result envelopes", () => {
+  it("sanitizes notification test result envelopes without hiding live sends", () => {
     expect(
       sanitizeDeliveryTestResult({
         schema_version: "desk_delivery_test_result_v1",
@@ -16,7 +16,7 @@ describe("Desk source and delivery sanitizers", () => {
         target_type: "telegram_bot",
         mode: "live",
         ok: true,
-        status: "dry_run",
+        status: "sent",
         title: "Notification test",
         detail: "Checked",
       }),
@@ -24,9 +24,9 @@ describe("Desk source and delivery sanitizers", () => {
       schema_version: "desk_delivery_test_result_v1",
       target_id: "telegram-bot-default",
       target_type: "telegram_bot",
-      mode: "dry-run",
+      mode: "live",
       ok: true,
-      status: "dry_run",
+      status: "sent",
       title: "Notification test",
       detail: "Checked",
     });

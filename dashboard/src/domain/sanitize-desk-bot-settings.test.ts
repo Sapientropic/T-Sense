@@ -96,6 +96,8 @@ describe("Desk bot and local settings sanitizers", () => {
       sanitizeDeskAiSettingsStatus({
         schema_version: "desk_ai_settings_status_v1",
         configured_count: 1,
+        matching_configured_count: 1,
+        ocr_configured_count: 0,
         local_store_supported: true,
         platform: "win32",
         detail: "1 AI provider key configured.",
@@ -105,7 +107,10 @@ describe("Desk bot and local settings sanitizers", () => {
             provider: "deepseek",
             label: "DeepSeek",
             env_name: "DEEPSEEK_API_KEY",
+            purpose: "matching",
             configured: true,
+            verification_status: "saved_unverified",
+            usable_for_matching: true,
             source: "windows_credential_manager",
             env_configured: false,
             local_store_configured: true,
@@ -121,6 +126,8 @@ describe("Desk bot and local settings sanitizers", () => {
     ).toEqual({
       schema_version: "desk_ai_settings_status_v1",
       configured_count: 1,
+      matching_configured_count: 1,
+      ocr_configured_count: 0,
       local_store_supported: true,
       platform: "win32",
       detail: "1 AI provider key configured.",
@@ -130,7 +137,10 @@ describe("Desk bot and local settings sanitizers", () => {
           provider: "deepseek",
           label: "DeepSeek",
           env_name: "DEEPSEEK_API_KEY",
+          purpose: "matching",
           configured: true,
+          verification_status: "saved_unverified",
+          usable_for_matching: true,
           source: "windows_credential_manager",
           env_configured: false,
           local_store_configured: true,
@@ -216,6 +226,7 @@ describe("Desk bot and local settings sanitizers", () => {
       sanitizeDeskNotificationTokenStatus({
         schema_version: "desk_notification_token_status_v1",
         configured: true,
+        verification_status: " saved_unverified ",
         source: " local_keyring ",
         updated_at: " 2026-05-10T00:00:00Z ",
         env_configured: false,
@@ -232,6 +243,7 @@ describe("Desk bot and local settings sanitizers", () => {
     ).toEqual({
       schema_version: "desk_notification_token_status_v1",
       configured: true,
+      verification_status: "saved_unverified",
       source: "local_keyring",
       updated_at: "2026-05-10T00:00:00Z",
       env_configured: false,
@@ -278,6 +290,7 @@ describe("Desk bot and local settings sanitizers", () => {
       sanitizeDeskTelegramStatus({
         schema_version: "desk_telegram_status_v1",
         credentials_ready: true,
+        credentials_status: " saved_unverified ",
         session_ready: false,
         login_state: " code_sent ",
         detail: "Code sent.",
@@ -289,6 +302,7 @@ describe("Desk bot and local settings sanitizers", () => {
     ).toEqual({
       schema_version: "desk_telegram_status_v1",
       credentials_ready: true,
+      credentials_status: "saved_unverified",
       session_ready: false,
       login_state: "code_sent",
       detail: "Code sent.",

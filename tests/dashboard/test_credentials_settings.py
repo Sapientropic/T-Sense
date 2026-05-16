@@ -144,12 +144,14 @@ class DashboardCredentialsSettingsTests(unittest.TestCase):
             )
 
             self.assertTrue(status["credentials_ready"])
+            self.assertEqual(status["credentials_status"], "saved_unverified")
             self.assertFalse(status["session_ready"])
             self.assertNotIn("a" * 32, json.dumps(status))
             self.assertIn("api_hash", config_path.read_text(encoding="utf-8"))
             session_path.write_text("session-string", encoding="utf-8")
             status = dashboard_server.telegram_status(config_path=config_path, session_path=session_path)
             self.assertEqual(status["login_state"], "authorized")
+            self.assertEqual(status["credentials_status"], "verified")
 
 
     def test_telegram_status_requires_credentials_and_session_for_scan_ready(self):
@@ -161,6 +163,7 @@ class DashboardCredentialsSettingsTests(unittest.TestCase):
             status = dashboard_server.telegram_status(config_path=config_path, session_path=session_path)
 
         self.assertFalse(status["credentials_ready"])
+        self.assertEqual(status["credentials_status"], "missing")
         self.assertTrue(status["session_ready"])
         self.assertEqual(status["login_state"], "credentials_missing")
         self.assertIn("credentials are missing", status["detail"])
@@ -609,6 +612,7 @@ class DashboardCredentialsSettingsTests(unittest.TestCase):
 
         self.assertTrue(status["configured"])
         self.assertEqual(status["source"], "environment")
+        self.assertEqual(status["verification_status"], "env_unverified")
         rendered = json.dumps(status, ensure_ascii=False)
         self.assertNotIn("env-token", rendered)
         self.assertNotIn("local-token", rendered)
@@ -633,6 +637,7 @@ class DashboardCredentialsSettingsTests(unittest.TestCase):
 
         self.assertTrue(status["configured"])
         self.assertEqual(status["source"], "keyring")
+        self.assertEqual(status["verification_status"], "saved_unverified")
         self.assertEqual(status["local_store_backend"], "keyring")
         self.assertEqual(status["local_store_label"], "macOS Keychain")
         self.assertIn("macOS Keychain", status["detail"])
@@ -664,6 +669,7 @@ class DashboardCredentialsSettingsTests(unittest.TestCase):
                             cleared = dashboard_server.update_desk_notification_token({"clear": True})
 
         self.assertTrue(saved["configured"])
+        self.assertEqual(saved["verification_status"], "saved_unverified")
         self.assertIn(
             saved["source"],
             {
@@ -704,6 +710,7 @@ class DashboardCredentialsSettingsTests(unittest.TestCase):
         deepseek = next(item for item in status["providers"] if item["provider"] == "deepseek")
         self.assertTrue(deepseek["configured"])
         self.assertEqual(deepseek["source"], "environment")
+        self.assertEqual(deepseek["verification_status"], "env_unverified")
         rendered = json.dumps(status, ensure_ascii=False)
         self.assertNotIn("env-deepseek-key", rendered)
         self.assertNotIn("local-deepseek-key", rendered)
@@ -729,6 +736,7 @@ class DashboardCredentialsSettingsTests(unittest.TestCase):
         deepseek = next(item for item in status["providers"] if item["provider"] == "deepseek")
         self.assertTrue(deepseek["configured"])
         self.assertEqual(deepseek["source"], "keyring")
+        self.assertEqual(deepseek["verification_status"], "saved_unverified")
         self.assertEqual(status["local_store_backend"], "keyring")
         self.assertEqual(status["local_store_label"], "Linux Secret Service/KWallet")
         self.assertEqual(deepseek["local_store_backend"], "keyring")
@@ -762,6 +770,8 @@ class DashboardCredentialsSettingsTests(unittest.TestCase):
         deepseek_saved = next(item for item in saved["providers"] if item["provider"] == "deepseek")
         deepseek_cleared = next(item for item in cleared["providers"] if item["provider"] == "deepseek")
         self.assertTrue(deepseek_saved["configured"])
+        self.assertTrue(deepseek_saved["usable_for_matching"])
+        self.assertEqual(deepseek_saved["verification_status"], "saved_unverified")
         self.assertIn(
             deepseek_saved["source"],
             {
@@ -772,6 +782,31 @@ class DashboardCredentialsSettingsTests(unittest.TestCase):
         self.assertEqual(env["DEEPSEEK_API_KEY"], "sk-deepseek123")
         self.assertFalse(deepseek_cleared["configured"])
         self.assertNotIn("sk-deepseek123", json.dumps(saved, ensure_ascii=False))
+
+
+    def test_ai_settings_separates_matching_keys_from_ocr_only_keys(self):
+        xai_target = dashboard_server.DESK_AI_PROVIDER_CONFIGS["xai"]["target"]
+        stored = dashboard_server.local_credentials.StoredSecret(
+            secret="local-xai-key",
+            updated_at="2026-05-10T00:00:00Z",
+        )
+        with patch.dict("os.environ", {}, clear=True):
+            with patch.object(dashboard_server.local_credentials, "is_supported", return_value=True):
+                with patch.object(
+                    dashboard_server.local_credentials,
+                    "read_secret",
+                    side_effect=lambda target_name: stored if target_name == xai_target else None,
+                ):
+                    status = dashboard_server.desk_ai_settings_status()
+
+        xai = next(item for item in status["providers"] if item["provider"] == "xai")
+        self.assertEqual(status["configured_count"], 1)
+        self.assertEqual(status["matching_configured_count"], 0)
+        self.assertEqual(status["ocr_configured_count"], 1)
+        self.assertEqual(xai["purpose"], "ocr")
+        self.assertTrue(xai["configured"])
+        self.assertFalse(xai["usable_for_matching"])
+        self.assertIn("OCR-only", xai["detail"])
 
 
     def test_ai_settings_update_rejects_command_fields_and_bad_keys(self):

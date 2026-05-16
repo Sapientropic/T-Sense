@@ -182,6 +182,11 @@ export function SettingsView({
     testDeliveryTarget,
   } = notifications;
   const { aiSettingsStatus, aiSettingsError, saveAiApiKey, clearAiApiKey } = ai;
+  const trackedSourceCount = sourceLibrary?.enabled_count ?? sourceStats.length;
+  const pausedSourceCount = Math.max(0, (sourceLibrary?.source_count ?? sourceStats.length) - trackedSourceCount);
+  const sourceTaskDetail = sourceLibrary
+    ? `${trackedSourceCount} tracked · ${pausedSourceCount} paused`
+    : "Tracked channels";
   const {
     feedbackSummary,
     feedbackExport,
@@ -226,10 +231,11 @@ export function SettingsView({
         activeTask={activeTask}
         feedbackCount={(feedbackSummary?.exportable_count ?? 0) + (feedbackSummary?.pending_profile_diff_count ?? 0)}
         updateCount={settingsUpdateCount(gitStatus)}
-        aiCount={aiSettingsStatus?.configured_count ?? 0}
+        aiCount={aiSettingsStatus?.matching_configured_count ?? aiSettingsStatus?.configured_count ?? 0}
         notificationCount={targets.length}
         onSelect={setActiveTask}
-        sourceCount={sourceLibrary?.source_count ?? sourceStats.length}
+        sourceCount={trackedSourceCount}
+        sourceDetail={sourceTaskDetail}
       />
       <section
         className="settings-section settings-section-sources"

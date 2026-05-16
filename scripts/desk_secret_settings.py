@@ -7,35 +7,41 @@ import re
 import sys
 from datetime import UTC, datetime
 
+from typing import Any
+
 from scripts import delivery, local_credentials
 
 
 DESK_NOTIFICATION_TOKEN_ALLOWED_FIELDS = {"token", "clear"}
 DESK_AI_SETTINGS_ALLOWED_FIELDS = {"provider", "api_key", "clear"}
-DESK_AI_PROVIDER_CONFIGS: dict[str, dict[str, str]] = {
+DESK_AI_PROVIDER_CONFIGS: dict[str, dict[str, Any]] = {
     "openai": {
         "label": "OpenAI",
         "env_name": "OPENAI_API_KEY",
         "target": "tgcs.signal-desk.openai-api-key",
         "username": "OpenAI API key",
+        "purpose": "matching",
     },
     "deepseek": {
         "label": "DeepSeek",
         "env_name": "DEEPSEEK_API_KEY",
         "target": "tgcs.signal-desk.deepseek-api-key",
         "username": "DeepSeek API key",
+        "purpose": "matching",
     },
     "minimax": {
         "label": "MiniMax",
         "env_name": "MINIMAX_TOKEN_PLAN_KEY",
         "target": "tgcs.signal-desk.minimax-token-plan-key",
         "username": "MiniMax token plan key",
+        "purpose": "matching",
     },
     "xai": {
         "label": "xAI OCR",
         "env_name": "XAI_API_KEY",
         "target": "tgcs.signal-desk.xai-api-key",
         "username": "xAI API key",
+        "purpose": "ocr",
     },
 }
 
@@ -92,10 +98,17 @@ def desk_notification_token_status() -> dict:
 
     source = "environment" if env_configured else local_backend if local_configured else "missing"
     configured = env_configured or local_configured
+    verification_status = (
+        "env_unverified"
+        if env_configured
+        else "saved_unverified"
+        if local_configured
+        else "missing"
+    )
     if env_configured:
-        detail = "Telegram bot token is configured from the environment. Environment wins over local storage."
+        detail = "Telegram bot token is available from the environment, but Signal Desk has not verified it with Telegram."
     elif local_configured:
-        detail = f"Telegram bot token is saved in {local_label}."
+        detail = f"Telegram bot token is saved in {local_label}, but Signal Desk has not verified it with Telegram."
     elif local_supported:
         detail = "Telegram bot token is not configured."
     else:
@@ -103,6 +116,7 @@ def desk_notification_token_status() -> dict:
     return {
         "schema_version": "desk_notification_token_status_v1",
         "configured": configured,
+        "verification_status": verification_status,
         "source": source,
         "updated_at": None if env_configured else local_updated_at,
         "env_configured": env_configured,
@@ -173,21 +187,34 @@ def desk_ai_settings_status() -> dict:
         stored = _local_ai_secret(provider_id) if local_supported else None
         local_configured = bool(stored and stored.secret.strip())
         configured = env_configured or local_configured
+        purpose = str(config.get("purpose") or "matching")
         if env_configured:
             source = "environment"
-            detail = f"{config['label']} is configured from {env_name}. Environment wins over local storage."
+            detail = f"{config['label']} is available from {env_name}. Environment wins over local storage, but the key is not verified here."
         elif local_configured:
             source = local_backend
-            detail = f"{config['label']} API key is saved in {local_label}."
+            detail = f"{config['label']} API key is saved in {local_label}, but the provider has not been tested."
         else:
             source = "missing"
             detail = f"{config['label']} API key is not configured."
+        if purpose == "ocr":
+            detail += " This provider is OCR-only and does not unlock AI matching."
+        verification_status = (
+            "env_unverified"
+            if env_configured
+            else "saved_unverified"
+            if local_configured
+            else "missing"
+        )
         providers.append(
             {
                 "provider": provider_id,
                 "label": config["label"],
                 "env_name": env_name,
+                "purpose": purpose,
                 "configured": configured,
+                "verification_status": verification_status,
+                "usable_for_matching": purpose == "matching" and configured,
                 "source": source,
                 "env_configured": env_configured,
                 "local_store_configured": local_configured,
@@ -200,15 +227,24 @@ def desk_ai_settings_status() -> dict:
             }
         )
     configured_count = sum(1 for provider in providers if provider["configured"])
+    matching_configured_count = sum(
+        1 for provider in providers if provider["configured"] and provider.get("purpose") == "matching"
+    )
+    ocr_configured_count = sum(
+        1 for provider in providers if provider["configured"] and provider.get("purpose") == "ocr"
+    )
     return {
         "schema_version": "desk_ai_settings_status_v1",
         "configured_count": configured_count,
+        "matching_configured_count": matching_configured_count,
+        "ocr_configured_count": ocr_configured_count,
         "local_store_supported": local_supported,
         "local_store_backend": local_backend,
         "local_store_label": local_label,
         "platform": sys.platform,
         "detail": (
-            f"{configured_count} AI provider key{'s' if configured_count != 1 else ''} configured."
+            f"{matching_configured_count} matching key{'s' if matching_configured_count != 1 else ''} available"
+            + (f"; {ocr_configured_count} OCR-only key{'s' if ocr_configured_count != 1 else ''} available." if ocr_configured_count else ".")
             if configured_count
             else "No AI provider keys configured yet."
         ),

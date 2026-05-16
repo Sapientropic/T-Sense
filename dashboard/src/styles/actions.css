@@ -817,6 +817,11 @@
   background: var(--surface-link);
 }
 
+.telegram-status-grid span.pending {
+  border-color: color-mix(in oklch, var(--signal-medium) 44%, var(--paper-3));
+  background: color-mix(in oklch, var(--surface-warm-strong) 88%, var(--signal-medium));
+}
+
 .telegram-status-grid span.blocked {
   border-color: color-mix(in oklch, var(--signal-danger) 36%, var(--paper-3));
   background: color-mix(in oklch, var(--surface-warm-strong) 88%, var(--signal-danger));
@@ -844,6 +849,11 @@
 .start-setup-drawer .telegram-status-grid span.ready {
   border-color: color-mix(in oklch, var(--signal-high) 36%, var(--wash-paper-18));
   background: color-mix(in oklch, var(--signal-high) 9%, transparent);
+}
+
+.start-setup-drawer .telegram-status-grid span.pending {
+  border-color: color-mix(in oklch, var(--signal-medium) 34%, var(--wash-paper-18));
+  background: color-mix(in oklch, var(--signal-medium) 9%, transparent);
 }
 
 .start-setup-drawer .telegram-status-grid strong,
@@ -876,6 +886,23 @@
   display: grid;
   gap: 10px;
   min-width: 0;
+}
+
+.telegram-credential-repair {
+  border: 1px solid var(--paper-3);
+  background: var(--surface-warm-strong);
+}
+
+.telegram-credential-repair > summary {
+  cursor: pointer;
+  padding: 9px 10px;
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.telegram-credential-repair .telegram-form {
+  border-top: 1px solid var(--paper-3);
+  padding: 10px;
 }
 
 .telegram-form {

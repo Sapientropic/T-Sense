@@ -1729,6 +1729,7 @@
 .profile-matching-editor label span,
 .profile-weekday-block > span,
 .profile-runtime-settings label small,
+.profile-timezone-warning,
 .profile-matching-editor label small,
 .profile-workdays-default {
   color: var(--muted);
@@ -1737,6 +1738,11 @@
   line-height: 1;
   text-transform: none;
   overflow-wrap: anywhere;
+}
+
+.profile-timezone-warning {
+  color: color-mix(in oklch, var(--signal-medium) 52%, var(--ink-warm));
+  line-height: 1.25;
 }
 
 .profile-help-tip {

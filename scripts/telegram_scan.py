@@ -579,7 +579,9 @@ async def _run_scan(args) -> int:
         f"--input {output_path} --profile profiles/YOUR_PROFILE.md",
     )
 
-    if failures:
+    partial_failures_allowed = bool(getattr(args, "allow_partial_failures", False))
+    partial_failure_warning = failures and partial_failures_allowed and total_written > 0
+    if failures and not partial_failure_warning:
         if json_mode:
             agent_cli.print_json(
                 agent_cli.envelope_error(
@@ -597,6 +599,12 @@ async def _run_scan(args) -> int:
                 )
             )
         return agent_cli.EXIT_RUNTIME
+    if partial_failure_warning:
+        _print_progress(
+            args,
+            "Partial source failures were kept as warnings because other sources produced messages.",
+            error=True,
+        )
     if incomplete and not args.allow_incomplete:
         if json_mode:
             agent_cli.print_json(
@@ -624,6 +632,9 @@ async def _run_scan(args) -> int:
                     "errors_path": str(errors_path),
                     "message_count": total_written,
                     "channel_count": len(channels),
+                    "failure_count": failures,
+                    "failed_channels": failed_channels,
+                    "status": "complete_with_warnings" if partial_failure_warning else "complete",
                     "source_health": source_health,
                 }
             )

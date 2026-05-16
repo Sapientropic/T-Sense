@@ -139,7 +139,7 @@ function NotificationTokenPanel({
       </label>
       <p
         className="delivery-note"
-        title="Token text is never shown again. Environment variables still take priority; test checks do not send Telegram messages."
+        title="Token text is never shown again. Environment variables still take priority."
       >
         Stored locally. Never shown again.
       </p>
@@ -180,13 +180,13 @@ function NotificationTokenPanel({
         <KeyRound size={16} />
         <div>
           <strong>Telegram bot token</strong>
-          <small>{status ? `${configured ? "Configured" : "Missing"} · ${sourceLabel}` : "Checking token status"}</small>
+          <small>{status ? `${configured ? "Saved" : "Missing"} · ${sourceLabel}` : "Checking token status"}</small>
         </div>
-        <span className={configured ? "status enabled" : "status disabled"}>{configured ? "Ready" : "Needed"}</span>
+        <span className={configured ? "status enabled" : "status disabled"}>{configured ? "Saved" : "Needed"}</span>
       </div>
       {configured && !token ? (
         <>
-          <p className="delivery-note">Token is saved. Use this only when rotating or removing the bot token.</p>
+          <p className="delivery-note">Token is saved, not verified. Use this only when rotating or removing the bot token.</p>
           {error && (
             <p className="delivery-token-warning" role="alert">
               {error}

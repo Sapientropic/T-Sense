@@ -42,6 +42,13 @@ class OcrMediaTests(unittest.TestCase):
         self.assertFalse(default_args.full_video)
         self.assertTrue(full_args.full_video)
 
+    def test_parser_defaults_to_current_xai_image_model(self):
+        parser = ocr_media.build_parser()
+
+        args = parser.parse_args(["--input", "scan.jsonl"])
+
+        self.assertEqual(args.model, "grok-4.3")
+
     def test_ocr_video_cleans_temporary_frame_directory(self):
         class FakeTemporaryDirectory:
             def __init__(self, path: Path):

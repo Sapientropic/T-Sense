@@ -266,11 +266,11 @@ DESK_ACTIONS: tuple[dict, ...] = (
         "action_id": "sources_import_jobs",
         "group": "Sources",
         "title": "Repair starter sources",
-        "detail": "Restore or refresh the starter Telegram channels for the jobs monitor.",
+        "detail": "Refresh the packaged jobs source list without restoring illustrative example channels.",
         "run_mode": "execute",
         "display_command": "tgcs sources import channel_lists/jobs.txt --topic jobs",
         "argv": ["sources", "import", "channel_lists/jobs.txt", "--topic", "jobs", "--format", "json"],
-        "next_action": "Check setup again, then run an AI review.",
+        "next_action": "Check setup again, then add real channels or run an AI review.",
     },
     {
         "action_id": "monitor_jobs_dry_run",
@@ -465,7 +465,7 @@ def _desk_action_success_copy(action_id: str, fallback: str) -> str:
         "init_jobs": "Signal Desk files are ready. Next, check setup before scanning.",
         "doctor_jobs": "Setup check finished. If no problem is shown, run a fresh AI review.",
         "sources_validate": "Source list check finished. If no problem is shown, run a fresh AI review.",
-        "sources_import_jobs": "Starter channels were repaired. Next, check setup, then run a fresh AI review.",
+        "sources_import_jobs": "Starter sources were refreshed without example placeholders. Next, check setup, then add real channels or run a fresh AI review.",
         "monitor_jobs_dry_run": "Fresh AI review finished. Open Review for cards or use the Telegram alert buttons.",
     }.get(action_id, f"{fallback} finished.")
 

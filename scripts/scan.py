@@ -223,6 +223,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--allow-incomplete", action="store_true")
     parser.add_argument(
+        "--allow-partial-failures",
+        action="store_true",
+        help="Return success when at least one source produced messages and other sources failed.",
+    )
+    parser.add_argument(
         "--max-flood-wait-seconds",
         type=max_flood_wait_type,
         default=env_default("SCAN_MAX_FLOOD_WAIT_SECONDS", DEFAULT_MAX_FLOOD_WAIT_SECONDS),

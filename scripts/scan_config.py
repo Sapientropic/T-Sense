@@ -26,7 +26,9 @@ DEFAULT_SCAN_CONCURRENCY = 2
 DEFAULT_MAX_FLOOD_WAIT_SECONDS = 300
 DEFAULT_XAI_BASE_URL = "https://api.x.ai/v1"
 DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
-DEFAULT_XAI_OCR_MODEL = "grok-4.1-fast"
+# Use xAI's current chat+image model for OCR. Older fast Grok slugs have been
+# retired or removed from the API, so pinning them makes live OCR fail at setup.
+DEFAULT_XAI_OCR_MODEL = "grok-4.3"
 DEFAULT_OPENAI_OCR_MODEL = "gpt-4o-mini"
 DEFAULT_STT_MODEL = "whisper-1"
 DEFAULT_VIDEO_FRAMES = 3

@@ -258,7 +258,11 @@ def import_starter_sources(body: dict) -> dict:
         starter_path = _project_root() / "channel_lists" / "example.txt"
     if not starter_path.exists():
         raise ValueError("Starter source list is missing from this checkout.")
-    channels = source_registry.load_channel_list(starter_path)
+    channels = [
+        channel
+        for channel in source_registry.load_channel_list(starter_path)
+        if not source_registry.normalize_channel_name(channel).casefold().startswith("example_")
+    ]
     registry_path = _project_root() / ".tgcs" / "sources.json"
     result = source_registry.import_channels(
         channels,
@@ -269,7 +273,9 @@ def import_starter_sources(body: dict) -> dict:
     )
     payload = _source_import_payload(result, topic=topic, written=True)
     payload["title"] = "Starter sources installed"
-    payload["detail"] = "Signal Desk added the packaged starter source set. Replace or prune it from Settings as you learn what works."
+    payload["detail"] = (
+        "Signal Desk refreshed the packaged starter source set. Example placeholders are skipped; add real channels from Settings when needed."
+    )
     return payload
 
 

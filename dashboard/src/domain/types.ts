@@ -196,6 +196,7 @@ export type DeskSourcesResult = {
 export type DeskNotificationTokenStatus = {
   schema_version: "desk_notification_token_status_v1";
   configured: boolean;
+  verification_status?: string;
   source: string;
   updated_at?: string | null;
   env_configured: boolean;
@@ -252,7 +253,10 @@ export type DeskAiProviderStatus = {
   provider: string;
   label: string;
   env_name: string;
+  purpose?: string;
   configured: boolean;
+  verification_status?: string;
+  usable_for_matching?: boolean;
   source: string;
   env_configured: boolean;
   local_store_configured: boolean;
@@ -267,6 +271,8 @@ export type DeskAiProviderStatus = {
 export type DeskAiSettingsStatus = {
   schema_version: "desk_ai_settings_status_v1";
   configured_count: number;
+  matching_configured_count?: number;
+  ocr_configured_count?: number;
   local_store_supported: boolean;
   local_store_backend?: string;
   local_store_label?: string;
@@ -374,7 +380,7 @@ export type DeliveryTestResult = {
   schema_version: "desk_delivery_test_result_v1";
   target_id: string;
   target_type: string;
-  mode: "dry-run";
+  mode: "dry-run" | "live";
   ok: boolean;
   status: string;
   title?: string;
@@ -609,6 +615,7 @@ export type DeskSchedulerStatus = {
 export type DeskTelegramStatus = {
   schema_version: "desk_telegram_status_v1";
   credentials_ready: boolean;
+  credentials_status?: string;
   session_ready: boolean;
   login_state: string;
   detail: string;

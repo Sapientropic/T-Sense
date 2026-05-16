@@ -3,6 +3,7 @@ export type SettingsTask = "sources" | "ai" | "notifications" | "learning" | "up
 export function SettingsTaskSwitch({
   activeTask,
   sourceCount,
+  sourceDetail,
   aiCount,
   notificationCount,
   feedbackCount,
@@ -11,6 +12,7 @@ export function SettingsTaskSwitch({
 }: {
   activeTask: SettingsTask;
   sourceCount: number;
+  sourceDetail?: string;
   aiCount: number;
   notificationCount: number;
   feedbackCount: number;
@@ -18,7 +20,7 @@ export function SettingsTaskSwitch({
   onSelect: (task: SettingsTask) => void;
 }) {
   const tasks: Array<{ id: SettingsTask; label: string; count: number; detail: string }> = [
-    { id: "sources", label: "Sources", count: sourceCount, detail: "Add or manage channels" },
+    { id: "sources", label: "Sources", count: sourceCount, detail: sourceDetail || "Tracked channels" },
     { id: "ai", label: "AI API", count: aiCount, detail: "Matching and image reading" },
     { id: "notifications", label: "Alerts", count: notificationCount, detail: "Where alerts go" },
     {

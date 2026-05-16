@@ -1,10 +1,4 @@
 # Developer Opportunity Starter
-# These are intentionally illustrative starter handles.
-# Replace them in Signal Desk Settings with Telegram channels you trust.
+# This production starter intentionally ships without non-resolving example_ handles.
+# Add real Telegram channels in Signal Desk Settings or use Source Assistant to discover them.
 # One channel name per line. Lines starting with # are ignored.
-
-example_remote_jobs
-example_developer_hiring
-example_frontend_jobs
-example_backend_jobs
-example_web3_jobs

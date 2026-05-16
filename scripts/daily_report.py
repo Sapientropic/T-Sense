@@ -77,6 +77,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--redact-contact-info", action="store_true")
     parser.add_argument("--next-scan-note")
     parser.add_argument("--allow-incomplete", action="store_true")
+    parser.add_argument(
+        "--allow-partial-failures",
+        action="store_true",
+        help="Continue report generation when scan.py collected messages from at least one source.",
+    )
     parser.add_argument("--state-dir", type=Path, help="Opt-in local item memory directory for report.py.")
     parser.add_argument("--state-read-only", action="store_true", help="Read item memory without writing updates.")
     parser.add_argument(
@@ -128,6 +133,8 @@ def main(argv: list[str] | None = None) -> int:
         scan_cmd.extend(["--delay", str(args.scan_delay)])
     if args.allow_incomplete:
         scan_cmd.append("--allow-incomplete")
+    if args.allow_partial_failures:
+        scan_cmd.append("--allow-partial-failures")
     if json_mode:
         scan_cmd.extend(["--format", "json"])
 

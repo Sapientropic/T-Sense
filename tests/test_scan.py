@@ -231,6 +231,32 @@ class ScanTests(unittest.TestCase):
         self.assertIsNotNone(cfg)
         self.assertEqual(created[0], ("https://api.openai.com/v1", "sk-test"))
 
+    def test_ocr_xai_provider_uses_current_xai_image_model(self):
+        created = []
+
+        class FakeOpenAI:
+            def __init__(self, *, base_url, api_key):
+                created.append((base_url, api_key))
+
+        fake_openai = SimpleNamespace(OpenAI=FakeOpenAI)
+        with patch.dict(os.environ, {"XAI_API_KEY": "xai-test"}, clear=True):
+            with patch.object(scan, "openai", fake_openai):
+                parser = scan.build_parser()
+                args = parser.parse_args(
+                    [
+                        "channel_lists/example.txt",
+                        "--ocr",
+                        "--ocr-provider",
+                        "xai",
+                    ]
+                )
+
+                cfg = scan._make_ocr_config(args)
+
+        self.assertIsNotNone(cfg)
+        self.assertEqual(created[0], ("https://api.x.ai/v1", "xai-test"))
+        self.assertEqual(cfg.model, "grok-4.3")
+
     def test_ocr_custom_provider_uses_explicit_base_url(self):
         created = []
 
@@ -414,6 +440,76 @@ class ScanTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertEqual(max_active, 2)
         self.assertEqual([row["channel"] for row in rows], ["jobs_a", "jobs_b", "jobs_c"])
+
+    def test_run_scan_can_keep_partial_source_failures_as_warnings(self):
+        class FakeClient:
+            def __init__(self, session, api_id, api_hash, *, flood_sleep_threshold):
+                pass
+
+            async def connect(self):
+                return None
+
+            async def is_user_authorized(self):
+                return True
+
+            async def disconnect(self):
+                return None
+
+        with tempfile.TemporaryDirectory() as tmp:
+            channel_list = Path(tmp) / "channels.txt"
+            channel_list.write_text("good_jobs\nmissing_jobs\n", encoding="utf-8")
+            output_dir = Path(tmp) / "output"
+            output_path = output_dir / "scan.jsonl"
+            parser = scan.build_parser()
+            args = parser.parse_args(
+                [
+                    str(channel_list),
+                    "--output-dir",
+                    str(output_dir),
+                    "--output",
+                    str(output_path),
+                    "--allow-partial-failures",
+                    "--format",
+                    "json",
+                ]
+            )
+
+            async def fake_resolve_entity(client, channel_name):
+                if channel_name == "missing_jobs":
+                    raise scan.ScanError("cannot resolve entity")
+                return f"entity:{channel_name}"
+
+            async def fake_read_channel(**kwargs):
+                channel = kwargs["channel_name"]
+                return scan.ChannelResult(
+                    channel=channel,
+                    messages=[{"channel": channel, "id": 1}],
+                    raw_count=1,
+                    skipped_missing_date=0,
+                    limit=kwargs["max_limit"],
+                    incomplete=False,
+                    ocr_count=0,
+                    stderr="",
+                )
+
+            stdout = io.StringIO()
+            with patch.object(scan, "load_config", return_value=scan.ScannerConfig(1, "hash", "session")):
+                with patch.object(scan, "StringSession", return_value="fake-session"):
+                    with patch.object(scan, "TelegramClient", FakeClient):
+                        with patch.object(scan, "resolve_entity", side_effect=fake_resolve_entity):
+                            with patch.object(scan, "read_channel", side_effect=fake_read_channel):
+                                with patch("sys.stdout", stdout):
+                                    exit_code = asyncio.run(scan._run_scan(args))
+
+            payload = json.loads(stdout.getvalue())
+            metadata = json.loads(scan.meta_path_for_output(output_path).read_text(encoding="utf-8"))
+
+        self.assertEqual(exit_code, scan.agent_cli.EXIT_SUCCESS)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["data"]["status"], "complete_with_warnings")
+        self.assertEqual(payload["data"]["failure_count"], 1)
+        self.assertEqual(metadata["failure_count"], 1)
+        self.assertEqual(metadata["total_messages_collected"], 1)
 
     def test_run_scan_fails_empty_channel_list(self):
         class FakeClient:

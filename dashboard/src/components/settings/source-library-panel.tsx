@@ -56,9 +56,12 @@ export function SourceLibraryPanel({
   const listVisible = showSourceList || hasFilters;
   const managementOpen = libraryOpen || hasFilters || showSourceList || isLoading || Boolean(error) || !sources.length;
   const activityLabel = sourceLibraryActivityLabel(sourceStats);
+  const pausedCount = Math.max(0, (library?.source_count ?? sources.length) - (library?.enabled_count ?? sources.length));
   const countLabel = listVisible
     ? sourceLibraryCountLabel(visibleSources.length, filteredSources.length, hasFilters)
-    : `${filteredSources.length} saved; search or manage when needed`;
+    : library
+      ? `${library.enabled_count} tracked · ${pausedCount} paused · ${library.source_count} saved`
+      : `${filteredSources.length} saved; search or manage when needed`;
   useEffect(() => {
     if (selectedTopic && !sources.some((source) => source.topics.includes(selectedTopic))) {
       setSelectedTopic("");

@@ -52,6 +52,7 @@ class MonitorConfigHelperTests(unittest.TestCase):
                     source_args=["--source-registry", str(root / ".tgcs" / "sources.json")],
                     hours=2,
                     allow_incomplete=False,
+                    allow_partial_failures=True,
                 )
                 daily_cmd = monitor.daily_report_command(
                     profile={},
@@ -64,11 +65,14 @@ class MonitorConfigHelperTests(unittest.TestCase):
                     allow_incomplete=False,
                     profile_id="jobs-fast",
                     run_id="run-command",
+                    allow_partial_failures=True,
                 )
 
         self.assertEqual(Path(report_cmd[1]), root / "scripts" / "report.py")
         self.assertEqual(Path(scan_cmd[1]), root / "scripts" / "scan.py")
         self.assertEqual(Path(daily_cmd[1]), root / "scripts" / "daily_report.py")
+        self.assertIn("--allow-partial-failures", scan_cmd)
+        self.assertIn("--allow-partial-failures", daily_cmd)
         self.assertEqual(monitor_execution.PROJECT_ROOT, root)
 
     def test_default_config_includes_fast_jobs_monitor(self):
@@ -83,6 +87,7 @@ class MonitorConfigHelperTests(unittest.TestCase):
         self.assertEqual(jobs["alert_schedule_mode"], "work_hours")
         self.assertEqual(jobs["delivery_targets"], ["telegram-bot-default"])
         self.assertTrue(jobs["prefilter_enabled"])
+        self.assertTrue(jobs["allow_partial_source_failures"])
         self.assertIn("hiring", jobs["prefilter_keywords"])
         self.assertIn("freelance", jobs["prefilter_keywords"])
         self.assertIn("contract", jobs["prefilter_keywords"])

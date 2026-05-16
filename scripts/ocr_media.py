@@ -39,7 +39,9 @@ CONFIG_PATH = CONFIG_DIR / "config.toml"
 SESSION_PATH = CONFIG_DIR / "session"
 
 DEFAULT_BASE_URL = "https://api.x.ai/v1"
-DEFAULT_MODEL = "grok-4.1-fast"
+# Keep standalone OCR aligned with scan.py's xAI default; retired fast Grok
+# slugs now fail before image processing starts.
+DEFAULT_MODEL = "grok-4.3"
 DEFAULT_STT_MODEL = "whisper-1"
 DEFAULT_VIDEO_FRAMES = 3
 

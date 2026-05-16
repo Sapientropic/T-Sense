@@ -155,6 +155,7 @@ def default_config(config_path: Path) -> MonitorConfig:
         "delivery_targets": ["telegram-bot-default"],
         "dashboard_visible": True,
         "prefilter_enabled": True,
+        "allow_partial_source_failures": True,
         "prefilter_keywords": DEFAULT_FAST_JOBS_PREFILTER_KEYWORDS,
         "semantic_max_messages": DEFAULT_FAST_JOBS_SEMANTIC_MAX_MESSAGES,
         "semantic_max_tokens": DEFAULT_FAST_JOBS_SEMANTIC_MAX_TOKENS,
@@ -209,6 +210,8 @@ def load_config(config_path: Path, root: Path | None = None) -> MonitorConfig:
         item.setdefault("delivery_targets", ["telegram-bot-default"])
         if "prefilter_enabled" in base_profile:
             item.setdefault("prefilter_enabled", base_profile["prefilter_enabled"])
+        if "allow_partial_source_failures" in base_profile:
+            item.setdefault("allow_partial_source_failures", base_profile["allow_partial_source_failures"])
         if "prefilter_keywords" in base_profile:
             item.setdefault("prefilter_keywords", base_profile["prefilter_keywords"])
         if "semantic_max_messages" in base_profile:

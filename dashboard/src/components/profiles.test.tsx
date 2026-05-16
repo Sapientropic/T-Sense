@@ -2,7 +2,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import { ProfilesView, runtimeSettingsSaveState } from "./profiles";
-import { runtimeSettingsSaveState as runtimeSettingsSaveStateFromModel } from "./profiles/runtime-settings-model";
+import {
+  runtimeSettingsSaveState as runtimeSettingsSaveStateFromModel,
+  timezoneMismatchLine,
+} from "./profiles/runtime-settings-model";
 import type { Profile, ProfilePatch } from "../domain/types";
 
 function profile(overrides: Partial<Profile>): Profile {
@@ -34,6 +37,11 @@ const createProfileFromBrief = vi.fn(async () => ({
 describe("ProfilesView", () => {
   it("keeps the split runtime settings model helper on the public profiles API", () => {
     expect(runtimeSettingsSaveStateFromModel).toBe(runtimeSettingsSaveState);
+  });
+
+  it("surfaces host timezone mismatches separately from profile timezone", () => {
+    expect(timezoneMismatchLine("Asia/Shanghai", "Asia/Baghdad")).toContain("Browser timezone Asia/Baghdad");
+    expect(timezoneMismatchLine("Asia/Shanghai", "Asia/Shanghai")).toBe("");
   });
 
   it("renders monitoring controls as human actions", () => {

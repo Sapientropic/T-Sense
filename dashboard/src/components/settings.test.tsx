@@ -321,8 +321,8 @@ describe("Settings source topic editor", () => {
       />,
     );
 
-    expect(html).toContain("Test without sending");
-    expect(html).toContain("This checks the saved target without sending a Telegram message.");
+    expect(html).toContain("Send test message");
+    expect(html).toContain("Sends a Telegram message to this chat");
     expect(html).not.toContain("dry run");
     expect(html).not.toContain("dry-run");
   });

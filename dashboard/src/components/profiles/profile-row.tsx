@@ -19,6 +19,7 @@ import {
   isOptionalTimezoneValid,
   normalizeWeekdays,
   parseOptionalIntegerField,
+  timezoneMismatchLine,
   timezoneOptions,
 } from "./runtime-settings-model";
 
@@ -220,6 +221,7 @@ function NotificationDetailsControl({
   const saveState = notificationSettingsSaveState(profile, draft);
   const detectedTimezone = detectedBrowserTimezone();
   const timezoneChoices = timezoneOptions(draft.timezoneText, detectedTimezone);
+  const timezoneMismatch = timezoneMismatchLine(draft.timezoneText, detectedTimezone);
   const workStartChoices = optionValuesWithCurrent(draft.workStartText, HALF_HOUR_TIME_OPTIONS);
   const workEndChoices = optionValuesWithCurrent(draft.workEndText, HALF_HOUR_TIME_OPTIONS);
   const workIntervalChoices = numericOptionsWithCurrent(Number(draft.workIntervalText), NOTIFICATION_INTERVAL_OPTIONS);
@@ -254,6 +256,7 @@ function NotificationDetailsControl({
               </option>
             ))}
           </select>
+          {timezoneMismatch && <small className="profile-timezone-warning">{timezoneMismatch}</small>}
         </label>
         <label>
           <span>Work starts</span>

@@ -139,6 +139,15 @@ export function timezoneOptions(current: string, detected: string) {
   return Array.from(new Set(options));
 }
 
+export function timezoneMismatchLine(profileTimezone: string, detectedTimezone: string) {
+  const profile = friendlyTimezone(profileTimezone);
+  const detected = friendlyTimezone(detectedTimezone);
+  if (!profile || !detected || profile === detected) {
+    return "";
+  }
+  return `Browser timezone ${detected}; profile uses ${profile}. Run times and alert windows follow the profile timezone.`;
+}
+
 function friendlyTimezone(value: string) {
   const normalized = value.trim();
   const aliases: Record<string, string> = {

@@ -166,32 +166,7 @@ DESK_BOT_GATEWAY_TASK_NAME = "T-Sense Bot Gateway"
 DESK_BOT_GATEWAY_LAUNCHD_LABEL = "com.sapientropic.tsense.bot-gateway"
 DESK_BOT_GATEWAY_SYSTEMD_NAME = "tsense-bot-gateway"
 DESK_BOT_GATEWAY_POLL_TIMEOUT_SECONDS = 8
-DESK_AI_PROVIDER_CONFIGS: dict[str, dict[str, str]] = {
-    "openai": {
-        "label": "OpenAI",
-        "env_name": "OPENAI_API_KEY",
-        "target": "tgcs.signal-desk.openai-api-key",
-        "username": "OpenAI API key",
-    },
-    "deepseek": {
-        "label": "DeepSeek",
-        "env_name": "DEEPSEEK_API_KEY",
-        "target": "tgcs.signal-desk.deepseek-api-key",
-        "username": "DeepSeek API key",
-    },
-    "minimax": {
-        "label": "MiniMax",
-        "env_name": "MINIMAX_TOKEN_PLAN_KEY",
-        "target": "tgcs.signal-desk.minimax-token-plan-key",
-        "username": "MiniMax token plan key",
-    },
-    "xai": {
-        "label": "xAI OCR",
-        "env_name": "XAI_API_KEY",
-        "target": "tgcs.signal-desk.xai-api-key",
-        "username": "xAI API key",
-    },
-}
+DESK_AI_PROVIDER_CONFIGS = desk_credentials.DESK_AI_PROVIDER_CONFIGS
 _DESK_TELEGRAM_LOGIN: dict[str, str] = {}
 _DESK_TELEGRAM_LOGIN_LOCK = Lock()
 

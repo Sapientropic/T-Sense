@@ -167,6 +167,13 @@ def telegram_status(
 ) -> dict:
     credentials_ready = _telegram_credentials_ready(config_path=config_path)
     session_ready = _telegram_session_ready(session_path=session_path)
+    credentials_status = (
+        "missing"
+        if not credentials_ready
+        else "verified"
+        if session_ready
+        else "saved_unverified"
+    )
     login = _telegram_login_snapshot()
     expired_login = _telegram_login_expired(login)
     if expired_login:
@@ -198,11 +205,12 @@ def telegram_status(
         next_step = "Send a new Telegram login code."
     else:
         state = "ready_for_code"
-        detail = "Credentials are saved. Send a Telegram login code from Signal Desk."
+        detail = "Telegram app credentials are saved, but Telegram has not verified them yet. Send a login code to check them."
         next_step = "Enter your phone number and send a login code."
     return {
         "schema_version": "desk_telegram_status_v1",
         "credentials_ready": credentials_ready,
+        "credentials_status": credentials_status,
         "session_ready": session_ready,
         "login_state": state,
         "detail": detail,
@@ -215,7 +223,9 @@ def telegram_status(
 def _telegram_interactive_error(exc: Exception, *, action: str) -> ValueError:
     name = exc.__class__.__name__
     lowered = name.lower()
-    if "phonecodeinvalid" in lowered:
+    if "apiidinvalid" in lowered or "apihashinvalid" in lowered:
+        message = "Telegram rejected the app ID or app hash. Change app details and try again."
+    elif "phonecodeinvalid" in lowered:
         message = "Telegram rejected the verification code. Check the code and try again."
     elif "phonecodenot" in lowered or "phonecodeexpired" in lowered:
         message = "Telegram login code expired. Send a new code."
