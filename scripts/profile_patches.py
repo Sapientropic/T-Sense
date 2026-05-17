@@ -547,7 +547,7 @@ def _compact_feedback_card(item: dict[str, Any]) -> dict[str, Any]:
         if key not in item:
             continue
         value = _safe_card_context_value(item.get(key))
-        if value not in {"", None}:
+        if not _is_empty_card_context_value(value):
             compact[key] = value
     decision_state = item.get("decision_state")
     if isinstance(decision_state, dict):
@@ -580,8 +580,20 @@ def _safe_card_context_value(value: Any) -> Any:
         return value
     if isinstance(value, list):
         output = [_safe_card_context_value(item) for item in value[:8]]
-        return [item for item in output if item not in {"", None}]
+        return [item for item in output if not _is_empty_card_context_value(item)]
     return ""
+
+
+def _is_empty_card_context_value(value: Any) -> bool:
+    # Review card metadata may contain lists; emptiness checks here must not
+    # require values to be hashable or Learning suggestions can crash.
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return value == ""
+    if isinstance(value, list):
+        return len(value) == 0
+    return False
 
 
 def create_profile_patch_suggestion(

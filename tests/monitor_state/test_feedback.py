@@ -266,6 +266,42 @@ class MonitorStateFeedbackTests(unittest.TestCase):
         self.assertEqual(summary["next_action"]["target_tab"], "profiles")
 
 
+    def test_feedback_profile_suggestions_accept_list_card_context(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        monitor_state.init_db(conn)
+        with tempfile.TemporaryDirectory() as tmp:
+            profile_path = Path(tmp) / "jobs.md"
+            profile_path.write_text("# Jobs profile\n", encoding="utf-8")
+            monitor_state.upsert_profile(
+                conn,
+                {"id": "jobs-fast", "path": str(profile_path), "enabled": True},
+            )
+            cards = monitor_state.upsert_review_cards(
+                conn,
+                profile_id="jobs-fast",
+                run_id="run-1",
+                items=[
+                    {
+                        "topic": "Skipped internship",
+                        "rating": "low",
+                        "tags": ["internship", "junior"],
+                        "decision_state": {"signals": ["too junior", "low seniority"]},
+                        "source_message_refs": [{"channel": "jobs", "id": 2}],
+                    }
+                ],
+            )
+            monitor_state.set_card_action(conn, card_id=cards[0]["card_id"], action="skip")
+
+            with patch.dict("os.environ", {"TGCS_PROFILE_PATCH_DISABLE_LLM": "1"}, clear=False):
+                with patch.object(monitor_state, "PROJECT_ROOT", Path(tmp)):
+                    result = monitor_state.create_feedback_profile_patch_suggestions(conn)
+
+        self.assertEqual(result["created_count"], 1)
+        self.assertEqual(result["skipped_count"], 0)
+        self.assertEqual(conn.execute("SELECT COUNT(*) FROM profile_patch_suggestions").fetchone()[0], 1)
+
+
     def test_feedback_summary_tracks_changes_since_last_export(self):
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row
