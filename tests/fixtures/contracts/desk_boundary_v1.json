@@ -20,7 +20,7 @@
         "title": "Run AI review",
         "detail": "Fetch latest source messages, create Review cards, and send Telegram alerts when notifications are enabled.",
         "run_mode": "execute",
-        "display_command": "tgcs monitor run --profile-id jobs-fast --delivery-mode live",
+        "display_command": "tgcs monitor run --profile-id market-news --delivery-mode live",
         "next_action": "Review the new cards in Signal Desk or act on the Telegram alert buttons."
       },
       {
@@ -61,7 +61,7 @@
     "status": "success",
     "title": "AI review complete",
     "detail": "Report ready.",
-    "display_command": "tgcs monitor run --profile-id jobs-fast --delivery-mode live",
+    "display_command": "tgcs monitor run --profile-id market-news --delivery-mode live",
     "exit_code": 0,
     "artifact_path": "output/runs/run-desk-contract/report.html",
     "next_action": "Open the generated report."
@@ -108,7 +108,7 @@
           "title": "Run AI review",
           "detail": "Fetch latest source messages, create Review cards, and send Telegram alerts when notifications are enabled.",
           "run_mode": "execute",
-          "display_command": "tgcs monitor run --profile-id jobs-fast --delivery-mode live",
+          "display_command": "tgcs monitor run --profile-id market-news --delivery-mode live",
           "next_action": "Review the new cards in Signal Desk or act on the Telegram alert buttons.",
           "argv": ["tgcs", "monitor", "run"],
           "token": "SECRET_DESK_BOUNDARY_TOKEN_SHOULD_NOT_SURFACE"
@@ -121,7 +121,7 @@
       "status": "success",
       "title": "AI review complete",
       "detail": "Report ready.",
-      "display_command": "tgcs monitor run --profile-id jobs-fast --delivery-mode live",
+      "display_command": "tgcs monitor run --profile-id market-news --delivery-mode live",
       "exit_code": 0,
       "artifact_path": "output/runs/run-desk-contract/report.html",
       "next_action": "Open the generated report.",
@@ -159,7 +159,7 @@
         "title": "Run AI review",
         "detail": "Fetch latest source messages, create Review cards, and send Telegram alerts when notifications are enabled.",
         "run_mode": "execute",
-        "display_command": "tgcs monitor run --profile-id jobs-fast --delivery-mode live",
+        "display_command": "tgcs monitor run --profile-id market-news --delivery-mode live",
         "next_action": "Review the new cards in Signal Desk or act on the Telegram alert buttons."
       }
     ],
@@ -169,7 +169,7 @@
       "status": "success",
       "title": "AI review complete",
       "detail": "Report ready.",
-      "display_command": "tgcs monitor run --profile-id jobs-fast --delivery-mode live",
+      "display_command": "tgcs monitor run --profile-id market-news --delivery-mode live",
       "exit_code": 0,
       "artifact_path": "output/runs/run-desk-contract/report.html",
       "next_action": "Open the generated report.",
