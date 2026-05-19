@@ -1,6 +1,6 @@
 include LICENSE README.md pyproject.toml
 recursive-include scripts *.py
-recursive-include channel_lists *.py *.txt *.md
+recursive-include channel_lists *.py *.txt *.md *.json
 include profiles/__init__.py
 include profiles/README.md
 include profiles/example-airdrop.md

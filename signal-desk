@@ -8,8 +8,8 @@ if [ ! -x "$ROOT_DIR/.venv/bin/python" ] && [ ! -x "$ROOT_DIR/.venv/Scripts/pyth
   echo "First run: preparing T-Sense local dependencies..."
   bash "$ROOT_DIR/setup.sh"
 elif [ ! -f "$ROOT_DIR/.tgcs/sources.json" ]; then
-  echo "Initializing T-Sense jobs starter defaults..."
-  "$ROOT_DIR/tgcs" init --starter jobs
+  echo "Initializing T-Sense starter defaults..."
+  "$ROOT_DIR/tgcs" init
 fi
 
 if [ "${TGCS_SIGNAL_DESK_FOREGROUND:-0}" = "1" ]; then

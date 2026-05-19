@@ -65,7 +65,7 @@ normal user does not have to edit TOML, copy JSON, or remember CLI commands.
 
 | Tab | Purpose |
 | --- | --- |
-| `Start` | Connect Telegram, repair setup, run demo scans, and manage auto-scan controls. |
+| `Start` | Run the demo, create a goal/profile, connect Telegram, add sources, and start the first review. |
 | `Review` | Triage the newest/highest-priority cards first, mark opportunity state with Applied / Saved / Contacted / Duplicate / Dismissed, then tune future matching with Prefer similar / Deprioritize / Wrong match. |
 | `Profiles` | Create profiles from plain language or files, edit matching rules, tune scan window and post limits. |
 | `Runs` | See whether recent scans are healthy and open generated report artifacts. |
@@ -146,16 +146,18 @@ Platform-specific notes for local key storage and auto-scan setup live in
 
 1. Open `Start` and create the offline demo report. This does not need Telegram
    login or an LLM key.
-2. Connect Telegram using your `api_id` and `api_hash` from
+2. Create or select a monitoring goal from `Profiles` / `Start` so Signal Desk
+   knows what you want to watch.
+3. Connect Telegram using your `api_id` and `api_hash` from
    [my.telegram.org/apps](https://my.telegram.org/apps).
-3. Add and check sources from `Start` / `Settings -> Sources` with the curated
+4. Add and check sources from `Start` / `Settings -> Sources` with the curated
    public starter set, pasted public links/handles, metadata-only candidate
    JSON, or Source assistant. Source assistant can preview local Telegram
    folder/all-channel discovery before applying any registry change.
-4. Run a dry scan from `Start`; if access fails, use the source access repair buttons before scanning again.
-5. Review cards in `Review`, then tune the profile when the results are too
+5. Run a dry scan from `Start`; if access fails, use the source access repair buttons before scanning again.
+6. Review cards in `Review`, then tune the profile when the results are too
    broad or too narrow.
-6. Open `Runs` when something fails; it shows the next repair step before asking
+7. Open `Runs` when something fails; it shows the next repair step before asking
    you to trust automation.
 
 ## Profiles

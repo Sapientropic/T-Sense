@@ -446,6 +446,40 @@ describe("Settings source topic editor", () => {
     expect(html).not.toContain("readonly");
   });
 
+  it("puts starter and public source paths before AI discovery when no profile exists", () => {
+    const html = renderToStaticMarkup(
+      <SourceImportPanel
+        result={null}
+        previewSourceImport={async () => {
+          throw new Error("manual import should not run during render");
+        }}
+        importSources={async () => {
+          throw new Error("manual import should not run during render");
+        }}
+        importStarterSources={async () => {
+          throw new Error("starter import should not run during render");
+        }}
+        previewSourceAssistant={async () => {
+          throw new Error("assistant should not run during render");
+        }}
+        applySourceAssistant={async () => {
+          throw new Error("assistant should not run during render");
+        }}
+        busy={false}
+        hasSavedSources={false}
+        profiles={[]}
+      />,
+    );
+
+    expect(html).toContain("Known public sources");
+    expect(html).toContain("Starter recommendations");
+    expect(html).toContain("Create a profile to unlock AI Telegram folder discovery.");
+    expect(html.indexOf("Known public sources")).toBeLessThan(html.indexOf("Create a profile to unlock AI Telegram folder discovery."));
+    expect(html).not.toContain("AI filters your Telegram channels against the selected profile.");
+    expect(html).not.toContain("value=\"default\"");
+    expect(html).not.toContain("Profile</span><select");
+  });
+
   it("shows profile coach confidence and matching mode after preview", () => {
     const coach: ProfileCoachPreview = {
       schema_version: "profile_coach_preview_v1",

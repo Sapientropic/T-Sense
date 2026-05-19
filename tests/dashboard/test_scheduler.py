@@ -103,7 +103,7 @@ class DashboardSchedulerTests(unittest.TestCase):
         self.assertIn(dashboard_server.DESK_SCHEDULER_TASK_NAME, args)
         trigger = args[args.index("/TR") + 1]
         self.assertIn("tgcs.py", trigger)
-        self.assertIn("--profile-id jobs-fast", trigger)
+        self.assertIn("--profile-id market-news", trigger)
         self.assertIn("--delivery-mode live", trigger)
         self.assertNotIn("--delivery-mode dry-run", trigger)
         self.assertEqual(result["status"], "success")
@@ -722,7 +722,7 @@ class DashboardSchedulerTests(unittest.TestCase):
                 "monitor",
                 "run",
                 "--profile-id",
-                "jobs-fast",
+                "market-news",
                 "--delivery-mode",
                 "live",
             ],
@@ -731,9 +731,9 @@ class DashboardSchedulerTests(unittest.TestCase):
         self.assertEqual(plist["EnvironmentVariables"]["TGCS_PROJECT_ROOT"], str(project_root))
         self.assertEqual(plist["EnvironmentVariables"]["TG_SCANNER_CONFIG_DIR"], str(project_root / ".tgcs" / "telegram"))
         self.assertEqual(plist["EnvironmentVariables"]["TGCLI_CONFIG_DIR"], str(project_root / ".tgcs" / "telegram"))
-        self.assertTrue(plist["StandardOutPath"].endswith("/tgcs-jobs-fast.log"))
+        self.assertTrue(plist["StandardOutPath"].endswith("/tgcs-market-news.log"))
         self.assertIn("/tmp/tsense-launchd-", plist["StandardOutPath"])
-        self.assertTrue(plist["StandardErrorPath"].endswith("/tgcs-jobs-fast.err.log"))
+        self.assertTrue(plist["StandardErrorPath"].endswith("/tgcs-market-news.err.log"))
         self.assertIn("/tmp/tsense-launchd-", plist["StandardErrorPath"])
         self.assertIn(["launchctl", "unload", "-w", str(plist_path)], calls)
         self.assertIn(["launchctl", "load", "-w", str(plist_path)], calls)
@@ -954,7 +954,7 @@ class DashboardSchedulerTests(unittest.TestCase):
             timer_text = timer_path.read_text(encoding="utf-8")
 
         self.assertEqual(result["status"], "success")
-        self.assertIn(f"ExecStart={project_root / 'tgcs'} monitor run --profile-id jobs-fast --delivery-mode live", service_text)
+        self.assertIn(f"ExecStart={project_root / 'tgcs'} monitor run --profile-id market-news --delivery-mode live", service_text)
         self.assertIn("OnUnitActiveSec=15min", timer_text)
         self.assertIn(["systemctl", "--user", "daemon-reload"], calls)
         self.assertIn(["systemctl", "--user", "enable", "--now", "tsense-auto-review.timer"], calls)

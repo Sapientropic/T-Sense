@@ -331,7 +331,7 @@ def _miniapp_source_excerpt(item: dict[str, Any]) -> str:
 
 
 def _miniapp_public_source_candidate_payload() -> dict[str, Any]:
-    paths = desk_source_registry._starter_source_candidate_paths()
+    paths = desk_source_registry._starter_source_candidate_paths("jobs")
     candidates_path = next((path for path in paths if path.suffix.casefold() == ".json" and path.exists()), None)
     if not candidates_path:
         return {"topic": "jobs", "candidates": []}
@@ -469,4 +469,5 @@ def _miniapp_setup_status(value: object) -> dict[str, Any] | None:
         "next_step": str(value.get("next_step") or ""),
         "has_runs": bool(value.get("has_runs")),
         "has_profiles": bool(value.get("has_profiles")),
+        "has_user_goal": bool(value.get("has_user_goal")),
     }

@@ -100,8 +100,8 @@ echo === Next Steps ===
 echo 1. Open Signal Desk:
 echo    Signal Desk.bat
 echo.
-echo 2. In the Start tab, save your Telegram app ID/hash, connect Telegram,
-echo    run the offline demo, and start the first AI review.
+echo 2. In the Start tab, run the offline demo, create or select a monitor goal,
+echo    connect Telegram, add sources, and start the first AI review.
 echo    Telegram app credentials come from: https://my.telegram.org/apps
 echo    ^(If the form shows ERROR, see docs\getting-api-credentials.md^)
 goto config_done
@@ -115,10 +115,10 @@ echo To reconfigure, edit: %TGCLI_CONFIG%
 if not exist "output" mkdir output
 
 echo.
-echo Initializing local project defaults (jobs starter)...
-call tgcs.bat init --starter jobs
+echo Initializing local project defaults (market-news starter)...
+call tgcs.bat init
 if errorlevel 1 (
-    echo Warning: local project defaults were not initialized. Run tgcs.bat init --starter jobs after setup.
+    echo Warning: local project defaults were not initialized. Open Signal Desk Start or run tgcs.bat init after setup.
 ) else (
     echo Local project defaults ready.
 )
@@ -127,4 +127,4 @@ echo.
 echo Setup complete. Next: open Signal Desk
 echo   Config:  %TGCLI_CONFIG%
 echo   Open:    Signal Desk.bat
-echo   Expert CLI fallback: tgcs.bat quickstart jobs
+echo   Advanced CLI users can run tgcs.bat --help

@@ -9,7 +9,7 @@ tests.
 | Platform | Recommended launcher | Notes |
 | --- | --- | --- |
 | Windows | `Signal Desk.bat` | Creates or reuses `.venv`, prepares dependencies, then opens Signal Desk. |
-| macOS / Linux | `./signal-desk` | Runs `setup.sh` on first launch, initializes the jobs starter when needed, then opens Signal Desk. |
+| macOS / Linux | `./signal-desk` | Runs `setup.sh` on first launch, initializes the default `market-news` starter when needed, then opens Signal Desk. |
 | macOS Finder | `Signal Desk.command` | Thin double-click wrapper around `./signal-desk`. |
 
 The expert path remains `./tgcs ...` on macOS/Linux and `tgcs.bat ...` on
@@ -77,12 +77,11 @@ launcher traceback.
 Signal Desk should not require a normal user to create source files by hand.
 The app path is:
 
-- `Use starter set` installs the packaged public Developer Opportunity starter
-  into `.tgcs/sources.json`. Packaged builds prefer metadata-only
-  `jobs.public-candidates.json` and keep `jobs.txt` as a handle-only fallback;
-  the import prunes legacy `example_*` placeholder sources while preserving real
-  user sources. Users should review and prune noisy channels from Settings before
-  treating the list as production-quality.
+- `Starter recommendations` installs the packaged public starter for the current
+  topic into `.tgcs/sources.json`. The default first-run topic is `market-news`;
+  the Developer Opportunity starter remains available when the user selects that
+  profile/lane explicitly. Users should review and prune noisy channels from
+  Settings before treating the list as production-quality.
 - `Known public sources` accepts pasted public `t.me` links/handles or
   `public_source_candidates_v1` JSON. Candidate JSON is metadata-only and is
   rejected if it includes Telegram message/post/raw text fields; safe
@@ -92,7 +91,9 @@ The app path is:
   `remove @old_jobs` and previews the local registry change before applying it.
 - `Source assistant` can also discover visible local Telegram channels from all
   dialogs or a named/id folder, then let the configured AI select channels
-  against the active profile after explicit confirmation.
+  against the active profile after explicit confirmation. It is shown after a
+  profile exists; first-run users without a profile see starter/public source
+  paths first.
 - Saved sources can be paused, resumed, retagged, or removed from Settings.
 - `Check source syntax` validates the registry file only. `Check source access`
   uses the local Telegram session to run a bounded, no-message-text probe and

@@ -179,7 +179,7 @@ Allowed chats come from
 delivery targets in `.tgcs/tgcs.db`.
 `Signal Desk.bat` is the Windows no-command-line launcher. `./signal-desk` is
 the macOS/Linux app-like launcher; it runs setup on first launch, initializes
-the jobs starter when local defaults are missing, then starts
+the default `market-news` starter when local defaults are missing, then starts
 `./tgcs dashboard --open`.
 Signal Desk `Start` is the primary human surface. It exposes a small dashboard
 action API for human-friendly wrappers around fixed local commands:

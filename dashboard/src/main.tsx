@@ -187,9 +187,10 @@ function App() {
     () => deskActions.find((action) => action.group === "Run" && action.run_mode === "execute")?.action_id ?? "",
     [deskActions],
   );
-  const headerReportActionId = state.setup_status?.has_profiles ? "monitor_jobs_dry_run" : "demo_render";
-  const headerReportLabel = state.setup_status?.has_profiles ? "New report" : "Demo report";
-  const headerReportTitle = state.setup_status?.has_profiles ? "Generate a fresh report" : "Generate a local sample report";
+  const hasReportGoal = state.setup_status?.has_user_goal ?? state.setup_status?.has_profiles;
+  const headerReportActionId = hasReportGoal ? "monitor_jobs_dry_run" : "demo_render";
+  const headerReportLabel = hasReportGoal ? "New report" : "Demo report";
+  const headerReportTitle = hasReportGoal ? "Generate a fresh report" : "Generate a local sample report";
 
   useEffect(() => {
     // Mobile bottom navigation can otherwise carry the previous tab's scroll

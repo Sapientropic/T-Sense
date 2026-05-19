@@ -99,11 +99,12 @@ class MonitorStateProjectionTests(unittest.TestCase):
         empty_snapshot = monitor_state.dashboard_snapshot(conn)
 
         self.assertEqual(empty_snapshot["setup_status"]["stage"], "needs_ai_key")
-        self.assertIn("AI API key", empty_snapshot["setup_status"]["next_step"])
+        self.assertIn("Open Start", empty_snapshot["setup_status"]["next_step"])
+        self.assertIn("demo report", empty_snapshot["setup_status"]["next_step"])
         self.assertFalse(empty_snapshot["setup_status"]["has_profiles"])
         self.assertFalse(empty_snapshot["setup_status"]["has_runs"])
         self.assertEqual(empty_snapshot["setup_status"]["checks"][0]["check_id"], "ai_api")
-        self.assertEqual(empty_snapshot["setup_status"]["checks"][0]["status"], "active")
+        self.assertEqual(empty_snapshot["setup_status"]["checks"][0]["status"], "todo")
 
         monitor_state.upsert_profile(
             conn,
@@ -132,7 +133,7 @@ class MonitorStateProjectionTests(unittest.TestCase):
         )
 
 
-    def test_dashboard_setup_status_keeps_profiles_blocked_until_ai_key_exists(self):
+    def test_dashboard_setup_status_does_not_block_local_setup_without_ai_key(self):
         status = dashboard_setup.dashboard_setup_status(
             profiles=[],
             runs=[],
@@ -141,12 +142,59 @@ class MonitorStateProjectionTests(unittest.TestCase):
         )
 
         self.assertEqual(status["stage"], "needs_ai_key")
-        self.assertIn("AI API key", status["next_step"])
+        self.assertIn("Open Start", status["next_step"])
         checks = {item["check_id"]: item for item in status["checks"]}
         self.assertEqual(list(checks)[0], "ai_api")
-        self.assertEqual(checks["ai_api"]["status"], "active")
-        self.assertEqual(checks["profiles"]["status"], "blocked")
-        self.assertIn("AI", checks["profiles"]["detail"])
+        self.assertEqual(checks["ai_api"]["status"], "todo")
+        self.assertIn("first AI review", checks["ai_api"]["detail"])
+        self.assertEqual(checks["profiles"]["status"], "active")
+        self.assertNotIn("before creating", checks["profiles"]["detail"])
+        self.assertIn("local", checks["profiles"]["detail"].lower())
+
+
+    def test_dashboard_setup_status_distinguishes_packaged_profiles_from_user_goal(self):
+        status = dashboard_setup.dashboard_setup_status(
+            profiles=[
+                {
+                    "profile_id": "market-news",
+                    "config": {"id": "market-news", "path": "profiles/templates/market-news.md"},
+                    "enabled": True,
+                },
+                {
+                    "profile_id": "jobs-fast",
+                    "config": {"id": "jobs-fast", "path": "profiles/templates/jobs.md"},
+                    "enabled": True,
+                },
+            ],
+            runs=[],
+            delivery_targets=[],
+            ai_configured=False,
+        )
+
+        self.assertTrue(status["has_profiles"])
+        self.assertFalse(status["has_user_goal"])
+        self.assertIn("create or choose", status["next_step"].lower())
+        checks = {item["check_id"]: item for item in status["checks"]}
+        self.assertEqual(checks["profiles"]["status"], "active")
+
+
+    def test_dashboard_setup_status_treats_desk_profile_as_user_goal(self):
+        status = dashboard_setup.dashboard_setup_status(
+            profiles=[
+                {
+                    "profile_id": "custom-monitor",
+                    "config": {"id": "custom-monitor", "path": "profiles/desk/custom-monitor.md"},
+                    "enabled": True,
+                },
+            ],
+            runs=[],
+            delivery_targets=[],
+            ai_configured=False,
+        )
+
+        self.assertTrue(status["has_profiles"])
+        self.assertTrue(status["has_user_goal"])
+        self.assertIn("AI API key", status["next_step"])
 
 
     def test_dashboard_setup_prefers_latest_desk_profile_for_first_run(self):

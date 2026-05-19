@@ -50,7 +50,7 @@ include = ["scripts*", "templates*", "profiles*", "channel_lists*"]
 exclude = ["tests*", "dashboard*", "docs*"]
 
 [tool.setuptools.package-data]
-channel_lists = ["*.md", "*.txt"]
+channel_lists = ["*.md", "*.txt", "*.json"]
 profiles = ["README.md", "example-airdrop.md", "example.md"]
 "profiles.templates" = ["*.md"]
 templates = ["*.css", "*.html", "*.js", "*.png"]

@@ -105,6 +105,45 @@ class DashboardSourcesTests(unittest.TestCase):
         self.assertEqual(result["added_count"], 2)
         self.assertEqual(payload["sources"][0]["topics"], ["jobs"])
 
+    def test_import_starter_sources_uses_topic_specific_market_news_candidates(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            starter_dir = root / "channel_lists"
+            starter_dir.mkdir(parents=True)
+            (starter_dir / "jobs.public-candidates.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "public_source_candidates_v1",
+                        "topic": "jobs",
+                        "candidates": [{"handle": "@remote_jobs", "title": "Remote Jobs"}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (starter_dir / "market-news.public-candidates.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "public_source_candidates_v1",
+                        "topic": "market-news",
+                        "candidates": [{"handle": "@market_updates", "title": "Market Updates"}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                result = dashboard_server.import_starter_sources({"topic": "market-news"})
+
+            registry = root / ".tgcs" / "sources.json"
+            payload = json.loads(registry.read_text(encoding="utf-8"))
+
+        self.assertTrue(result["written"])
+        self.assertEqual(result["added_count"], 1)
+        self.assertEqual(result["topic"], "market-news")
+        self.assertEqual(payload["sources"][0]["username"], "market_updates")
+        self.assertEqual(payload["sources"][0]["topics"], ["market-news"])
+        self.assertNotIn("remote_jobs", json.dumps(payload, ensure_ascii=False))
+
     def test_import_starter_sources_skips_packaged_example_placeholders(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

@@ -77,11 +77,20 @@ export function ActionsView({
   const compactReadyMode = !activeStep && (stage === "ready" || stage === "needs_delivery_target");
   const showCompactMoreControls = false;
   const firstRunStep = steps.find((step) => step.key === "first-run");
-  const showProfileGuide = !compactReadyMode && setupStatus?.has_profiles === false;
+  const hasUserGoal = setupHasUserGoal(setupStatus);
+  const showProfileGuide = !compactReadyMode && hasUserGoal === false;
   const showPrivacyBoundary = !compactReadyMode && setupStatus?.has_runs !== true;
+  const showPostReviewControls = Boolean(setupStatus?.has_runs || reviewCount > 0 || stage === "ready" || stage === "needs_delivery_target");
   const secondaryReadyStepOrder = ["feedback", "automation"];
   const secondaryReadyStepKeys = new Set(["first-run", ...secondaryReadyStepOrder]);
-  const visibleSteps = compactReadyMode ? [] : steps;
+  const visibleSteps = compactReadyMode
+    ? []
+    : steps.filter((step) => {
+        if (!showPostReviewControls && ["automation", "feedback"].includes(step.key)) {
+          return false;
+        }
+        return !(hasUserGoal === false && step.key === "telegram");
+      });
   const secondaryReadySteps = compactReadyMode
     ? secondaryReadyStepOrder.map((key) => steps.find((step) => step.key === key)).filter(Boolean) as JourneyStep[]
     : [];
@@ -99,7 +108,12 @@ export function ActionsView({
     canOpenProfiles: Boolean(onOpenProfiles),
     setupStatus,
   }) ?? primaryReadyAction;
-  const primaryStartResultActionIds = primaryStartAction?.actionId ? [primaryStartAction.actionId] : [];
+  const demoResultReady = results.demo_render?.status === "success" && !setupStatus?.has_runs;
+  const primaryStartResultActionIds = primaryStartAction?.actionId
+    ? [primaryStartAction.actionId]
+    : demoResultReady
+      ? ["demo_render"]
+      : [];
   const summaryBlock = (
     <StartSummary
       actionMap={actionMap}
@@ -201,10 +215,10 @@ export function ActionsView({
       )}
 
       {!compactReadyMode && actions.length > 0 && (
-        <details className="start-setup-drawer start-real-setup" aria-label="Set up real sources">
+        <details className="start-setup-drawer start-real-setup" aria-label="Set up your first scan">
           <summary>
-            <span>Set up real sources</span>
-            <small>Goals, Telegram, AI, and recovery controls</small>
+            <span>Set up your first scan</span>
+            <small>Goal, Telegram, sources, and AI checks</small>
           </summary>
           {summaryBlock}
           {showProfileGuide && <StartProfileGuide onOpenProfiles={onOpenProfiles} />}
@@ -380,7 +394,7 @@ function buildPrimaryStartAction({
     };
   }
 
-  if (setupStatus?.has_profiles === false && canOpenProfiles) {
+  if (setupHasUserGoal(setupStatus) === false) {
     return {
       kind: "profile" as const,
       title: "Create your monitor",
@@ -412,6 +426,13 @@ function buildPrimaryStartAction({
   }
 
   return null;
+}
+
+function setupHasUserGoal(setupStatus: DashboardState["setup_status"] | undefined) {
+  if (!setupStatus) {
+    return undefined;
+  }
+  return setupStatus.has_user_goal ?? setupStatus.has_profiles;
 }
 
 function prioritizeCurrentStep(steps: JourneyStep[], activeKey?: string) {

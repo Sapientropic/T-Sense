@@ -61,7 +61,7 @@ TOML、复制 JSON 或背 CLI 命令开始。
 
 | 页面 | 用途 |
 | --- | --- |
-| `Start` | 连接 Telegram、修复 setup、跑 demo / dry scan、管理自动扫描入口。 |
+| `Start` | 跑 demo、创建目标/Profile、连接 Telegram、添加来源、启动第一轮 review。 |
 | `Review` | 优先处理最新/最高优先级卡片，用 Applied / Save / Not a fit / Feedback 训练后续匹配。 |
 | `Profiles` | 用自然语言或文件新建 profile，编辑匹配规则，调整扫描窗口和读取数量。 |
 | `Runs` | 看最近扫描是否健康，打开本地报告 artifact。 |
@@ -123,7 +123,7 @@ chmod +x setup.sh tgcs signal-desk "Signal Desk.command"
 ```
 
 `./signal-desk` 是推荐的 app-like 入口：首次运行会执行 setup，缺少本地默认配置时
-初始化 jobs starter，然后打开 Signal Desk。macOS 也可以从 Finder 打开
+初始化默认 `market-news` starter，然后打开 Signal Desk。macOS 也可以从 Finder 打开
 `Signal Desk.command`。`./tgcs ...` 保留为专家 CLI 路径。
 
 本地 key 存储、自动扫描安装和 Linux headless 边界集中放在
@@ -132,13 +132,14 @@ chmod +x setup.sh tgcs signal-desk "Signal Desk.command"
 ### 第一轮有效结果
 
 1. 在 `Start` 创建离线 demo 报告；这一步不需要 Telegram 登录，也不需要 LLM key。
-2. 用 [my.telegram.org/apps](https://my.telegram.org/apps) 的 `api_id` / `api_hash`
+2. 在 `Profiles` / `Start` 创建或选择一个监控目标，让 Signal Desk 先知道你想看什么。
+3. 用 [my.telegram.org/apps](https://my.telegram.org/apps) 的 `api_id` / `api_hash`
    连接 Telegram。
-3. 在 `Start` / `Settings -> Sources` 添加并检查来源：内置公开频道 starter、粘贴公开链接/handle、
+4. 在 `Start` / `Settings -> Sources` 添加并检查来源：内置公开频道 starter、粘贴公开链接/handle、
    只含元数据的 candidate JSON，或让 Source assistant 先预览本地 Telegram 文件夹/全部频道发现结果，再应用变更。
-4. 从 `Start` 跑一次 dry scan；如果来源访问失败，先用 source access 修复按钮处理，再重新扫描。
-5. 在 `Review` 处理卡片；如果结果太宽或太窄，再去 `Profiles` 调整匹配规则。
-6. 如果扫描失败，打开 `Runs`，它会先给出修复路径，再让你重新扫描。
+5. 从 `Start` 跑一次 dry scan；如果来源访问失败，先用 source access 修复按钮处理，再重新扫描。
+6. 在 `Review` 处理卡片；如果结果太宽或太窄，再去 `Profiles` 调整匹配规则。
+7. 如果扫描失败，打开 `Runs`，它会先给出修复路径，再让你重新扫描。
 
 ## Profiles
 

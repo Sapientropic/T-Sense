@@ -1004,10 +1004,11 @@ function opportunityStatusTone(status: string) {
 }
 
 function emptyHint(state: MiniAppReviewState | null) {
-  if (!state?.setup_status?.has_profiles) {
+  const hasUserGoal = state?.setup_status?.has_user_goal ?? state?.setup_status?.has_profiles;
+  if (!hasUserGoal) {
     return "Create a profile in Signal Desk first.";
   }
-  if (!state.setup_status.has_runs) {
+  if (!state?.setup_status?.has_runs) {
     return "Run a local AI review from Signal Desk.";
   }
   return "Nothing matches this filter.";

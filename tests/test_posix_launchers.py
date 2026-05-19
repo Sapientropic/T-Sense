@@ -54,6 +54,20 @@ class PosixLauncherTests(unittest.TestCase):
         for rel_path in POSIX_LAUNCHERS:
             self.assertEqual(modes.get(rel_path), "100755", rel_path)
 
+    def test_setup_completion_copy_is_app_first(self):
+        text = (PROJECT_ROOT / "setup.sh").read_text(encoding="utf-8")
+
+        self.assertIn("Signal Desk is ready.", text)
+        self.assertIn("Next: open Signal Desk with ./signal-desk, then use Start.", text)
+        self.assertIn("Advanced CLI users can run ./tgcs --help.", text)
+        self.assertIn("Initializing local project defaults (market-news starter)...", text)
+        self.assertIn("if ./tgcs init; then", text)
+        self.assertNotIn("Setup complete. Next: edit config and run jobs-fast", text)
+        self.assertNotIn("Initializing local project defaults (jobs starter)...", text)
+        self.assertNotIn("if ./tgcs init --starter jobs; then", text)
+        self.assertNotIn("Run:     ./tgcs doctor --profile jobs", text)
+        self.assertNotIn("Schedule preview: ./tgcs schedule print --profile-id jobs-fast", text)
+
     def test_signal_desk_launcher_defaults_to_detached_dashboard(self):
         text = (PROJECT_ROOT / "signal-desk").read_text(encoding="utf-8")
 
@@ -149,7 +163,7 @@ class PosixLauncherTests(unittest.TestCase):
                 "TG_SCANNER_SETUP_SKIP_INSTALL": "1",
                 "TG_SCANNER_CONFIG_DIR": str(config_dir),
             }
-            subprocess.run(
+            result = subprocess.run(
                 ["bash", "setup.sh"],
                 cwd=root,
                 env=env,
@@ -162,7 +176,14 @@ class PosixLauncherTests(unittest.TestCase):
 
             self.assertTrue((config_dir / "config.toml").exists())
             self.assertTrue((root / "output").is_dir())
-            self.assertIn("init --starter jobs", (root / "tgcs.calls").read_text(encoding="utf-8"))
+            calls = (root / "tgcs.calls").read_text(encoding="utf-8")
+            self.assertIn("init", calls)
+            self.assertNotIn("init --starter jobs", calls)
+            self.assertIn("Signal Desk is ready.", result.stdout)
+            self.assertIn("Next: open Signal Desk with ./signal-desk, then use Start.", result.stdout)
+            self.assertNotIn("./tgcs quickstart jobs", result.stdout)
+            self.assertNotIn("./tgcs doctor --profile jobs", result.stdout)
+            self.assertNotIn("./tgcs monitor run --profile-id jobs-fast", result.stdout)
 
 
 if __name__ == "__main__":

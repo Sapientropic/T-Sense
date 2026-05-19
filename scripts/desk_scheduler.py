@@ -28,7 +28,7 @@ TGCLI_CONFIG_DIR_ENV = "TGCLI_CONFIG_DIR"
 DESK_BOT_GATEWAY_STATE_FILENAME = "bot-gateway-state.json"
 DESK_BOT_GATEWAY_STALE_SECONDS = 120
 DESK_BOT_SUPPORTED_COMMANDS = ["/status", "/latest", "/sources", "/profiles", "/scan"]
-DESK_SCHEDULER_PROFILE_ID = "jobs-fast"
+DESK_SCHEDULER_PROFILE_ID = "market-news"
 DESK_SCHEDULER_INTERVAL_MINUTES = 15
 DESK_SCHEDULER_TASK_NAME = "T-Sense auto review"
 DESK_SCHEDULER_LEGACY_TASK_NAMES = ("TGCS jobs-fast dry-run",)
@@ -195,6 +195,18 @@ def scheduler_profile_selection(
 
     fallback_profile = next((profile for profile in profiles if _safe_profile_id(profile.get("id")) == fallback), None)
     if fallback_profile is None:
+        active_profile_ids = [_safe_profile_id(profile.get("id")) for profile in active_profiles]
+        active_profile_ids = [profile_id for profile_id in active_profile_ids if profile_id]
+        if len(active_profile_ids) == 1:
+            # Older workspaces can have only the legacy jobs-fast profile in
+            # profiles.toml. Use that one enabled profile instead of reporting
+            # auto review as broken just because the new market-news fallback is
+            # not present in the legacy config.
+            return {
+                "profile_id": active_profile_ids[0],
+                "has_enabled_profile": True,
+                "source": "single_active_profile",
+            }
         return {"profile_id": fallback, "has_enabled_profile": False, "source": "fallback_missing"}
     if fallback_profile.get("enabled", True):
         return {"profile_id": fallback, "has_enabled_profile": True, "source": "fallback_profile"}
@@ -639,6 +651,7 @@ def desk_scheduler_status() -> dict:
                 "detail": "Automatic AI reviews are installed, but no enabled profile is available.",
                 "next_action": "Turn off auto review, or enable a profile before background checks continue.",
                 "task_name": installed_task_name,
+                "legacy_task_name": installed_task_name != DESK_SCHEDULER_TASK_NAME,
             }
         return {
             **base,

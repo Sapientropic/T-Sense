@@ -1,28 +1,28 @@
-state: miniapp_source_learning_docs_debt_cleanup
+state: documentation_authority_graphify_sync
 mode: Standard
-run_shape: remote_sync_plus_publish_prep
-slice_goal: "Prepare the Mini App/source-learning/settings work for split commits after syncing origin/master, while keeping the active handoff compact and removing stale verification noise."
+run_shape: local_doc_debt_sweep
+slice_goal: "Keep the active handoff aligned with the real repository state, current authority boundaries, and the latest local Graphify evidence."
 authority_note: "This file is only the compact active handoff. Product direction lives in ROADMAP.md; route/agent contracts live in docs/agent-cli-contract.md; platform notes live in docs/desktop-platforms.md; debt guardrails live in docs/technical-debt-cleanup-spec.md; dated quality logs remain historical evidence."
 gate_status: passed
-blockers: []
+blockers:
+  - "Local master remains behind origin/master by 1 commit on the current remote-tracking refs; pull or reconcile upstream before the next product-change slice."
 
 current_truth:
-  - "Branch: master, synced with origin/master at 2f40a04 before restoring local work."
-  - "Restored local Mini App/source-learning/settings changes from stash after remote sync."
-  - "Resolved the restore conflicts in docs/quality/task-state.md and tests/test_bot_gateway.py by keeping the new upstream fixes plus the local Mini App additions."
-  - "Telegram Mini App remains a local-first review companion: local preview is safe, real Telegram menu install still requires a user-approved public HTTPS /miniapp URL."
-  - "Settings should present Mini App install as a normal-user flow: preview locally, paste a public HTTPS link, block local/http links before calling Telegram, then enable the Review menu button."
-  - "Public-source intake remains metadata-only: starter recommendations, public links/handles, and candidate JSON must not store raw Telegram message text."
-  - "Learning loop remains profile-first structured extraction; profile drafts and coach previews are reviewable user-facing artifacts, not hidden vector matching."
+  - "Branch: master; current local remote-tracking refs show origin/master ahead by 1 commit (`cd77f6e fix: restart dashboard after app updates`), and the tracked local diff now consists of this documentation/Graphify sweep."
+  - "The 2026-05-17 Mini App/source-learning contract refresh is already committed locally as `1a57f94`; the old 'split commits then push master' handoff is no longer current."
+  - "Technical-debt status authority remains docs/technical-debt-cleanup-spec.md, command authority remains docs/testing.md, and local Graphify artifacts remain advisory evidence only."
+  - "docs/graphify-maintenance/ stays local/ignored and excluded from the graph corpus via .graphifyignore, so recurring sweep notes remain reviewable without becoming graph noise."
+  - "The 2026-05-18 Graphify rebuild detected a materially larger corpus (357 files / about 279731 words), refreshed AST extraction through a sequential fallback, reran MiniMax semantic extraction successfully against 14 uncached docs, and published a synced local advisory snapshot."
+  - "The refreshed local graph snapshot now reports 4359 nodes, 8291 edges, 32 communities, 79 semantic nodes, 195 semantic edges, and 30274 input / 10676 output semantic tokens."
+  - "The earlier root-level Graphify temp-file debris was cleaned successfully in the current write-capable session, so the previous temp-file blocker is resolved."
+  - "Mini App/source-learning product behavior still follows the committed docs: local preview is safe, Telegram install requires a user-approved public HTTPS /miniapp URL, and source intake remains metadata-only."
 
 active_scope:
-  - "Mini App shell, route boundary, API sanitizers, source recommendations, learning summary, review actions, accessibility, and responsive polish."
-  - "Settings source intake, source metadata display/search, learning panel, and Mini App install card."
-  - "Bot gateway Mini App menu dry-run/live install, identity repair menu preservation, dashboard miniapp-only static readiness, and doctor checks."
-  - "README/ROADMAP/agent contract/platform docs describing the current Mini App, source discovery, and learning behavior."
-  - "Document debt cleanup before publishing: keep this handoff compact, keep durable details in authority docs or dated evidence logs, and avoid stale exhaustive verification logs."
+  - "Compact documentation-debt cleanup only: stale current-state claims, duplicated graph snapshot status, obsolete handoff guidance, and graph corpus boundary checks."
+  - "Authority alignment across docs/technical-debt-cleanup-spec.md, docs/testing.md, docs/quality/task-state.md, .graphifyignore, and graphify-out/README.md."
+  - "Local Graphify refresh and maintenance logging after documentation-boundary changes."
 
 verification:
-  - "After remote sync, conflict resolution, and document-debt cleanup: dashboard npm test passed with 33 files / 249 tests; dashboard npm run build passed and emitted dist/miniapp.html; .venv/bin/pytest passed with 708 passed, 2 skipped; .venv/bin/ruff check . passed."
+  - "This sweep verifies documentation truth with git status/log, focused stale-claim greps, git diff --check, detect_corpus.py, a sequential no-cache AST fallback, a successful MiniMax semantic-helper run against graphify-out, assemble_graph.py publishing to graphify-out, and temp-file cleanup verification."
 
-next_action: "Split commits by product surface, then push master after a final git status/log check."
+next_action: "Review the current documentation/Graphify diff, then pull or reconcile the one upstream master commit before the next product slice."
