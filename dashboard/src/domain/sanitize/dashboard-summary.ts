@@ -247,6 +247,7 @@ export function sanitizeSetupStatus(value: unknown): DashboardState["setup_statu
   assignOptionalStrings(setup, value, ["stage", "next_step"]);
   assignOptionalBooleans(setup, value, [
     "has_profiles",
+    "has_user_goal",
     "has_runs",
     "has_delivery_targets",
     "has_enabled_delivery_targets",

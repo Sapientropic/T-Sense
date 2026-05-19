@@ -26,13 +26,19 @@ scripts/scan.sh channel_lists/my-jobs.txt --since 2026-05-06T07:30:00Z
 scripts\scan.bat channel_lists\my-jobs.txt 24
 ```
 
-`jobs.public-candidates.json` is the packaged Developer Opportunity starter used
-by Signal Desk. It contains metadata-only public source recommendations checked
-against public Telegram pages on 2026-05-17. `jobs.txt` mirrors the same handles
-for CLI and legacy scripts. Both files are still only first-run seeds. Review,
-pause, or remove noisy channels from Signal Desk Settings before relying on live
-scans. Starter import removes legacy `example_*` placeholder sources but keeps
-real user-added sources.
+`market-news.public-candidates.json` and `market-news.txt` are the default
+Signal Desk first-run starter. They keep the default route aligned with the
+packaged `market-news` profile instead of importing developer-job sources before
+the user chooses a goal.
+
+`jobs.public-candidates.json` is the explicit Developer Opportunity starter used
+when a user picks `tgcs init --starter jobs` or the Mini App jobs source helper.
+It contains metadata-only public source recommendations checked against public
+Telegram pages on 2026-05-17. `jobs.txt` mirrors the same handles for CLI and
+legacy scripts. Starter files are only first-run seeds. Review, pause, or remove
+noisy channels from Signal Desk Settings before relying on live scans. Starter
+import removes legacy `example_*` placeholder sources but keeps real user-added
+sources.
 
 ## Tips
 

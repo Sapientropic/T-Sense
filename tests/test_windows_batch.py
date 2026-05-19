@@ -45,22 +45,21 @@ class WindowsBatchTests(unittest.TestCase):
         self.assertIn("Local project defaults", output)
         self.assertIn("Signal Desk.bat", output)
         self.assertIn("Telegram app credentials come from", output)
-        self.assertIn("tgcs.bat quickstart jobs", output)
+        self.assertIn("Advanced CLI users can run tgcs.bat --help", output)
+        self.assertNotIn("tgcs.bat quickstart jobs", output)
         self.assertTrue(config_exists)
 
 
 class SetupScriptPromptTests(unittest.TestCase):
-    def test_setup_sh_points_to_non_mutating_scheduler_preview(self):
+    def test_setup_sh_points_to_signal_desk_instead_of_jobs_cli_chain(self):
         setup_text = (ROOT / "setup.sh").read_text(encoding="utf-8")
 
-        self.assertIn("./tgcs init --starter jobs", setup_text)
-        self.assertIn("./tgcs quickstart jobs", setup_text)
-        self.assertIn("./tgcs doctor --profile jobs", setup_text)
-        self.assertIn("./tgcs monitor run --profile-id jobs-fast --delivery-mode live", setup_text)
-        self.assertIn(
-            "./tgcs schedule print --profile-id jobs-fast --interval-minutes 15",
-            setup_text,
-        )
+        self.assertIn("Signal Desk is ready.", setup_text)
+        self.assertIn("open Signal Desk with ./signal-desk", setup_text)
+        self.assertNotIn("./tgcs init --starter jobs", setup_text)
+        self.assertNotIn("./tgcs quickstart jobs", setup_text)
+        self.assertNotIn("./tgcs doctor --profile jobs", setup_text)
+        self.assertNotIn("./tgcs monitor run --profile-id jobs-fast --delivery-mode live", setup_text)
 
 
 if __name__ == "__main__":

@@ -1020,19 +1020,19 @@ profile run pipeline:
   export, delivery-test, or default-TOML blocker. Its P2 compatibility feedback
   about old `monitor_runner` module globals was addressed before final gates.
 
-## Current Debt Snapshot: 2026-05-16
+## Current Debt Snapshot: 2026-05-18
 
 The debt register below remains the long-form reasoning. This table is the
 current triage view for what is still real after the later splits:
 
 | Debt | Current Status | Next Useful Slice |
 | --- | --- | --- |
-| D1. WIP and branch hygiene | Cleared for the known backlog. The current branch is `master`, the worktree is clean, and `origin/master...HEAD` is now `0 0`. | Keep using staged snapshot or clean worktree gates for future slices; do not use mixed-worktree gates as commit proof. |
+| D1. WIP and branch hygiene | Cleared for the known local backlog, but upstream sync is pending. The current branch is `master`, `origin/master...HEAD` is `1 0` on the current local refs, and the active tracked diff is now this documentation/Graphify refresh rather than the old split-commit handoff. | Keep using staged snapshot or clean worktree gates for future slices; do not use mixed-worktree gates as commit proof, and do not revive the old split-commit/push handoff once upstream is pulled. |
 | D2. Contract sprawl | Materially improved. Shared fixtures now cover the high-risk Python/TypeScript contracts, but `docs/agent-cli-contract.md` is still long. | Keep the contract doc as an index and move new guarantees into fixtures first, prose second. |
-| D3. `dashboard_server.py` boundaries | Artifact, git, scheduler, Bot Gateway background, credentials, source, action, profile, state payload, GET, settings/source/profile/operation POST route boundaries are split behind the old facade. The facade is now about `954` lines, and the remaining debt is still compatibility ownership around `DashboardHandler` plus `_sync_desk_scheduler_context()`. | Create a compatibility-owner ledger before removing wrappers. Further backend work should target a named route, injection point, or facade re-export; avoid low-value line shaving. |
-| D4. `monitor_state.py` boundaries | Mostly reduced to a `505` line facade. DB/schema, privacy guards, review cards, alerts, feedback, profile patches, and dashboard projection are split, while `tests/monitor_state/test_projection.py` remains a `1020` line behavior lock. | Treat monitor-state projection as a protected contract. Split tests only with a clear owner boundary; do not move projection behavior just to shrink a file. |
-| D5. Report pipeline coupling | `report.py` is about `538` lines, but the larger review units are `report_extraction.py` at about `767` lines and `report_sources.py` at about `665` lines. MiniMax/provider routing and semantic batching are real product surfaces. | Treat report extraction, source evidence, and HTML output as separate fixture-backed slices. Do not add another scoring or attribution layer before the current contracts demand it. |
-| D6. Dashboard profile/evidence state | Actions, Profiles, Inbox, Runs, the Settings source library, and profile runtime settings are composition entrypoints. Current UI hotspots include `dashboard/src/components/inbox/review-card.tsx` at about `867` lines, `profile-row.tsx` at about `449` lines, and the profile query path through `profile-matching-panel.tsx` and `runtime-settings-model.ts`. | The next UI slice should be driven by a real UX/test gap: review-card evidence/source-preview behavior first, or profile matching/runtime-settings behavior when profile learning changes. |
+| D3. `dashboard_server.py` boundaries | Artifact, git, scheduler, Bot Gateway background, credentials, source, action, profile, state payload, GET, settings/source/profile/operation POST route boundaries are split behind the old facade. The facade is now about `1301` lines, and the remaining debt is concentrated in `DashboardHandler`, route/exception orchestration, `_sync_desk_scheduler_context()`, and patch-compatible exports. | Create a compatibility-owner ledger before removing wrappers. Further backend work should target a named route, injection point, or facade re-export; avoid low-value line shaving. |
+| D4. `monitor_state.py` boundaries | Mostly reduced to a `506` line facade. DB/schema, privacy guards, review cards, alerts, feedback, profile patches, and dashboard projection are split, while `tests/monitor_state/test_projection.py` remains a `1020` line behavior lock. | Treat monitor-state projection as a protected contract. Split tests only with a clear owner boundary; do not move projection behavior just to shrink a file. |
+| D5. Report pipeline coupling | `report.py` is about `538` lines, but the larger review units are `report_extraction.py` at about `862` lines and `report_sources.py` at about `665` lines. MiniMax/provider routing and semantic batching are real product surfaces. | Treat report extraction, source evidence, and HTML output as separate fixture-backed slices. Do not add another scoring or attribution layer before the current contracts demand it. |
+| D6. Dashboard profile/evidence state | Actions, Profiles, Inbox, Runs, the Settings source library, and profile runtime settings are composition entrypoints. Current UI hotspots include `dashboard/src/components/inbox/review-card.tsx` at about `907` lines, `profile-row.tsx` at about `452` lines, and the profile query path through `profile-matching-panel.tsx` and `runtime-settings-model.ts`. | The next UI slice should be driven by a real UX/test gap: review-card evidence/source-preview behavior first, or profile matching/runtime-settings behavior when profile learning changes. |
 | D7. Runtime sanitizers | Dashboard sanitizer is now a `14` line facade. Dashboard state sanitizers are split by product area and Desk-owned helpers re-export `sanitize/desk.ts`. The former `1368` line legacy `sanitize.test.ts` is split into focused dashboard-state, Desk action/feedback, Desk bot/settings, Desk source/delivery, and entrypoint-compat files. | Keep these tests close to existing sanitizer modules; avoid adding a second sanitizer implementation. |
 | D8. Test concentration | Improved, but the rebuilt graph makes the remaining test-helper hubs visible. `patch`, `load_tgcs_module()`, `BotGatewayTests`, credential/scheduler tests, and `MonitorStateProjectionTests` are high-degree graph nodes; most are test scaffolding, not architecture abstractions. | Keep focused directories. When touching affected owners, reduce helper centrality by moving setup into owner-specific fixtures; do not run a broad test refactor without behavior work. |
 | D9. Packaging metadata | Mostly complete for local Python packaging. Build, staged wheel install, `pipx`, `uvx`, and Docker build/demo/doctor smokes passed. | Keep `signal-desk` as a source-checkout launcher until resources are package-safe; re-run Docker when Dockerfile/package-data/dependency metadata changes. |
@@ -1040,33 +1040,28 @@ current triage view for what is still real after the later splits:
 
 Large current files are still a useful signal, but exact line counts drift too
 quickly to be the authority. Treat this list as a dated triage map from the
-2026-05-16 workspace, not as a contract:
+2026-05-18 workspace, not as a contract:
 
 | Area | Current Hotspot | Why It Matters |
 | --- | --- | --- |
-| HTTP/Desk compatibility facade | `scripts/dashboard_server.py` | `954` lines. `DashboardHandler`, `_sync_desk_scheduler_context()`, static/artifact serving, exception mapping, and old patch surfaces still bridge communities. Most product helpers are already split, so the remaining debt is migration ownership rather than file size. |
-| Review-card evidence UI | `dashboard/src/components/inbox/review-card.tsx` | `867` lines. Owns rendering, actions, source refs, report artifact chips, original-source preview, and source-preview HTML sanitation. This remains the clearest user-facing cleanup candidate. |
-| Profile learning and runtime settings | `scripts/profile_patches.py`, `dashboard/src/components/profiles/profile-row.tsx`, `profile-matching-panel.tsx`, `runtime-settings-model.ts` | `profile_patches.py` is `970` lines; the dashboard profile query path now crosses profile row, matching panel, runtime-settings helpers, and shared types. Split only around a tested profile-learning or runtime-settings behavior. |
-| Report extraction and source evidence | `scripts/report_extraction.py`, `scripts/report_sources.py`, `scripts/report.py` | `767`, `665`, and `538` lines respectively. These own provider/key routing, JSON repair diagnostics, semantic batching, source evidence, and final report assembly. Keep fixture coverage ahead of refactors. |
-| Desk actions/scheduler/Bot Gateway | `scripts/desk_actions.py`, `scripts/desk_scheduler.py`, `scripts/desk_bot_gateway_background.py` | `701`, `906`, and `663` lines. These are fixed-argv and local automation safety surfaces. Preserve allowlists, token/chat gating, and patch-compatible wrappers while migrating. |
-| Dashboard contracts/sanitizers/projections | `dashboard/src/domain/sanitize/desk.ts`, `dashboard/src/domain/types.ts`, `dashboard/src/api/client.ts`, `scripts/dashboard_projection.py`, `dashboard/src/domain/projections.ts` | `784`, `684`, `590`, `544`, and `241` lines. `postJson()` and `optionalString()` are high-degree because they are legitimate shared contract/sanitizer surfaces; change them only with fixture-backed contract tests. |
+| HTTP/Desk compatibility facade | `scripts/dashboard_server.py` | `1301` lines. `DashboardHandler`, `_sync_desk_scheduler_context()`, static/artifact serving, exception mapping, route orchestration, and old patch surfaces still bridge communities. Most product helpers are already split, so the remaining debt is migration ownership rather than file size. |
+| Review-card evidence UI | `dashboard/src/components/inbox/review-card.tsx` | `907` lines. Owns rendering, actions, source refs, report artifact chips, original-source preview, and source-preview HTML sanitation. This remains the clearest user-facing cleanup candidate. |
+| Profile learning and runtime settings | `scripts/profile_patches.py`, `dashboard/src/components/profiles/profile-row.tsx`, `profile-matching-panel.tsx`, `runtime-settings-model.ts` | `profile_patches.py` is `1054` lines; the dashboard profile query path now crosses profile row, matching panel, runtime-settings helpers, and shared types. Split only around a tested profile-learning or runtime-settings behavior. |
+| Report extraction and source evidence | `scripts/report_extraction.py`, `scripts/report_sources.py`, `scripts/report.py` | `862`, `665`, and `538` lines respectively. These own provider/key routing, JSON repair diagnostics, semantic batching, source evidence, and final report assembly. Keep fixture coverage ahead of refactors. |
+| Desk actions/scheduler/Bot Gateway | `scripts/desk_actions.py`, `scripts/desk_scheduler.py`, `scripts/desk_bot_gateway_background.py` | `780`, `1114`, and `812` lines. These are fixed-argv and local automation safety surfaces. Preserve allowlists, token/chat gating, and patch-compatible wrappers while migrating. |
+| Dashboard contracts/sanitizers/projections | `dashboard/src/domain/sanitize/desk.ts`, `dashboard/src/domain/types.ts`, `dashboard/src/api/client.ts`, `scripts/dashboard_projection.py`, `dashboard/src/domain/projections.ts` | `1032`, `879`, `744`, `614`, and `241` lines. `postJson()` and `optionalString()` are high-degree because they are legitimate shared contract/sanitizer surfaces; change them only with fixture-backed contract tests. |
 | Focused large tests | `tests/monitor_state/test_projection.py`, `tests/test_bot_gateway.py`, `tests/dashboard/test_credentials_settings.py`, `tests/dashboard/test_scheduler.py`, `tests/monitor/test_prefilter_and_manifest.py` | Large because they protect broad route, projection, gateway, and manifest behavior. The graph's `patch` and `load_tgcs_module()` hubs are still test scaffolding signals, not proof that production architecture is coupled. |
-| Graph weak-evidence backlog | `graphify-out/GRAPH_REPORT.md` knowledge gaps | The current public graph snapshot is now synced for 2026-05-16: 3981 nodes, 7410 edges, 33 communities, 376 inferred edges, and refreshed MiniMax semantic coverage. These remain triage prompts only; verify against real files before turning them into debt tickets. |
+| Graph weak-evidence backlog | `graphify-out/GRAPH_REPORT.md` knowledge gaps | The current graph snapshot lives only in local advisory artifacts under `graphify-out/`. Read `graphify-out/README.md` for the current snapshot summary and same-day `docs/graphify-maintenance/` notes for rebuild evidence instead of copying volatile graph stats into this authority doc. These remain triage prompts only; verify against real files before turning them into debt tickets. |
 
 ## Graphify Snapshot Usage
 
-`graphify-out/GRAPH_REPORT.md` exists for the current 2026-05-16 workspace
-snapshot and is a useful navigation artifact, but it is not repository truth.
-The synced snapshot now has 3981 nodes, 7410 edges, 33 communities,
-376 inferred edges, and an LLM-accounted semantic overlay from the MiniMax
-OpenAI-compatible China route: 76 semantic nodes, 160 semantic edges,
-10230 input tokens, and 5985 output tokens. The refreshed corpus is 340 files
-(302 code, 38 docs, about 244331 words), and Graphify still uses directory
-fallback clustering at low density (`0.000935347422871706`), so community
-boundaries remain inspection hints rather than proof. Daily doc-debt and
-Graphify maintenance records live in local ignored
-`docs/graphify-maintenance/` files for auditability and are excluded from both
-Git and future graph corpora.
+`graphify-out/GRAPH_REPORT.md` remains a useful navigation artifact when a local
+snapshot exists, but it is not repository truth. Keep volatile graph counts,
+semantic token totals, and rebuild outcomes in `graphify-out/README.md` plus
+the same-day local ignored `docs/graphify-maintenance/` record rather than
+mirroring them here. The graph corpus boundary still comes from
+`.graphifyignore`, and the maintenance records remain excluded from both Git
+and future graph corpora.
 
 Agent rules:
 

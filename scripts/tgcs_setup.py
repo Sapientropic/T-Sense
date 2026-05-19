@@ -25,8 +25,8 @@ from scripts.tgcs_launchers import (
 INIT_STARTERS = {
     "default": {
         "profile": "market-news",
-        "channel_list": "channel_lists/example.txt",
-        "topics": [],
+        "channel_list": "channel_lists/market-news.txt",
+        "topics": ["market-news"],
     },
     "jobs": {
         "profile": "jobs",
@@ -40,15 +40,14 @@ INIT_STARTERS = {
 def _print_init_next_steps(starter: str = "default") -> None:
     print("Local project defaults ready.")
     print("- Profiles: market-news, jobs-fast")
-    print("- Next: tgcs doctor")
     if starter == "jobs":
-        print("- Check jobs setup: tgcs doctor --profile jobs")
-        print("- Run jobs AI review: tgcs monitor run --profile-id jobs-fast --delivery-mode live")
-    print("- Manage sources: tgcs dashboard (Settings > Sources: Use starter set or Source assistant)")
-    print("- Login: tgcs login")
-    print("- Run report: tgcs run")
-    print("- Print scheduler command: tgcs schedule print --profile-id jobs-fast --interval-minutes 15")
-    print("- Open inbox: tgcs dashboard")
+        print("- Developer Opportunity starter is ready.")
+    print("- Open Signal Desk: tgcs dashboard")
+    print("- Start: generate the demo report, then create or select your monitor goal.")
+    print("- Manage sources: Signal Desk Settings > Sources (starter set, public links, or Telegram folders).")
+    if starter == "jobs":
+        print("- Developer Opportunity reviews can be run from Start after Telegram is connected.")
+    print("- Advanced CLI users: tgcs --help")
 
 
 

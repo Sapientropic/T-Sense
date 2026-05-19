@@ -279,6 +279,7 @@ function sanitizeMiniAppSetupStatus(value: unknown): MiniAppReviewState["setup_s
     next_step: optionalString(value.next_step),
     has_runs: typeof value.has_runs === "boolean" ? value.has_runs : undefined,
     has_profiles: typeof value.has_profiles === "boolean" ? value.has_profiles : undefined,
+    has_user_goal: typeof value.has_user_goal === "boolean" ? value.has_user_goal : undefined,
   };
   return Object.values(setup).some((item) => item !== undefined && item !== "") ? setup : undefined;
 }

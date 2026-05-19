@@ -1,0 +1,46 @@
+{
+  "schema_version": "public_source_candidates_v1",
+  "topic": "market-news",
+  "privacy_note": "Metadata-only public starter list. Do not include Telegram message bodies, private invite links, session data, or scraped post text.",
+  "candidates": [
+    {
+      "handle": "@bloomberg",
+      "url": "https://t.me/s/bloomberg",
+      "title": "Bloomberg",
+      "language": "en",
+      "source_of_recommendation": "public Telegram page checked 2026-05-20",
+      "quality_hints": {
+        "scope": "global markets and business headlines",
+        "direct_page_status": "200",
+        "has_public_messages": true,
+        "expected_noise": "medium"
+      }
+    },
+    {
+      "handle": "@reutersworldchannel",
+      "url": "https://t.me/s/reutersworldchannel",
+      "title": "Reuters World Channel",
+      "language": "en",
+      "source_of_recommendation": "public Telegram page checked 2026-05-20",
+      "quality_hints": {
+        "scope": "world news with market-moving context",
+        "direct_page_status": "200",
+        "has_public_messages": true,
+        "expected_noise": "medium"
+      }
+    },
+    {
+      "handle": "@CoinDeskGlobal",
+      "url": "https://t.me/s/CoinDeskGlobal",
+      "title": "CoinDesk Global",
+      "language": "en",
+      "source_of_recommendation": "public Telegram page checked 2026-05-20",
+      "quality_hints": {
+        "scope": "crypto market news and digital asset policy",
+        "direct_page_status": "200",
+        "has_public_messages": true,
+        "expected_noise": "medium"
+      }
+    }
+  ]
+}

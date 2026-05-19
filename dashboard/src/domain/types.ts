@@ -551,6 +551,7 @@ export type DashboardState = {
     stage?: string;
     next_step?: string;
     has_profiles?: boolean;
+    has_user_goal?: boolean;
     has_runs?: boolean;
     has_delivery_targets?: boolean;
     has_enabled_delivery_targets?: boolean;
@@ -604,6 +605,7 @@ export type MiniAppReviewState = {
     next_step?: string;
     has_runs?: boolean;
     has_profiles?: boolean;
+    has_user_goal?: boolean;
   };
 };
 

@@ -135,7 +135,8 @@ describe("Signal Desk journey", () => {
     const firstRun = steps.find((step) => step.key === "first-run");
 
     expect(workspace?.state).toBe("active");
-    expect(workspace?.buttons[0]).toMatchObject({ actionId: "init_jobs", label: "Prepare files" });
+    expect(workspace?.title).toBe("Create your goal");
+    expect(workspace?.detail).toContain("plain language");
     expect(firstRun?.state).toBe("blocked");
   });
 
@@ -163,7 +164,7 @@ describe("Signal Desk journey", () => {
     });
   });
 
-  it("does not let a missing AI key block local profile and Telegram setup", () => {
+  it("does not let a missing AI key block local profile setup", () => {
     const setup = { stage: "needs_ai_key", has_profiles: false, has_runs: false };
     const steps = buildJourneySteps(actions, { demo_render: result("demo_render", "success") }, setup, {
       ...telegramReady,
@@ -185,14 +186,15 @@ describe("Signal Desk journey", () => {
       stateLabel: "Start here",
     });
     expect(steps.find((step) => step.key === "telegram")).toMatchObject({
-      state: "active",
+      state: "ready",
+      stateLabel: "After goal",
     });
     expect(steps.find((step) => step.key === "first-run")).toMatchObject({
       state: "blocked",
-      stateLabel: "Connect Telegram first",
+      stateLabel: "Choose goal first",
     });
     expect(summary.find((item) => item.label === "Next")).toMatchObject({
-      value: "Connect Telegram",
+      value: "Create your goal",
     });
   });
 
@@ -247,8 +249,8 @@ describe("Signal Desk journey", () => {
     );
 
     expect(html).toContain("Generate demo report");
-    expect(html).toContain("<details class=\"start-setup-drawer start-real-setup\" aria-label=\"Set up real sources\">");
-    expect(html).toContain("<summary><span>Set up real sources</span>");
+    expect(html).toContain("<details class=\"start-setup-drawer start-real-setup\" aria-label=\"Set up your first scan\">");
+    expect(html).toContain("<summary><span>Set up your first scan</span>");
     expect(html).toContain("Create profile guidance");
     expect(html).toContain("Create a monitor in plain language");
     expect(html).toContain("Create profile");
@@ -304,9 +306,80 @@ describe("Signal Desk journey", () => {
       />,
     );
 
-    expect(html).toContain("Set up local files");
-    expect(html).toContain("Prepare files");
+    expect(html).toContain("Create your goal");
     expect(html).not.toContain("Refresh sample report");
+  });
+
+  it("keeps the demo result openable while promoting profile creation", () => {
+    const html = renderToStaticMarkup(
+      <ActionsView
+        actions={actions}
+        busyActionId=""
+        loadError=""
+        onRun={async () => undefined}
+        results={{
+          demo_render: {
+            ...result("demo_render"),
+            artifact_path: "output/demo-report.html",
+            detail: "Demo report ready.",
+          },
+        }}
+        setupStatus={{ stage: "needs_ai_key", has_profiles: false, has_runs: false }}
+        telegram={{
+          status: {
+            ...telegramReady,
+            credentials_ready: false,
+            session_ready: false,
+            login_state: "credentials_missing",
+          },
+          busy: "",
+          error: "",
+          saveCredentials: async () => telegramReady,
+          sendCode: async () => telegramReady,
+          verifyCode: async () => telegramReady,
+          refresh: async () => telegramReady,
+          cancelLogin: async () => telegramReady,
+        }}
+        onOpenProfiles={() => undefined}
+      />,
+    );
+
+    expect(html).toContain("<h3>Create your monitor</h3>");
+    expect(html).toContain("Open result");
+    expect(html).toContain("/artifacts/output/demo-report.html");
+  });
+
+  it("does not show automation or feedback before the first real review", () => {
+    const html = renderToStaticMarkup(
+      <ActionsView
+        actions={actions}
+        busyActionId=""
+        loadError=""
+        onRun={async () => undefined}
+        results={{ demo_render: result("demo_render") }}
+        setupStatus={{ stage: "needs_ai_key", has_profiles: false, has_runs: false }}
+        telegram={{
+          status: {
+            ...telegramReady,
+            credentials_ready: false,
+            session_ready: false,
+            login_state: "credentials_missing",
+          },
+          busy: "",
+          error: "",
+          saveCredentials: async () => telegramReady,
+          sendCode: async () => telegramReady,
+          verifyCode: async () => telegramReady,
+          refresh: async () => telegramReady,
+          cancelLogin: async () => telegramReady,
+        }}
+        onOpenProfiles={() => undefined}
+      />,
+    );
+
+    expect(html).not.toContain("<h3>Automation</h3>");
+    expect(html).not.toContain("<h3>Tune results</h3>");
+    expect(html).not.toContain("Notifications:");
   });
 
   it("promotes profile creation before Telegram after the demo is ready", () => {
@@ -340,6 +413,39 @@ describe("Signal Desk journey", () => {
     expect(html).toContain("start-next-card is-profile");
     expect(html).toContain("<h3>Create your monitor</h3>");
     expect(html).toContain("<span>Create profile</span>");
+  });
+
+  it("promotes goal selection after demo when setup only has packaged profiles", () => {
+    const html = renderToStaticMarkup(
+      <ActionsView
+        actions={actions}
+        busyActionId=""
+        loadError=""
+        onRun={async () => undefined}
+        results={{ demo_render: result("demo_render") }}
+        setupStatus={{ stage: "needs_ai_key", has_profiles: true, has_user_goal: false, has_runs: false }}
+        telegram={{
+          status: {
+            ...telegramReady,
+            credentials_ready: false,
+            session_ready: false,
+            login_state: "credentials_missing",
+          },
+          busy: "",
+          error: "",
+          saveCredentials: async () => telegramReady,
+          sendCode: async () => telegramReady,
+          verifyCode: async () => telegramReady,
+          refresh: async () => telegramReady,
+          cancelLogin: async () => telegramReady,
+        }}
+        onOpenProfiles={() => undefined}
+      />,
+    );
+
+    expect(html).toContain("start-next-card is-profile");
+    expect(html).toContain("<h3>Create your monitor</h3>");
+    expect(html).not.toContain("<h3>Connect Telegram</h3>");
   });
 
   it("promotes first scan after workspace exists", () => {

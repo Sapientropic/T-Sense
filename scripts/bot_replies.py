@@ -92,7 +92,7 @@ def source_summary() -> str:
 def profile_summary(snapshot: dict[str, Any]) -> str:
     profiles = [item for item in snapshot.get("profiles") or [] if isinstance(item, dict)]
     if not profiles:
-        return "No profiles are registered yet. Open Signal Desk Start or run ./tgcs init --starter jobs."
+        return "No profiles are registered yet. Open Signal Desk Start or run ./tgcs init."
     lines = ["Profiles"]
     for profile in profiles[:12]:
         status = "enabled" if profile.get("enabled") else "muted"

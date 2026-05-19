@@ -20,6 +20,8 @@ DESK_SOURCE_TOPIC_ALLOWED_FIELDS = {"topics"}
 DESK_SOURCE_IMPORT_MAX_TEXT_LENGTH = 20000
 DESK_SOURCE_IMPORT_MAX_CHANNELS = 500
 PUBLIC_SOURCE_CANDIDATE_SCHEMA_VERSION = "public_source_candidates_v1"
+DEFAULT_STARTER_TOPIC = "market-news"
+JOBS_STARTER_TOPIC = "jobs"
 PUBLIC_SOURCE_CANDIDATE_RAW_TEXT_KEYS = {
     "content",
     "message",
@@ -112,9 +114,9 @@ def _reject_unexpected_source_starter_fields(body: dict) -> None:
 
 
 def _clean_source_topic(value: object) -> str:
-    topic = str(value or "jobs").strip().casefold()
+    topic = str(value or DEFAULT_STARTER_TOPIC).strip().casefold()
     if not topic:
-        topic = "jobs"
+        topic = DEFAULT_STARTER_TOPIC
     if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{1,40}", topic):
         raise ValueError("Source topic must use letters, numbers, hyphen, or underscore.")
     return topic
@@ -426,22 +428,31 @@ def _desk_sources_from_body(body: dict) -> tuple[list[str], str, str, dict[str, 
     return channels, topic, input_path, source_metadata
 
 
-def _starter_source_candidate_paths() -> list[Path]:
+def _starter_source_candidate_paths(topic: str = JOBS_STARTER_TOPIC) -> list[Path]:
+    topic = _clean_source_topic(topic)
     project_root = _project_root()
     code_root = _code_root()
-    project_jobs = project_root / "channel_lists" / "jobs.txt"
-    project_candidates = project_root / "channel_lists" / "jobs.public-candidates.json"
-    project_example = project_root / "channel_lists" / "example.txt"
-    code_candidates = code_root / "channel_lists" / "jobs.public-candidates.json"
-    code_jobs = code_root / "channel_lists" / "jobs.txt"
-    code_example = code_root / "channel_lists" / "example.txt"
     try:
         same_root = project_root.resolve() == code_root.resolve()
     except OSError:
         same_root = project_root == code_root
+    if topic == JOBS_STARTER_TOPIC:
+        project_jobs = project_root / "channel_lists" / "jobs.txt"
+        project_candidates = project_root / "channel_lists" / "jobs.public-candidates.json"
+        project_example = project_root / "channel_lists" / "example.txt"
+        code_candidates = code_root / "channel_lists" / "jobs.public-candidates.json"
+        code_jobs = code_root / "channel_lists" / "jobs.txt"
+        code_example = code_root / "channel_lists" / "example.txt"
+        if same_root:
+            return [code_candidates, code_jobs, code_example]
+        return [project_jobs, project_candidates, project_example, code_candidates, code_jobs, code_example]
+    project_candidates = project_root / "channel_lists" / f"{topic}.public-candidates.json"
+    project_list = project_root / "channel_lists" / f"{topic}.txt"
+    code_candidates = code_root / "channel_lists" / f"{topic}.public-candidates.json"
+    code_list = code_root / "channel_lists" / f"{topic}.txt"
     if same_root:
-        return [code_candidates, code_jobs, code_example]
-    return [project_jobs, project_candidates, project_example, code_candidates, code_jobs, code_example]
+        return [code_candidates, code_list]
+    return [project_candidates, project_list, code_candidates, code_list]
 
 
 def _starter_channels_and_metadata(path: Path) -> tuple[list[str], dict[str, dict[str, Any]], str]:
@@ -484,7 +495,7 @@ def _remove_example_placeholder_sources(registry_path: Path) -> int:
 def import_starter_sources(body: dict) -> dict:
     _reject_unexpected_source_starter_fields(body)
     topic = _clean_source_topic(body.get("topic"))
-    starter_candidates = _starter_source_candidate_paths()
+    starter_candidates = _starter_source_candidate_paths(topic)
     starter_path = next((candidate for candidate in starter_candidates if candidate.exists()), starter_candidates[0])
     if not starter_path.exists():
         raise ValueError("Starter source list is missing from this checkout.")

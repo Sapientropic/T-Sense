@@ -173,6 +173,25 @@ class DashboardDeskActionCatalogTests(unittest.TestCase):
         self.assertEqual(result["display_command"], "tgcs monitor run --profile-id frontend-only --delivery-mode live")
 
 
+    def test_run_desk_action_defaults_to_market_news_when_no_user_profile_exists(self):
+        completed = subprocess.CompletedProcess(
+            ["python"],
+            0,
+            stdout=json.dumps({"ok": True, "data": {"status": "complete"}, "error": None}),
+            stderr="",
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                with patch.object(dashboard_server.subprocess, "run", return_value=completed) as run_mock:
+                    result = dashboard_server.run_desk_action("monitor_jobs_dry_run")
+
+        cmd = [str(part) for part in run_mock.call_args.args[0]]
+        self.assertEqual(cmd[cmd.index("--profile-id") + 1], "market-news")
+        self.assertEqual(result["display_command"], "tgcs monitor run --profile-id market-news --delivery-mode live")
+
+
     def test_run_desk_action_accepts_safe_one_off_scan_window(self):
         completed = subprocess.CompletedProcess(
             ["python"],
@@ -215,6 +234,14 @@ class DashboardDeskActionCatalogTests(unittest.TestCase):
                 self.assertEqual(result["artifact_path"], expected_artifact)
 
 
+    def test_demo_render_success_copy_makes_report_openable(self):
+        detail = dashboard_server._desk_action_success_copy("demo_render", "Render offline demo")
+
+        self.assertIn("Demo report ready", detail)
+        self.assertIn("Open it", detail)
+        self.assertNotIn("Render offline demo", detail)
+
+
     def test_run_desk_action_returns_needs_human_without_subprocess_for_human_takeover(self):
         with patch.object(dashboard_server.subprocess, "run") as run_mock:
             results = {
@@ -247,7 +274,7 @@ class DashboardDeskActionCatalogTests(unittest.TestCase):
         self.assertIn("print", cmd)
         self.assertNotIn("/Create", cmd)
         self.assertIn("live", cmd)
-        self.assertEqual(cmd[cmd.index("--profile-id") + 1], "jobs-fast")
+        self.assertEqual(cmd[cmd.index("--profile-id") + 1], "market-news")
         self.assertNotIn("dry-run", cmd)
         self.assertEqual(result["status"], "success")
         self.assertIn("AI reviews would run every 15 minutes", result["detail"])

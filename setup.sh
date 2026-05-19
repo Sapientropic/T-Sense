@@ -120,20 +120,12 @@ if [ ! -f "$TGCLI_CONFIG" ]; then
     mkdir -p "$TGCLI_CONFIG_DIR"
     cp config.example.toml "$TGCLI_CONFIG"
     echo ""
-    echo "=== Next Steps ==="
-    echo "1. Edit Telegram API credentials:"
-    echo "   $TGCLI_CONFIG"
-    echo "   Get your api_id and api_hash from: https://my.telegram.org/apps"
-    echo "   (If the form shows ERROR, see docs/getting-api-credentials.md)"
-    echo ""
-    echo "2. Check jobs prerequisites, log in, then run a dry monitor:"
-    echo "   ./tgcs quickstart jobs"
-    echo "   ./tgcs doctor --profile jobs"
-    echo "   ./tgcs login"
-    echo "   ./tgcs monitor run --profile-id jobs-fast --delivery-mode live"
+    echo "Created local Telegram config at $TGCLI_CONFIG."
+    echo "Telegram app credentials can be saved later in Signal Desk Settings."
+    echo "Advanced config file editing remains available if you need it."
 else
     echo "Scanner config already exists at $TGCLI_CONFIG; skipping."
-    echo "To reconfigure, edit: $TGCLI_CONFIG"
+    echo "To reconfigure outside the app, edit: $TGCLI_CONFIG"
 fi
 
 # Make scripts executable (macOS/Linux).
@@ -143,16 +135,15 @@ chmod +x setup.sh tgcs signal-desk "Signal Desk.command" scripts/scan.sh 2>/dev/
 mkdir -p output
 
 echo ""
-echo "Initializing local project defaults (jobs starter)..."
-if ./tgcs init --starter jobs; then
+echo "Initializing local project defaults (market-news starter)..."
+if ./tgcs init; then
     echo "Local project defaults ready."
 else
-    echo "Warning: local project defaults were not initialized. Run ./tgcs init --starter jobs after setup."
+    echo "Warning: local project defaults were not initialized. Open Signal Desk Start or run ./tgcs init after setup."
 fi
 
 echo ""
-echo "Setup complete. Next: edit config and run jobs-fast"
+echo "Signal Desk is ready."
 echo "  Config:  $TGCLI_CONFIG"
-echo "  Next:    ./tgcs quickstart jobs"
-echo "  Run:     ./tgcs doctor --profile jobs && ./tgcs login && ./tgcs monitor run --profile-id jobs-fast --delivery-mode live"
-echo "  Schedule preview: ./tgcs schedule print --profile-id jobs-fast --interval-minutes 15"
+echo "  Next: open Signal Desk with ./signal-desk, then use Start."
+echo "  Advanced CLI users can run ./tgcs --help."

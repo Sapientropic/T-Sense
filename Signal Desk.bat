@@ -17,8 +17,8 @@ if not exist ".venv\Scripts\python.exe" (
     )
 ) else (
     if not exist ".tgcs\sources.json" (
-        echo Preparing the default jobs workspace.
-        call tgcs.bat init --starter jobs
+        echo Preparing the default workspace.
+        call tgcs.bat init
         if errorlevel 1 (
             echo Warning: default workspace setup did not complete. Signal Desk can still open.
         )

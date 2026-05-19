@@ -171,7 +171,7 @@ class TgcsRunDemoInitTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "channel_lists").mkdir()
-            (root / "channel_lists" / "example.txt").write_text("example\n", encoding="utf-8")
+            (root / "channel_lists" / "market-news.txt").write_text("market_updates\npolicy_watch\n", encoding="utf-8")
             stdout = io.StringIO()
 
             def fake_run(cmd, check=False):
@@ -187,6 +187,8 @@ class TgcsRunDemoInitTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 0)
         self.assertIn("profile", config_text)
+        self.assertIn('profile = "market-news"', config_text)
+        self.assertIn('channel_list = "channel_lists/market-news.txt"', config_text)
         self.assertIn("state_dir", config_text)
         self.assertIn("profile_run_config_v1", profiles_config_text)
         self.assertIn("scan_concurrency = 3", profiles_config_text)
@@ -198,15 +200,21 @@ class TgcsRunDemoInitTests(unittest.TestCase):
         cmd = [str(part) for part in run_mock.call_args.args[0]]
         self.assertIn("source_registry.py", cmd[1])
         self.assertIn("import-list", cmd)
+        self.assertIn(str(root / "channel_lists" / "market-news.txt"), cmd)
+        self.assertIn("--topic", cmd)
+        self.assertIn("market-news", cmd)
+        self.assertNotIn(str(root / "channel_lists" / "example.txt"), cmd)
         output = stdout.getvalue()
         self.assertIn("Local project defaults ready", output)
         self.assertIn("market-news", output)
         self.assertIn("jobs-fast", output)
-        self.assertIn("tgcs doctor", output)
+        self.assertIn("Open Signal Desk", output)
+        self.assertIn("Start", output)
         self.assertIn("Settings > Sources", output)
-        self.assertIn("Source assistant", output)
-        self.assertIn("tgcs schedule print --profile-id jobs-fast", output)
-        self.assertIn("tgcs dashboard", output)
+        self.assertIn("Advanced CLI users", output)
+        self.assertNotIn("Next: tgcs doctor", output)
+        self.assertNotIn("tgcs monitor run --profile-id jobs-fast --delivery-mode live", output)
+        self.assertNotIn("tgcs schedule print --profile-id jobs-fast", output)
 
     def test_init_jobs_starter_imports_real_jobs_list_with_topic(self):
         tgcs = load_tgcs_module(self)
